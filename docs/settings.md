@@ -40,7 +40,7 @@ The poller stays the only Modbus client, and it follows the protocol's limits: a
 How a change works:
 - You enter a value. The page shows a summary such as "Max charge current: 100 A → 30 A", and you click Apply.
 - One change runs at a time, with at least `MIN_WRITE_INTERVAL_S` (default 60 s) between changes.
-- The poller writes the register, waits 3 s and reads it back. If the inverter didn't keep the value, the page says so. Some Solis firmwares only accept certain settings from the front panel or SolisCloud. In that case, don't keep retrying.
+- The poller writes the register, waits 3 s and reads it back; some settings (max charge SOC) show the new value only a few seconds later, so it reads again at 6 and 9 s before deciding. If the inverter still didn't keep the value, the page says so. Some Solis firmwares only accept certain settings from the front panel or SolisCloud. In that case, don't keep retrying.
 - Every change is logged to InfluxDB (measurement `solis_control`), shown under *Recent changes*, and logged in `docker compose logs poller`.
 
 Notes:

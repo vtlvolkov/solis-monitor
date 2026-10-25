@@ -130,6 +130,23 @@ def test_readback_mismatch_reported():
     assert audits[0][1]["verified"] is False
 
 
+def test_readback_waits_for_a_slow_inverter():
+    ctl, inv, *_ = make()
+    readbacks = []
+    real = inv.read_holding
+
+    def slow(reg, count=1):                       # the first read-back after the write still shows the old value
+        if (reg, count) == (REG_MAX_CHARGE_SOC, 1):
+            readbacks.append(reg)
+            if len(readbacks) == 1:
+                return [100]
+        return real(reg, count)
+    inv.read_holding = slow
+    r = ctl.apply("max_charge_soc", 90)
+    assert r["verified"] is True and "warning" not in r and r["read_back_raw"] == [90]
+    assert len(readbacks) == 2
+
+
 # ---------------------------------------------------------------- flags
 
 @pytest.mark.parametrize("setting,bit,value,expected", [

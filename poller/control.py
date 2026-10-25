@@ -12,7 +12,7 @@ Safety model
 * Currents are bounded by MAX_CHARGE_CURRENT_A / MAX_DISCHARGE_CURRENT_A (0 = refuse),
   SOC values by the inverter's own related limits (force-charge < every other floor < max charge).
 * One change at a time, at most one per MIN_WRITE_INTERVAL_S.
-* Read-back verification after 3 s, and an audit point in measurement "solis_control".
+* Read-back verification after 3 s (again at 6 and 9 s if it doesn't match yet), and an audit point in measurement "solis_control".
 
 Register addresses were checked against a live S6-EH1P (2026-10-18). It uses the six-slot
 Time-of-Use layout (43707..43791); newer "FB00" firmware ignores some single-register
@@ -62,6 +62,7 @@ MIN_MAX_CHARGE_SOC = 70          # conservative: a lower charge ceiling is almos
 MIN_FORCE_CHARGE_SOC = 5
 CURRENT_REGS = {"max_charge_current_a": REG_MAX_CHARGE_A, "max_discharge_current_a": REG_MAX_DISCHARGE_A}
 SETTLE_S = 3                     # some firmwares revert a value within seconds
+READBACKS = 3                    # others show the new value only later (43010 took > 3 s): read up to 3 times, 3 s apart
 HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -239,9 +240,12 @@ class Controller:
         extra = getattr(self, "_after_write", None)
         if extra:
             extra()
-        self.sleep(SETTLE_S)
-        after = self.inv.read_holding(reg, len(expected))
-        ok = self._verify(setting, after, expected)
+        for _ in range(READBACKS):
+            self.sleep(SETTLE_S)
+            after = self.inv.read_holding(reg, len(expected))
+            ok = self._verify(setting, after, expected)
+            if ok:
+                break
         self.audit(setting, register=reg, before=_fmt(before), written=_fmt(expected), read_back=_fmt(after),
                    verified=ok, summary=summary)
         result = {"applied": summary, "register": reg, "before_raw": before,
@@ -254,7 +258,7 @@ class Controller:
 
     def _verify(self, setting, after, expected):
         if setting == "clock_sync":                  # seconds tick during the settle delay
-            return after[:4] == expected[:4] and abs((after[4] * 60 + after[5]) - (expected[4] * 60 + expected[5])) <= SETTLE_S + 5
+            return after[:4] == expected[:4] and abs((after[4] * 60 + after[5]) - (expected[4] * 60 + expected[5])) <= SETTLE_S * READBACKS + 5
         if setting == "tou_slot":
             return after == expected and self._tou_switch_ok()
         return after == expected
