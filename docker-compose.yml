@@ -1,0 +1,89 @@
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: solis-influxdb
+    restart: unless-stopped
+    # No published port: only the poller and web services reach it, over the Docker network.
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_RETENTION: ${INFLUX_RETENTION:-0}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+      TZ: ${TZ:-Europe/Kyiv}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  poller:
+    image: ${SOLIS_IMAGE_PREFIX:-solis-monitor}-poller:${SOLIS_VERSION:-latest}
+    build: ./poller
+    container_name: solis-poller
+    restart: unless-stopped
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    environment:
+      INVERTER_HOST: ${INVERTER_HOST}
+      INVERTER_PORT: ${INVERTER_PORT:-502}
+      MODBUS_UNIT: ${MODBUS_UNIT:-1}
+      POLL_INTERVAL: ${POLL_INTERVAL:-10}
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      # Settings page: internal control API on :8780 (Docker network only, not published)
+      CONTROL_ENABLED: ${CONTROL_ENABLED:-false}
+      CURRENT_SCALE: ${CURRENT_SCALE:-0.1}
+      MAX_CHARGE_CURRENT_A: ${MAX_CHARGE_CURRENT_A:-0}
+      MAX_DISCHARGE_CURRENT_A: ${MAX_DISCHARGE_CURRENT_A:-0}
+      MIN_WRITE_INTERVAL_S: ${MIN_WRITE_INTERVAL_S:-60}
+      BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ALERT_SOC_LEVELS: ${ALERT_SOC_LEVELS:-50,30,20}
+      ALERT_OFFLINE_MIN: ${ALERT_OFFLINE_MIN:-5}
+      SITE_NAME: ${SITE_NAME:-}
+      TZ: ${TZ:-Europe/Kyiv}
+
+  web:
+    image: ${SOLIS_IMAGE_PREFIX:-solis-monitor}-web:${SOLIS_VERSION:-latest}
+    build: ./web
+    container_name: solis-web
+    restart: unless-stopped
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8088}:8088"
+    environment:
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      WEB_BASIC_AUTH: ${WEB_BASIC_AUTH:-}
+      WEB_AUTH_SETTINGS_ONLY: ${WEB_AUTH_SETTINGS_ONLY:-}
+      SITE_NAME: ${SITE_NAME:-}
+      POLLER_URL: http://poller:8780
+      MCP_TOKEN: ${MCP_TOKEN:-}
+      TARIFF_CURRENCY: ${TARIFF_CURRENCY:-UAH}
+      TARIFF_DAY: ${TARIFF_DAY:-}
+      TARIFF_NIGHT: ${TARIFF_NIGHT:-}
+      TARIFF_NIGHT_START: ${TARIFF_NIGHT_START:-23:00}
+      TARIFF_NIGHT_END: ${TARIFF_NIGHT_END:-07:00}
+      TARIFF_FILE: /data/tariff.json
+      TZ: ${TZ:-Europe/Kyiv}
+    volumes:
+      - web-data:/data        # tariff changes saved from the Settings page
+
+volumes:
+  influxdb-data:
+  influxdb-config:
+  web-data:

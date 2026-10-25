@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Solis</string>
+    <string name="settings_title">Dashboard address</string>
+    <string name="host_label">Host or IP address</string>
+    <string name="host_hint">192.168.1.50</string>
+    <string name="port_label">Port</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="invalid_address">Enter a host name or IP address, and a port from 1 to 65535.</string>
+    <string name="retry">Retry</string>
+    <string name="settings">Settings</string>
+    <string name="cannot_reach">Cannot reach the dashboard: %1$s</string>
+    <string name="http_error">The dashboard answered with HTTP %1$d</string>
+    <string name="hint_settings">Hold OK (or press Menu) to change the dashboard address</string>
+</resources>

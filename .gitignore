@@ -1,0 +1,24 @@
+# Secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+test-results/
+playwright-report/
+
+# Local tooling
+.idea/
+.vscode/
+.DS_Store
+.claude/settings.local.json
+
+# Deploy state on the server
+deploy/deploy.log
+deploy/last-ok

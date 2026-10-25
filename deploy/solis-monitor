@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Manage a Solis Monitor installed by install.sh (it lives in /opt/solis-monitor, with a link at
+# /usr/local/bin/solis-monitor). Updates only ever go to tagged releases, never to unreleased code.
+#
+#   solis-monitor status                 version, containers, latest reading
+#   solis-monitor update [--version vX]  install the latest release (or the one named); rolls back on failure
+#   solis-monitor auto-update on|off     check for a new release every night (off by default)
+#   solis-monitor logs [service]         follow the logs (poller, web or influxdb)
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+cd "$DIR"
+SELF="$DIR/solis-monitor"
+
+env_value() { grep -E "^$1=" .env 2>/dev/null | sed -n 1p | cut -d= -f2- | sed 's/[[:space:]]#.*//; s/[[:space:]]*$//' || true; }
+set_env() {          # set_env NAME VALUE: replace the NAME= line, or add it
+  if grep -qE "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
+}
+die() { echo "solis-monitor: $*" >&2; exit 1; }
+as_root() { if [[ $EUID -eq 0 ]]; then "$@"; else sudo "$@"; fi; }
+compose() { docker compose "$@"; }
+
+REPO="$(env_value SOLIS_REPO)"
+RAW_BASE="${SOLIS_RAW_BASE:-https://raw.githubusercontent.com/${REPO}}"
+API_BASE="${SOLIS_API_BASE:-https://api.github.com/repos/${REPO}}"
+
+notify() {           # Telegram notice if the bot is set up in .env
+  local token chat site
+  token=$(env_value TELEGRAM_BOT_TOKEN); chat=$(env_value TELEGRAM_CHAT_ID); site=$(env_value SITE_NAME)
+  [[ -n "$token" && -n "$chat" ]] || return 0
+  curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${token}/sendMessage" \
+       --data-urlencode "chat_id=${chat}" --data-urlencode "text=${site:+[$site] }$1" || true
+}
+
+latest_release() {
+  local json
+  json=$(curl -fsS -m 20 "$API_BASE/releases/latest") || die "could not reach GitHub to look for a release"
+  printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed -n 1p
+}
+
+cmd_status() {
+  echo "Version:   $(env_value SOLIS_VERSION)  (repo $REPO)"
+  echo "Dashboard: http://$(hostname -I | awk '{print $1}'):$(env_value WEB_PORT | sed 's/^$/8088/')"
+  echo "Inverter:  $(env_value INVERTER_HOST || true)"
+  echo "Updates:   $(systemctl is-enabled solis-monitor-update.timer 2>/dev/null | sed 's/^enabled$/automatic, nightly/; s/^disabled$/manual (solis-monitor update)/' || true)"
+  compose ps --format 'table {{.Name}}\t{{.Status}}'
+  echo "--- poller, last lines ---"
+  compose logs --tail 5 poller 2>&1 || true
+}
+
+cmd_update() {
+  local target=""
+  while (($#)); do
+    case "$1" in
+      --version) target="${2:?--version needs a tag, e.g. v1.2.0}"; shift 2 ;;
+      --auto) shift ;;                       # from the nightly timer; same as by hand
+      *) die "unknown option $1" ;;
+    esac
+  done
+  [[ -n "$REPO" ]] || die "SOLIS_REPO is missing from .env"
+  exec 9>/tmp/solis-monitor-update.lock
+  flock -n 9 || { echo "another update is running"; exit 0; }
+
+  local current explicit="$target"
+  current="$(env_value SOLIS_VERSION)"
+  [[ -n "$target" ]] || target="$(latest_release)"
+  [[ -n "$target" ]] || die "no release found"
+  if [[ "$target" == "$current" ]]; then echo "Already on $current."; return 0; fi
+  if [[ -z "$explicit" && "$(printf '%s\n%s\n' "$current" "$target" | sort -V | sed -n 2p)" == "$current" ]]; then
+    echo "Latest release $target is not newer than $current."; return 0      # never downgrade by itself
+  fi
+
+  echo "Updating $current -> $target"
+  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  curl -fsS -m 60 -o "$tmp/docker-compose.yml" "$RAW_BASE/$target/docker-compose.yml" || die "could not download $target"
+  curl -fsS -m 60 -o "$tmp/solis-monitor" "$RAW_BASE/$target/deploy/solis-monitor" || die "could not download $target"
+
+  cp docker-compose.yml docker-compose.yml.prev
+  install -m 644 "$tmp/docker-compose.yml" docker-compose.yml
+  set_env SOLIS_VERSION "$target"
+
+  if ! compose pull --quiet; then
+    echo "Could not download the images for $target; staying on $current." >&2
+    restore "$current"; return 1
+  fi
+  compose up -d --remove-orphans
+  if wait_healthy; then
+    install -m 755 "$tmp/solis-monitor" "$SELF.new" && mv "$SELF.new" "$SELF"      # mv: the running copy is not overwritten in place
+    echo "Updated to $target."
+    notify "🚀 Solis Monitor updated to $target"
+  else
+    echo "$target did not start properly; going back to $current." >&2
+    restore "$current"
+    compose up -d --remove-orphans
+    notify "❌ Solis Monitor update to $target failed; still on $current"
+    return 1
+  fi
+}
+
+restore() {          # put the previous compose file and version back
+  [[ -f docker-compose.yml.prev ]] && mv docker-compose.yml.prev docker-compose.yml
+  set_env SOLIS_VERSION "$1"
+}
+
+wait_healthy() {     # the web container's healthcheck passes and the poller stays up
+  local _
+  for _ in $(seq 1 "${SOLIS_HEALTH_TRIES:-40}"); do
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' solis-web 2>/dev/null)" == "healthy" ]] \
+       && [[ "$(docker inspect -f '{{.State.Running}}' solis-poller 2>/dev/null)" == "true" ]]; then
+      sleep "${SOLIS_SETTLE_S:-10}"             # a crashing poller restarts within seconds
+      [[ "$(docker inspect -f '{{.State.Running}}' solis-poller 2>/dev/null)" == "true" ]] && return 0
+    fi
+    sleep "${SOLIS_HEALTH_STEP:-5}"
+  done
+  return 1
+}
+
+cmd_auto_update() {
+  case "${1:-}" in
+    on)
+      as_root tee /etc/systemd/system/solis-monitor-update.service >/dev/null <<UNIT
+[Unit]
+Description=Update Solis Monitor to the latest release
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$SELF update --auto
+UNIT
+      as_root tee /etc/systemd/system/solis-monitor-update.timer >/dev/null <<UNIT
+[Unit]
+Description=Look for a new Solis Monitor release every night
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+      as_root systemctl daemon-reload
+      as_root systemctl enable --now solis-monitor-update.timer
+      echo "Automatic updates are on: each night the latest tagged release is installed." ;;
+    off)
+      as_root systemctl disable --now solis-monitor-update.timer 2>/dev/null || true
+      echo "Automatic updates are off. Update by hand with: solis-monitor update" ;;
+    *) die "usage: solis-monitor auto-update on|off" ;;
+  esac
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  update) shift; cmd_update "$@" ;;
+  auto-update) shift; cmd_auto_update "${1:-}" ;;
+  logs) shift; compose logs -f --tail 100 "$@" ;;
+  version) env_value SOLIS_VERSION ;;
+  ""|-h|--help|help) sed -n '2,8p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) die "unknown command '$1' (try: solis-monitor help)" ;;
+esac

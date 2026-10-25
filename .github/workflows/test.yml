@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  poller:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: poller } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  web-backend:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web/backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  web-frontend:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web/frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/frontend/package-lock.json }
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -S warning install.sh deploy/solis-monitor deploy/tests/test-install.sh
+      - run: bash deploy/tests/test-install.sh

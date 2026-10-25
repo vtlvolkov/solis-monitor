@@ -1,0 +1,409 @@
+"""Read-only web dashboard API. Talks to InfluxDB only, never to the inverter."""
+import asyncio
+import base64
+import binascii
+import json
+import logging
+import os
+import secrets
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+from . import shaping
+from .tariff import Tariff, TariffError, TariffStore, next_boundary, validate, version_dict
+from .config import Settings
+from .control import ControlClient, PollerUnavailable
+from .validation import (ENERGY_FIELDS, WINDOWS, parse_agg, parse_days, parse_every,
+                         parse_fields, parse_range)
+
+log = logging.getLogger("solis-web")
+
+SETTING_TYPES = {"grid_charging": bool, "time_of_use_mode": bool, "reserve_mode": bool,
+                 "max_charge_current_a": float, "max_discharge_current_a": float,
+                 "overdischarge_soc": int, "backup_soc": int, "tou_slot": dict, "clock_sync": True}
+TOU_KEYS = {"kind", "slot", "enabled", "start", "end", "current_a", "soc"}
+
+
+def valid_setting(setting, value) -> bool:
+    """Shape check only; the poller validates ranges against the inverter's current values."""
+    kind = SETTING_TYPES.get(setting)
+    number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind is bool:
+        return isinstance(value, bool)
+    if kind is float:
+        return number
+    if kind is int:
+        return number and value == int(value)
+    if kind is dict:
+        return isinstance(value, dict) and set(value) == TOU_KEYS
+    if kind is True:
+        return value is True
+    return False
+
+
+class InfluxUnavailable(Exception):
+    pass
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def create_app(repo=None, settings: Settings | None = None, now=_now, control=None) -> FastAPI:
+    s = settings or Settings()
+    if repo is None:
+        from .influx import InfluxRepo
+        repo = InfluxRepo(s)
+    if control is None:
+        control = ControlClient(s.poller_url, s.influx_token)
+
+    mcp_state: dict = {}
+
+    # The tariff is a list of versions (see tariff.py): .env gives the first one, saved changes add later ones.
+    tariffs = TariffStore(
+        Tariff(day=s.tariff_day, night=s.tariff_night,
+               night_start=s.tariff_night_start if s.tariff_night is not None else None,
+               night_end=s.tariff_night_end if s.tariff_night is not None else None) if s.tariff_day is not None else None,
+        s.tariff_file)
+
+    def tariff_view(tf):
+        """The tariff as the cost endpoints and the cards show it (None = nothing configured)."""
+        return {"currency": s.tariff_currency, **(tf.as_dict() if tf else {"day": None, "night": None, "night_start": None, "night_end": None})}
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        manager = mcp_state.get("manager")
+        if manager is None:
+            yield
+        else:
+            async with manager.run():                 # the MCP transport needs its task group
+                yield
+
+    app = FastAPI(title="Solis web", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+    @app.exception_handler(InfluxUnavailable)
+    async def _influx_down(_req, exc):
+        return JSONResponse({"detail": "InfluxDB unavailable", "error": str(exc)[:200]}, status_code=503)
+
+    async def call(fn, *args):
+        try:
+            return await asyncio.to_thread(fn, *args)
+        except Exception as exc:          # connection refused, timeout, auth, Flux error ...
+            log.warning("InfluxDB query failed: %s", exc)
+            raise InfluxUnavailable(f"InfluxDB unavailable ({type(exc).__name__})") from exc
+
+    # ------------------------------------------------------------------ auth
+    # /mcp has its own bearer token (MCP_TOKEN) so an agent never holds the dashboard password,
+    # which can change inverter settings. Everything else uses optional Basic auth, either on every
+    # route or (WEB_AUTH_SETTINGS_ONLY) only on /api/settings*, which makes the browser ask for the
+    # password when the Settings page loads and nowhere else.
+    @app.middleware("http")
+    async def mcp_auth(request: Request, call_next):
+        if request.url.path.rstrip("/") == "/mcp":
+            token = request.headers.get("authorization", "")
+            if not s.mcp_token or not secrets.compare_digest(token, f"Bearer {s.mcp_token}"):
+                return Response("unauthorized", status_code=401)
+        return await call_next(request)
+
+    if s.basic_auth:
+        expected = s.basic_auth.encode()
+
+        @app.middleware("http")
+        async def basic_auth(request: Request, call_next):
+            path = request.url.path
+            if path in ("/healthz", "/mcp", "/mcp/"):
+                return await call_next(request)
+            if s.auth_settings_only and path != "/api/settings" and not path.startswith("/api/settings/"):
+                return await call_next(request)
+            header = request.headers.get("authorization", "")
+            ok = False
+            if header.lower().startswith("basic "):
+                try:
+                    ok = secrets.compare_digest(base64.b64decode(header[6:], validate=True), expected)
+                except (binascii.Error, ValueError):
+                    ok = False
+            if not ok:
+                return Response("unauthorized", status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="solis", charset="UTF-8"'})
+            return await call_next(request)
+
+    # ------------------------------------------------------------------ routes
+    @app.get("/healthz")
+    async def healthz():
+        return {"status": "ok"}
+
+    @app.get("/api/site")
+    async def api_site():
+        return {"name": s.site_name}
+
+    async def live():
+        return shaping.live_payload(await call(repo.latest), now())
+
+    @app.get("/api/live")
+    async def api_live():
+        return await live()
+
+    @app.get("/api/stream")
+    async def api_stream(request: Request):
+        async def events():
+            yield f"retry: 5000\n\n"
+            while not await request.is_disconnected():
+                try:
+                    yield f"data: {json.dumps(await live())}\n\n"
+                except InfluxUnavailable as exc:
+                    yield f"event: influx-error\ndata: {json.dumps({'detail': 'InfluxDB unavailable', 'error': str(exc)})}\n\n"
+                await asyncio.sleep(s.stream_interval_s)
+
+        return StreamingResponse(events(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/history")
+    async def api_history(fields: str = Query(...), range: str = Query("6h"),
+                          every: str = Query("auto"), agg: str = Query("mean")):
+        names = parse_fields(fields)
+        rng, range_s = parse_range(range)
+        win = parse_every(every, range_s)
+        fn = parse_agg(agg)
+        times, series = await call(repo.history, names, range_s, win, fn)
+        times, series = shaping.insert_gaps(times, series, WINDOWS[win])
+        return {"range": rng, "every": win, "agg": fn,
+                "t": [round(t.timestamp()) for t in times],
+                "series": {k: [shaping._num(v) for v in vs] for k, vs in series.items()}}
+
+    @app.get("/api/energy/daily")
+    async def api_energy_daily(days: int = Query(30)):
+        n = parse_days(days)
+        t = now()
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz), "15m")
+        return {"tz": s.tz, "unit": "kWh", "days": shaping.aggregate_daily(rows, ENERGY_FIELDS, n, t, s.tz)}
+
+    # ------------------------------------------------------------------ settings (via the poller)
+    async def poller(fn, *args):
+        try:
+            return await asyncio.to_thread(fn, *args)
+        except PollerUnavailable as exc:
+            log.warning("poller control API unreachable: %s", exc)
+            return 502, {"detail": "Poller unreachable"}
+
+    @app.get("/api/settings")
+    async def api_settings():
+        status, body = await poller(control.get)
+        if status == 200:
+            ctl = body.get("control", {})
+            reason = None
+            if not ctl.get("enabled"):
+                reason = "Changes are disabled. Set CONTROL_ENABLED=true in .env and restart the poller."
+            elif not s.basic_auth:
+                reason = "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."
+            body["web"] = {"auth_enabled": bool(s.basic_auth), "can_change": reason is None, "reason": reason}
+        return JSONResponse(body, status_code=status)
+
+    def refuse_write(request: Request):
+        """Common checks for every POST that changes something: a password must be configured, and the request
+        must be same-origin JSON (browsers send Basic credentials with cross-site form posts, but a form
+        cannot send JSON, and Origin/Sec-Fetch-Site reveal the caller). Returns an error response, or None."""
+        if not s.basic_auth:
+            return JSONResponse({"detail": "Changes need WEB_BASIC_AUTH to be set."}, status_code=403)
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            return JSONResponse({"detail": "Content-Type must be application/json"}, status_code=415)
+        origin = request.headers.get("origin")
+        if origin and urlparse(origin).netloc != request.headers.get("host"):
+            return JSONResponse({"detail": "Cross-origin request refused"}, status_code=403)
+        if request.headers.get("sec-fetch-site", "same-origin") not in ("same-origin", "none"):
+            return JSONResponse({"detail": "Cross-site request refused"}, status_code=403)
+        return None
+
+    @app.post("/api/settings")
+    async def api_settings_change(request: Request):
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        setting = body.get("setting") if isinstance(body, dict) else None
+        value = body.get("value") if isinstance(body, dict) else None
+        if not valid_setting(setting, value):
+            return JSONResponse({"detail": "body must be {setting, value} for a known setting"}, status_code=400)
+        log.warning("settings change requested: %s=%s", setting, value)
+        status, result = await poller(control.apply, setting, value)
+        return JSONResponse(result, status_code=status)
+
+    @app.get("/api/events")
+    async def api_events(days: int = Query(30)):
+        if not 1 <= days <= 366:
+            raise HTTPException(status_code=400, detail="days must be 1..366")
+        return {"days": days, **shaping.pair_events(await call(repo.events, days), now())}
+
+    summary_cache: dict = {}
+
+    @app.get("/api/energy/summary")
+    async def api_energy_summary():
+        """Month/year to date from our own daily maxima (the inverter only keeps month/year for PV)."""
+        t = now()
+        if summary_cache.get("at") and (t - summary_cache["at"]).total_seconds() < 300:
+            return summary_cache["body"]
+        zone = ZoneInfo(s.tz)
+        today = t.astimezone(zone).date()
+        n = (today - today.replace(month=1, day=1)).days + 1
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz), "1h")
+        days = shaping.aggregate_daily(rows, ENERGY_FIELDS, n, t, s.tz)
+        body = {"tz": s.tz, "unit": "kWh", **shaping.period_sums(days, ENERGY_FIELDS, today)}
+        summary_cache.update(at=t, body=body)
+        return body
+
+    @app.get("/api/schedule")
+    async def api_schedule():
+        """Cached inverter settings (Time-of-Use slots, modes, SOC limits) for the Overview."""
+        status, body = await poller(control.cached_settings)
+        return JSONResponse(body, status_code=status)
+
+    cost_cache: dict = {}
+
+    @app.get("/api/cost")
+    async def api_cost():
+        t = now()
+        if tariffs.at(t) is None:
+            return {"configured": False, "tariff": tariff_view(None)}
+        # the active zone follows the clock, so it is computed on every request, outside the 5-minute cache
+        def with_rate(body):
+            return {**body, "tariff": tariff_view(tariffs.at(t)), "now": shaping.rate_now(t, s.tz, tariffs.at(t))}
+        if cost_cache.get("at") and (t - cost_cache["at"]).total_seconds() < 300:
+            return with_rate(cost_cache["body"])
+        today = t.astimezone(ZoneInfo(s.tz)).date()
+        rows = await call(repo.window_max, ["grid_import_today"], shaping.daily_start(t, today.day, s.tz), "15m")
+        zones = shaping.import_costs([(r[0], r[2]) for r in rows], s.tz, tariffs.at)
+        body = {"configured": True, **shaping.cost_summary(zones, today)}
+        cost_cache.update(at=t, body=body)
+        return with_rate(body)
+
+    history_cache: dict = {}
+    first_cache: dict = {}
+
+    async def first_day(t):
+        """Local date of the oldest stored reading (cached: it only changes if old data is deleted)."""
+        if "at" not in first_cache or (t - first_cache["at"]).total_seconds() > 6 * 3600:
+            ft = await call(repo.first_time)
+            first_cache.update(at=t, day=ft.astimezone(ZoneInfo(s.tz)).date() if ft else None)
+        return first_cache["day"]
+
+    @app.get("/api/cost/history")
+    async def api_cost_history(month: str | None = Query(None)):
+        """Day-by-day import, cost (day/night zones) and consumption for one month.
+        Every day is priced with the tariff that was in force at the time, so later price changes don't alter it."""
+        t = now()
+        if tariffs.at(t) is None:
+            return {"configured": False, "tariff": tariff_view(None)}
+        today = t.astimezone(ZoneInfo(s.tz)).date()
+        ym = shaping.parse_month(month) if month else (today.year, today.month)
+        if ym is None or ym > (today.year, today.month):
+            raise HTTPException(status_code=400, detail="month must be YYYY-MM, not in the future")
+        first = await first_day(t)
+        key = f"{ym[0]}-{ym[1]:02d}"
+        is_now = ym == (today.year, today.month)
+        hit = history_cache.get(key)
+        if hit and (t - hit["at"]).total_seconds() < (300 if is_now else 3600):
+            return hit["body"]
+        dates = shaping.month_dates(ym[0], ym[1], today)
+        start, stop = shaping.local_range(dates[0], dates[-1], s.tz)
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), start, "15m", stop)
+        zones = shaping.import_costs([(r[0], r[2]) for r in rows if r[1] == "grid_import_today"], s.tz, tariffs.at)
+        energy = shaping.aggregate_dates(rows, list(ENERGY_FIELDS), dates, s.tz)
+        body = {"configured": True, "tariff": tariff_view(tariffs.at(t)), "month": key,
+                "current_month": f"{today.year}-{today.month:02d}", "tz": s.tz,
+                "first_day": first.isoformat() if first else None,
+                "tariff_changes": [version_dict(st, tf) for st, tf in tariffs.between(start, stop)],
+                **shaping.cost_days(energy, zones)}
+        history_cache[key] = {"at": t, "body": body}
+        return body
+
+    # ------------------------------------------------------------------ tariff settings (the web app's own, not the inverter's)
+    def tariff_payload(t):
+        cur = tariffs.at(t)
+        return {"currency": s.tariff_currency, "tz": s.tz, "configured": cur is not None,
+                "current": cur.as_dict() if cur else None, "source": tariffs.source,
+                "versions": [version_dict(st, tf) for st, tf in tariffs.versions],
+                "upcoming": [version_dict(st, tf) for st, tf in tariffs.upcoming(t)],
+                "next_change_at": next_boundary(t).isoformat(),
+                "can_change": bool(s.basic_auth),
+                "reason": None if s.basic_auth else "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."}
+
+    @app.get("/api/settings/tariff")
+    async def api_tariff():
+        return tariff_payload(now())
+
+    TARIFF_KEYS = {"day", "night", "night_start", "night_end", "from"}
+
+    @app.post("/api/settings/tariff")
+    async def api_tariff_change(request: Request):
+        """New prices, valid from the next quarter-hour or from a later date. Earlier consumption keeps its price."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        if not isinstance(body, dict) or set(body) - TARIFF_KEYS:
+            return JSONResponse({"detail": "body must be {day, night, night_start, night_end, from}"}, status_code=400)
+        requested = None
+        if body.get("from") is not None:
+            try:
+                d = datetime.strptime(str(body["from"]), "%Y-%m-%d").date()
+            except ValueError:
+                return JSONResponse({"detail": "from must be a date like 2026-11-01"}, status_code=400)
+            requested = shaping.local_range(d, d, s.tz)[0]
+        t = now()
+        try:
+            tariff = validate(body.get("day"), body.get("night"), body.get("night_start"), body.get("night_end"))
+            effective = tariffs.set(tariff, t, requested)
+        except TariffError as exc:
+            return JSONResponse({"detail": str(exc)[:1].upper() + str(exc)[1:] + "."}, status_code=400)
+        except OSError as exc:
+            log.error("could not save the tariff: %s", exc)
+            return JSONResponse({"detail": "Could not save the tariff on the server."}, status_code=500)
+        cost_cache.clear()
+        history_cache.clear()
+        log.warning("tariff changed from %s: %s", effective.isoformat(), tariff.as_dict())
+        return {"effective_from": effective.isoformat(), **tariff_payload(t)}
+
+    @app.get("/api/devices")
+    async def api_devices():
+        status, body = await poller(control.devices)
+        return JSONResponse(body, status_code=status)
+
+    @app.get("/api/settings/log")
+    async def api_settings_log(limit: int = Query(20)):
+        if not 1 <= limit <= 100:
+            raise HTTPException(status_code=400, detail="limit must be 1..100")
+        return {"changes": await call(repo.control_log, limit)}
+
+    # ------------------------------------------------------------------ MCP (read-only, for agents)
+    if s.mcp_token:
+        from .mcp_server import DataApi, build_mcp
+
+        async def mcp_history(fields, rng, agg):
+            return await api_history(",".join(fields), rng, "auto", agg)
+
+        mcp = build_mcp(DataApi(
+            live=live, history=mcp_history, events=lambda d: api_events(d),
+            energy_summary=api_energy_summary, cost=api_cost,
+            devices=lambda: poller(control.devices), schedule=lambda: poller(control.cached_settings)))
+        app.router.routes.extend(mcp.streamable_http_app().routes)   # before the static mount below
+        mcp_state["manager"] = mcp.session_manager
+
+    # ------------------------------------------------------------------ frontend
+    if os.path.isdir(s.static_dir):
+        app.mount("/", StaticFiles(directory=s.static_dir, html=True), name="static")
+
+    return app
+
+
+def app_factory():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    return create_app()
