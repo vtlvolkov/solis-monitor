@@ -11,6 +11,11 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 cd "$DIR"
 SELF="$DIR/solis-monitor"
+# .env is readable by root only (it holds the passwords) and Docker needs root: ask for sudo ourselves.
+if [[ ! -r "$DIR/.env" ]]; then
+  command -v sudo >/dev/null || { echo "solis-monitor: needs root (run it as root, or install sudo)" >&2; exit 1; }
+  exec sudo "$SELF" "$@"
+fi
 
 env_value() { grep -E "^$1=" .env 2>/dev/null | sed -n 1p | cut -d= -f2- | sed 's/[[:space:]]#.*//; s/[[:space:]]*$//' || true; }
 set_env() {          # set_env NAME VALUE: replace the NAME= line, or add it

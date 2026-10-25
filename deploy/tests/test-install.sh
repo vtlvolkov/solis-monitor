@@ -125,6 +125,15 @@ check "a release that does not become healthy is rolled back" '[[ $rc -ne 0 && "
 check "other settings untouched by updates" '[[ "$(env_of CONTROL_ENABLED)" == false && "$(env_of INVERTER_HOST)" == 127.0.0.1 ]]'
 out=$(upd update --version v9.9.8 2>&1); check "an unknown release fails cleanly" '[[ $? -ne 0 && "$(env_of SOLIS_VERSION)" == v9.9.10 ]]'
 
+echo "solis-monitor as a normal user"
+printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"; chmod +x "$T/bin/sudo"
+chmod 000 "$T/inst/.env"
+upd status > /dev/null 2>&1
+check "an unreadable .env makes it ask for sudo" 'grep -q "^sudo $T/inst/solis-monitor status" "$T/sudo.log"'
+chmod 600 "$T/inst/.env"; : > "$T/sudo.log"
+upd version > /dev/null 2>&1
+check "with a readable .env it does not" '[[ ! -s "$T/sudo.log" ]]'
+
 echo
 if ((fails)); then echo "$fails check(s) failed"; exit 1; fi
 echo "all checks passed"
