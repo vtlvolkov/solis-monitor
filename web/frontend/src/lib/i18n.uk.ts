@@ -364,6 +364,7 @@ export const UK: Record<string, string> = {
     "Оновлення зупинилося, не завершившись. Дивіться: solis-monitor logs",
   "Update available": "Доступне оновлення",
   "{version} is available. Click to review and update.": "Доступна версія {version}. Натисніть, щоб переглянути й оновити.",
+  "General": "Загальні", "System": "Система", "Settings sections": "Розділи налаштувань",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */

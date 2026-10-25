@@ -268,7 +268,7 @@ cat <<PLAN
   Inverter       ${INVERTER:-not set yet} (port $MODBUS_PORT)
   Time zone      $TZ_NAME
   Inverter settings can be changed from the dashboard: NO (off; see the README before enabling)
-  Updates        $([[ -n "$AUTO_UPDATES" ]] && echo "automatic, tagged releases, nightly" || echo "by hand: solis-monitor update"); $([[ -n "$NO_DASH_UPDATES" ]] && echo "not from the dashboard" || echo "also from the dashboard (Settings -> Software, after login)")
+  Updates        $([[ -n "$AUTO_UPDATES" ]] && echo "automatic, tagged releases, nightly" || echo "by hand: solis-monitor update"); $([[ -n "$NO_DASH_UPDATES" ]] && echo "not from the dashboard" || echo "also from the dashboard (Settings -> System -> Software, after login)")
 PLAN
 if [[ -n "$DRY_RUN" ]]; then say; say "Dry run: nothing was changed."; trap - EXIT; exit 0; fi
 if [[ -n "$interactive" ]]; then yes_no "Install now?" y || { say "Cancelled."; trap - EXIT; exit 0; }; fi

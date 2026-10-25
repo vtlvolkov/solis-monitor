@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
+import { goTo } from '../lib/nav';
+import { SETTINGS_TABS, tabFrom, type SettingsTab } from '../lib/settingsTabs';
 import { ApiError, getJson } from '../lib/api';
 import { holdInfo } from '../lib/hold';
 import { locale, t, tx, unit } from '../lib/i18n';
@@ -286,6 +288,10 @@ function ClockCard({ s, wait, onPropose }: { s: SettingsPayload; wait: number; o
   );
 }
 
+const TAB_LABELS: Record<SettingsTab, string> = {
+  general: tx('General'), battery: tx('Battery'), schedule: tx('Schedule'), system: tx('System'),
+};
+
 export function Settings({ live, now }: { live: LiveState; now: number }) {
   const [s, setS] = useState<SettingsPayload | null>(null);
   const [loadedAt, setLoadedAt] = useState(0);
@@ -337,6 +343,81 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
 
   const propose = (p: Pending) => { setOutcome(null); setPending(p); };
 
+  const tab = tabFrom(location.search);
+  const workCard = (
+<Card title="Work mode" aside={
+            <button type="button" class="btn btn-small" onClick={load} disabled={loading}>{loading ? t('Reading…') : t('Refresh')}</button>
+          }>
+            {!s ? <Skeleton h={220} /> : (
+              <>
+                <FlagRow s={s} k="grid_charging" wait={wait} onPropose={propose}>
+                  {t('Forbidding it doesn\'t stop charging from PV. Grid charging also needs a charge slot or mode that asks for it.')}
+                </FlagRow>
+                <FlagRow s={s} k="time_of_use_mode" wait={wait} onPropose={propose} />
+                <FlagRow s={s} k="reserve_mode" wait={wait} onPropose={propose} />
+                <div class="setting-hint">
+                  {t('Self-use is {state}.', { state: s.storage_flags.self_use ? t('on') : t('off') })}{' '}
+                  {t('Off-grid and feed-in priority can only be changed on the inverter or in SolisCloud: switching them by mistake could cut the grid connection.')}
+                </div>
+                {s.web.can_change && wait > 0 && <div class="setting-hint" data-testid="wait">{t('Next change allowed in {n} s', { n: wait })}</div>}
+              </>
+            )}
+          </Card>
+  );
+  const limitsCard = (
+<Card title="Battery limits">
+            {!s ? <Skeleton h={220} /> : (
+              <>
+                <SocRow s={s} k="overdischarge_soc" wait={wait} onPropose={propose}
+                        hint={tx('Normal discharging stops here (keeps a reserve when the grid is up)')} />
+                <SocRow s={s} k="backup_soc" wait={wait} onPropose={propose}
+                        hint={tx('Target kept in reserve battery mode')} />
+                <CurrentRow s={s} k="max_charge_current_a" wait={wait} onPropose={propose} />
+                <CurrentRow s={s} k="max_discharge_current_a" wait={wait} onPropose={propose} />
+                <dl class="kv kv-tight">
+                  <div><dt>{t('Max charge SOC')}</dt><dd>{s.battery.max_charge_soc}%</dd></div>
+                  <div><dt>{t('Force-charge SOC')}</dt><dd>{s.battery.force_charge_soc}%</dd></div>
+                  <div><dt>{t('Discharge floor on backup output')}</dt><dd>{s.battery.eps_dod}%</dd></div>
+                  <div><dt>{t('Off-grid floor')}</dt><dd>{s.battery.offgrid_overdischarge_soc}%</dd></div>
+                  <div><dt>{t('Rated capacity (setting)')}</dt><dd>{s.battery.rated_capacity_ah} {unit('Ah')}</dd></div>
+                  <div><dt>{t('Float / equalise voltage')}</dt><dd>{s.battery.float_voltage} {unit('V')} / {s.battery.equalize_voltage} {unit('V')}</dd></div>
+                </dl>
+              </>
+            )}
+          </Card>
+  );
+  const logCard = (
+<Card title="Recent changes">
+            {log == null ? <div class="setting-hint">{t('Change log unavailable.')}</div>
+              : log.length === 0 ? <div class="setting-hint">{t('No changes yet.')}</div>
+              : (
+                <ul class="changelog">
+                  {log.map((c) => (
+                    <li key={c.time}>
+                      <span class={`dot ${c.verified ? 'ok' : 'bad'}`} title={c.verified ? t('verified') : t('not kept by the inverter')} />
+                      <span class="changelog-summary">{c.summary ?? c.action}</span>
+                      <time>{new Date(c.time).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })}</time>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </Card>
+  );
+  const storageCard = (
+<Card title="Storage mode">
+              {!s ? <Skeleton h={120} /> : (
+                <>
+                  <div class="flags">
+                    {Object.entries(s.storage_flags).map(([name, on]) => (
+                      <span key={name} class={`flag ${on ? 'on' : ''}`}>{t(name.replace(/_/g, ' '))}</span>
+                    ))}
+                  </div>
+                  <div class="setting-hint">{t('Register 43110 = {n}.', { n: s.storage_switch_raw })}</div>
+                </>
+              )}
+            </Card>
+  );
+
   return (
     <div class="page settings">
       <Header live={live} now={now} title="Settings" />
@@ -374,88 +455,37 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
         </div>
       )}
 
-      <div class="settings-grid">
-        <div class="settings-top">
-          <Card title="Work mode" class="area-work" aside={
-            <button type="button" class="btn btn-small" onClick={load} disabled={loading}>{loading ? t('Reading…') : t('Refresh')}</button>
-          }>
-            {!s ? <Skeleton h={220} /> : (
-              <>
-                <FlagRow s={s} k="grid_charging" wait={wait} onPropose={propose}>
-                  {t('Forbidding it doesn\'t stop charging from PV. Grid charging also needs a charge slot or mode that asks for it.')}
-                </FlagRow>
-                <FlagRow s={s} k="time_of_use_mode" wait={wait} onPropose={propose} />
-                <FlagRow s={s} k="reserve_mode" wait={wait} onPropose={propose} />
-                <div class="setting-hint">
-                  {t('Self-use is {state}.', { state: s.storage_flags.self_use ? t('on') : t('off') })}{' '}
-                  {t('Off-grid and feed-in priority can only be changed on the inverter or in SolisCloud: switching them by mistake could cut the grid connection.')}
-                </div>
-                {s.web.can_change && wait > 0 && <div class="setting-hint" data-testid="wait">{t('Next change allowed in {n} s', { n: wait })}</div>}
-              </>
-            )}
-          </Card>
+      <nav class="settings-tabs" role="tablist" aria-label={t('Settings sections')}>
+        {SETTINGS_TABS.map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} class={tab === k ? 'on' : ''} data-testid={`tab-${k}`}
+                  onClick={() => goTo('settings', { tab: k })}>{t(TAB_LABELS[k])}</button>
+        ))}
+      </nav>
 
-          <Card title="Battery limits" class="area-limits">
-            {!s ? <Skeleton h={220} /> : (
-              <>
-                <SocRow s={s} k="overdischarge_soc" wait={wait} onPropose={propose}
-                        hint={tx('Normal discharging stops here (keeps a reserve when the grid is up)')} />
-                <SocRow s={s} k="backup_soc" wait={wait} onPropose={propose}
-                        hint={tx('Target kept in reserve battery mode')} />
-                <CurrentRow s={s} k="max_charge_current_a" wait={wait} onPropose={propose} />
-                <CurrentRow s={s} k="max_discharge_current_a" wait={wait} onPropose={propose} />
-                <dl class="kv kv-tight">
-                  <div><dt>{t('Max charge SOC')}</dt><dd>{s.battery.max_charge_soc}%</dd></div>
-                  <div><dt>{t('Force-charge SOC')}</dt><dd>{s.battery.force_charge_soc}%</dd></div>
-                  <div><dt>{t('Discharge floor on backup output')}</dt><dd>{s.battery.eps_dod}%</dd></div>
-                  <div><dt>{t('Off-grid floor')}</dt><dd>{s.battery.offgrid_overdischarge_soc}%</dd></div>
-                  <div><dt>{t('Rated capacity (setting)')}</dt><dd>{s.battery.rated_capacity_ah} {unit('Ah')}</dd></div>
-                  <div><dt>{t('Float / equalise voltage')}</dt><dd>{s.battery.float_voltage} {unit('V')} / {s.battery.equalize_voltage} {unit('V')}</dd></div>
-                </dl>
-              </>
-            )}
-          </Card>
-
-          <Card title="Recent changes" class="area-log">
-            {log == null ? <div class="setting-hint">{t('Change log unavailable.')}</div>
-              : log.length === 0 ? <div class="setting-hint">{t('No changes yet.')}</div>
-              : (
-                <ul class="changelog">
-                  {log.map((c) => (
-                    <li key={c.time}>
-                      <span class={`dot ${c.verified ? 'ok' : 'bad'}`} title={c.verified ? t('verified') : t('not kept by the inverter')} />
-                      <span class="changelog-summary">{c.summary ?? c.action}</span>
-                      <time>{new Date(c.time).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })}</time>
-                    </li>
-                  ))}
-                </ul>
-              )}
-          </Card>
-        </div>
-
-        {s && <HoldCard s={s} />}
-        {s && <TouCard s={s} wait={wait} onPropose={propose} />}
-
-        <div class="settings-bottom">
+      {tab === 'general' && (
+        <div class="settings-row settings-general">
           <TariffCard />
-          <div class="settings-stack">
+          <div class="settings-col">
             {s && <ClockCard s={s} wait={wait} onPropose={propose} />}
-            <UpdateCard />
-            <Card title="Storage mode">
-              {!s ? <Skeleton h={120} /> : (
-                <>
-                  <div class="flags">
-                    {Object.entries(s.storage_flags).map(([name, on]) => (
-                      <span key={name} class={`flag ${on ? 'on' : ''}`}>{t(name.replace(/_/g, ' '))}</span>
-                    ))}
-                  </div>
-                  <div class="setting-hint">{t('Register 43110 = {n}.', { n: s.storage_switch_raw })}</div>
-                </>
-              )}
-            </Card>
+            {storageCard}
           </div>
         </div>
-      </div>
+      )}
+      {tab === 'battery' && (
+        <>
+          <div class="settings-row">
+            <div class="settings-col">{workCard}{logCard}</div>
+            {limitsCard}
+          </div>
+          {s && <HoldCard s={s} />}
+        </>
+      )}
+      {tab === 'schedule' && s && <TouCard s={s} wait={wait} onPropose={propose} />}
+      {tab === 'system' && (
+        <div class="settings-row">
+          <UpdateCard />
+        </div>
+      )}
     </div>
   );
 }

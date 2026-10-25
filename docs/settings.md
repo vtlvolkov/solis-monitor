@@ -2,6 +2,8 @@
 
 ![Settings page](img/settings.png)
 
+The Settings page has four tabs: **General** (electricity tariff, inverter clock, storage mode), **Battery** (work mode, limits, battery hold), **Schedule** (Time-of-Use slots) and **System** (software updates). The tab is kept in the address (`?view=settings&tab=battery`).
+
 The Settings page reads the inverter's settings live, and can change these:
 
 | Setting | Register | Notes |

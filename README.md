@@ -141,7 +141,7 @@ solis-monitor edit              # open your settings file (.env) in an editor, t
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
 ```
 
-**From the dashboard:** when a newer release exists, an **Update available** badge appears next to the Online pill on every page (the server looks for one every 6 hours). Click it to open **Settings → Software** with the update ready to confirm, or press **Check for updates** there yourself.
+**From the dashboard:** when a newer release exists, an **Update available** badge appears next to the Online pill on every page (the server looks for one every 6 hours). Click it to open **Settings → System → Software** with the update ready to confirm, or press **Check for updates** there yourself.
 
 <img src="docs/img/update-badge.png" width="420" alt="Update available badge next to the Online pill">
 

@@ -33,7 +33,7 @@ See also `CLAUDE.md` in the repository root for an architecture overview written
 
 ## Updating from the dashboard (how it works)
 
-The web container has no Docker access on purpose. **Settings → Software** (`web/frontend/src/components/UpdateCard.tsx`) calls `/api/settings/update*` (`web/backend/app/main.py`, logic in `updates.py`). Those endpoints sit behind the Settings login and the same same-origin checks as every other change. They only ever:
+The web container has no Docker access on purpose. **Settings → System → Software** (`web/frontend/src/components/UpdateCard.tsx`) calls `/api/settings/update*` (`web/backend/app/main.py`, logic in `updates.py`). Those endpoints sit behind the Settings login and the same same-origin checks as every other change. They only ever:
 
 1. ask GitHub for the newest published release of `SOLIS_REPO` (on button press at most once per 30 s, and in the background every `UPDATE_CHECK_HOURS`, default 6, +-10 % jitter, ETag so an unchanged answer is free, backing off after failures; `/api/version` publishes the result for the header badge), and
 2. drop a request file in `control/` (`./control` on the host, `/control` in the container).

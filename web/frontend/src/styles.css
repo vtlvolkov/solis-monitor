@@ -199,18 +199,16 @@ button { font: inherit; color: inherit; }
 .daily-readout { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.82rem; min-height: 1.4em; margin-top: 6px; font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- settings */
-.settings-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
-.settings-grid > * { min-width: 0; }
-/* Work mode, Battery limits and Recent changes: one column on a phone, and on desktop Recent changes fills the space under Work mode. */
-.settings-top { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "work" "limits" "log"; grid-column: 1 / -1; }
-.settings-top > * { min-width: 0; align-self: start; }
-.area-work { grid-area: work; }
-.area-limits { grid-area: limits; }
-.area-log { grid-area: log; }
-/* Electricity tariff beside the clock and storage-mode cards */
-.settings-bottom { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); grid-column: 1 / -1; }
-.settings-bottom > * { min-width: 0; align-self: start; }
-.settings-stack { display: grid; gap: 14px; align-content: start; }
+/* Settings: tabs, then rows of cards. A row is one column on a phone; on desktop its cards end on the same line. */
+.settings-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.settings-tabs button { padding: 7px 16px; border: 0; border-radius: 999px; background: var(--c-surface2); color: var(--c-muted); font: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer; }
+.settings-tabs button:hover { color: var(--c-text); }
+.settings-tabs button.on { background: #3d2c14; color: var(--c-warn); }
+.settings-tabs button:focus-visible { outline: 2px solid var(--c-warn); outline-offset: 2px; }
+.settings-row { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: stretch; margin-bottom: 14px; }
+.settings-row > * { min-width: 0; }
+.settings-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.settings-col > .card:last-child { flex: 1; }          /* the last card fills the column, so both sides end together */
 .tariff-now { font-weight: 600; margin-bottom: 12px; line-height: 1.4; }
 .tariff-form { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; align-items: end; }
 .tariff-form label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--c-muted); min-width: 0; }
@@ -426,9 +424,8 @@ a.link { text-decoration: none; }
   .top { flex-direction: row; justify-content: space-between; }
 }
 @media (min-width: 1024px) {
-  .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .settings-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .settings-top { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; grid-template-areas: "work limits" "log limits"; }
+  .settings-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-row.settings-general { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }     /* prices wider, clock and storage mode narrower */
   .stat-row { grid-template-columns: repeat(6, 1fr); }
   .overview-grid { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); align-items: stretch; gap: 28px; }   /* both columns end on the same line */
   .chips-row { justify-content: flex-start; }
