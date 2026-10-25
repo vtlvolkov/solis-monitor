@@ -196,7 +196,7 @@ scan() {       # prints the addresses in a.b.c.1-254 that speak Modbus
     "timeout 1 bash -c 'echo > /dev/tcp/${prefix}.{}/${MODBUS_PORT}' 2>/dev/null && echo ${prefix}.{}" | sort -t. -k4 -n || true)
   for h in $open; do
     [[ "$h" == "$me" ]] && continue
-    if probe "$h"; then echo "$h"; fi
+    if probe "$h"; then echo "$h"; else echo "  $h has port ${MODBUS_PORT} open but did not answer Modbus: skipped" >&2; fi
   done
 }
 
@@ -231,6 +231,9 @@ else
       fi
     else
       say "No Modbus device answered on ${prefix}.0/24."
+      say "  - Is the data logger powered and online (check the Solis app)? Is this machine on the same network?"
+      say "  - The logger accepts only ONE connection at a time. If another program is connected to it"
+      say "    (Home Assistant, another monitor, a second copy of this stack), it looks absent here: stop that first."
     fi
   fi
   if [[ -z "$INVERTER" ]]; then
