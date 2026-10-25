@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { ApiError, getJson, postJson } from '../lib/api';
 import { locale, t } from '../lib/i18n';
-import { describeStatus, shouldReload, type UpdatePayload } from '../lib/update';
+import { describeStatus, progressOf, shouldReload, type UpdatePayload } from '../lib/update';
 import { Card, Skeleton } from './common';
 
 const POLL_MS = 3000;
@@ -139,12 +139,23 @@ export function UpdateCard() {
         </div>
       )}
 
-      {inProgress && (
-        <div class="update-line" role="status" data-testid="update-progress">
-          <strong>{u.status?.state === 'running' ? describeStatus(u.status).text : t('Waiting for the server to start the update…')}</strong>
-          {offline && <div class="setting-hint">{t('The dashboard is restarting. This page reconnects by itself.')}</div>}
-        </div>
-      )}
+      {inProgress && (() => {
+        const p = progressOf(u.status);
+        return (
+          <div class="update-line" role="status" data-testid="update-progress">
+            <div class="progress-head">
+              <strong>{u.status?.state === 'running' ? t('Updating to {version}…', { version: u.status.to ?? '' }) : p.label}</strong>
+              {p.percent !== null && <span class="muted" data-testid="update-percent">{p.percent}%</span>}
+            </div>
+            <div class={`progress ${p.percent === null ? 'indeterminate' : ''}`} role="progressbar" aria-label={t('Progress')}
+                 aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.percent ?? undefined} data-testid="update-bar">
+              <div class="progress-fill" style={p.percent === null ? undefined : { width: `${p.percent}%` }} />
+            </div>
+            {u.status?.state === 'running' && <div class="setting-hint" data-testid="update-step">{p.label}</div>}
+            {offline && <div class="setting-hint">{t('The dashboard is restarting. This page reconnects by itself.')}</div>}
+          </div>
+        );
+      })()}
       {!inProgress && result && (
         <div class={`update-result tone-${result.tone}`} role="status" data-testid="update-result">{result.text}</div>
       )}

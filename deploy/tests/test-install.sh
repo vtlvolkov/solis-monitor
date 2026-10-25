@@ -35,6 +35,7 @@ case "\$1" in
       version) echo "Docker Compose version v2.0.0" ;;
       config) if [[ "\$*" == *" -q"* ]]; then [[ -n "\${SHIM_CONFIG_FAIL:-}" ]] && { echo "error: invalid .env" >&2; exit 1; }; exit 0
               else exec "$REAL_DOCKER" "\$@"; fi ;;
+      pull) cat "$T/inst/control/update-status.json" >> "$T/trace.log" 2>/dev/null ;;
       *) : ;;
     esac ;;
   inspect)
@@ -123,7 +124,7 @@ out=$(upd update 2>&1); check "up to date: nothing to do" '[[ "$out" == *"Alread
 release v9.9.10; latest v9.9.10; : > "$T/docker.log"
 out=$(upd update 2>&1); rc=$?
 check "update moves to the new release" '[[ $rc -eq 0 && "$(env_of SOLIS_VERSION)" == v9.9.10 ]] || { echo "$out"; false; }'
-check "images pulled and restarted" 'grep -q "^compose pull --quiet poller web$" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
+check "images pulled and restarted" 'grep -q "^compose pull --quiet poller$" "$T/docker.log" && grep -q "^compose pull --quiet web$" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
 latest v9.9.9
 out=$(upd update 2>&1); check "never downgrades by itself" '[[ "$out" == *"not newer"* && "$(env_of SOLIS_VERSION)" == v9.9.10 ]]'
 release v9.9.11; latest v9.9.11
@@ -166,9 +167,10 @@ upd update --from-dashboard > /dev/null 2>&1
 check "no request file: nothing happens and nothing is reported" '[[ ! -e "$T/inst/control/update-status.json" ]] && ! grep -q "^compose" "$T/docker.log"'
 
 release v9.9.20; latest v9.9.20
-echo '{"to":"v9.9.20"}' > "$T/inst/control/update-request"
+echo '{"to":"v9.9.20"}' > "$T/inst/control/update-request"; : > "$T/trace.log"
 upd update --from-dashboard > /dev/null 2>&1; rc=$?
 check "a request updates to the newest release and reports ok" '[[ $rc -eq 0 && "$(status_of state)" == ok && "$(status_of from)" == v9.9.10 && "$(status_of to)" == v9.9.20 && "$(env_of SOLIS_VERSION)" == v9.9.20 ]]'
+check "progress is reported step by step and ends at 100" '[[ "$(sed -n "s/.*\"percent\":\([0-9]*\).*/\1/p" "$T/inst/control/update-status.json")" == 100 ]] && grep -q "poller image.*\"percent\":20," "$T/trace.log" && grep -q "web image.*\"percent\":45," "$T/trace.log"'
 check "the request is consumed and the bridge file shows the new version" '[[ ! -e "$T/inst/control/update-request" ]] && grep -q "v9.9.20" "$T/inst/control/bridge.json"'
 check "the status has a start and a finish time" '[[ -n "$(status_of started)" && -n "$(status_of finished)" ]]'
 

@@ -6,6 +6,7 @@ export interface UpdateStatus {
   from: string | null;
   to: string | null;
   message: string | null;
+  percent: number | null;
   started: string | null;
   finished: string | null;
 }
@@ -61,3 +62,18 @@ export function updateBadge(v: VersionPayload | null): { label: string; title: s
   if (!v?.update?.available || !v.update.tag) return null;
   return { label: t('Update available'), title: t('{version} is available. Click to review and update.', { version: v.update.tag }) };
 }
+
+/** The progress bar: a percentage (null = unknown, shown as a moving stripe) and a label for the current step. */
+export function progressOf(status: UpdateStatus | null): { percent: number | null; label: string } {
+  if (!status || status.state !== 'running') return { percent: null, label: t('Waiting for the server to start the update…') };
+  const percent = typeof status.percent === 'number' ? Math.max(0, Math.min(100, Math.round(status.percent))) : null;
+  return { percent, label: status.message ? t(status.message) : describeStatus(status).text };
+}
+
+/** Steps the updater reports (English, from the server); the ones that name a version are patterns in i18n.uk.ts. */
+export const STEP_TEXTS = [
+  tx('Looking for the newest release'),
+  tx('Downloading the poller image'),
+  tx('Downloading the web image'),
+  tx('Waiting for the new version to start'),
+];

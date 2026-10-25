@@ -365,6 +365,10 @@ export const UK: Record<string, string> = {
   "Update available": "Доступне оновлення",
   "{version} is available. Click to review and update.": "Доступна версія {version}. Натисніть, щоб переглянути й оновити.",
   "General": "Загальні", "System": "Система", "Settings sections": "Розділи налаштувань",
+  "Looking for the newest release": "Пошук найновішого випуску",
+  "Downloading the poller image": "Завантаження образу опитувача", "Downloading the web image": "Завантаження образу веб-панелі",
+  "Waiting for the new version to start": "Очікування запуску нової версії",
+  "Progress": "Хід оновлення",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */
@@ -374,4 +378,7 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^BMS fault (\d+) bit (\d+)$/, "Помилка BMS $1, біт $2"],
   [/^Rate limit: next change allowed in (\d+) s\.$/, "Обмеження частоти: наступна зміна дозволена через $1 с."],
   [/^Inverter not reachable: (.*)$/, "Інвертор недоступний: $1"],
+  [/^Downloading the files of (\S+)$/, "Завантаження файлів версії $1"],
+  [/^Restarting with (\S+)$/, "Перезапуск з $1"],
+  [/^Could not download the images for (\S+)\. Still on (\S+)\.$/, "Не вдалося завантажити образи для $1. Залишається $2."],
 ];

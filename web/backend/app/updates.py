@@ -117,8 +117,10 @@ class Bridge:
         raw = self._read(STATUS)
         if not raw or raw.get("state") not in STATES:
             return None
+        percent = raw.get("percent")
+        percent = max(0, min(100, percent)) if isinstance(percent, int) and not isinstance(percent, bool) else None
         return {"state": raw["state"], "from": _text(raw.get("from"), 40), "to": _text(raw.get("to"), 40),
-                "message": _text(raw.get("message")), "started": _text(raw.get("started"), 40),
+                "message": _text(raw.get("message")), "percent": percent, "started": _text(raw.get("started"), 40),
                 "finished": _text(raw.get("finished"), 40)}
 
     def pending(self) -> bool:

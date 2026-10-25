@@ -184,6 +184,15 @@ def test_status_file_is_sanitised(tmp_path):
     assert st["state"] == "ok" and len(st["message"]) == 300 and st["started"] is None and "extra" not in st
 
 
+def test_progress_percent_is_clamped_and_optional(tmp_path):
+    b = Bridge(str(tmp_path))
+    for raw, want in ((45, 45), (250, 100), (-3, 0), ("50", None), (4.5, None), (True, None), (None, None)):
+        (tmp_path / "update-status.json").write_text(json.dumps({"state": "running", "percent": raw}))
+        assert b.status()["percent"] == want, raw
+    (tmp_path / "update-status.json").write_text(json.dumps({"state": "running"}))      # an older updater without progress
+    assert b.status()["percent"] is None
+
+
 def test_fetch_latest_release(monkeypatch):
     class Resp:
         def __init__(self, body): self.body = body
