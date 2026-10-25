@@ -10,7 +10,7 @@ Safety model
 * CONTROL_ENABLED=false (default) -> settings can be read, never written.
 * Only the named settings below exist; no raw register writes.
 * Currents are bounded by MAX_CHARGE_CURRENT_A / MAX_DISCHARGE_CURRENT_A (0 = refuse),
-  SOC values by the inverter's own related limits.
+  SOC values by the inverter's own related limits (force-charge < every other floor < max charge).
 * One change at a time, at most one per MIN_WRITE_INTERVAL_S.
 * Read-back verification after 3 s, and an audit point in measurement "solis_control".
 
@@ -57,6 +57,9 @@ STORAGE_BITS = {0: "self_use", 1: "time_of_use", 2: "off_grid", 3: "battery_wake
 FLAG_SETTINGS = {"grid_charging": (BIT_GRID_CHARGE, "Grid charging", ("forbidden", "allowed")),
                  "time_of_use_mode": (BIT_TIME_OF_USE, "Time-of-Use mode", ("off", "on")),
                  "reserve_mode": (BIT_RESERVE, "Reserve battery mode", ("off", "on"))}
+SOC_SETTINGS = ("overdischarge_soc", "backup_soc", "max_charge_soc", "force_charge_soc")
+MIN_MAX_CHARGE_SOC = 70          # conservative: a lower charge ceiling is almost always a typo
+MIN_FORCE_CHARGE_SOC = 5
 CURRENT_REGS = {"max_charge_current_a": REG_MAX_CHARGE_A, "max_discharge_current_a": REG_MAX_DISCHARGE_A}
 SETTLE_S = 3                     # some firmwares revert a value within seconds
 HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
@@ -278,14 +281,21 @@ class Controller:
             which = "charge" if reg == REG_MAX_CHARGE_A else "discharge"
             return reg, [before], [raw], f"Max {which} current: {round(before * self.cfg.scale, 1):g} A -> {amps:g} A", False
 
-        if setting in ("overdischarge_soc", "backup_soc"):
+        if setting in SOC_SETTINGS:
             lim = self.inv.read_holding(REG_MAX_CHARGE_SOC, 15)          # 43010..43024
             max_soc, over, force, backup = lim[0], lim[1], lim[8], lim[14]
+            offgrid, eps = self.inv.read_holding(REG_OFFGRID_SOC, 2)     # 43137, 43138
             if setting == "overdischarge_soc":
-                soc = self._int(value, "Over-discharge SOC", max(5, force + 1), max_soc - 1)
+                soc = self._int(value, "Over-discharge SOC", max(MIN_FORCE_CHARGE_SOC, force + 1), max_soc - 1)
                 return (REG_OVERDISCHARGE_SOC, [over], [soc], f"Over-discharge SOC: {over}% -> {soc}%", True)
-            soc = self._int(value, "Backup SOC", over, max_soc)
-            return REG_BACKUP_SOC, [backup], [soc], f"Backup (reserve) SOC: {backup}% -> {soc}%", True
+            if setting == "backup_soc":
+                soc = self._int(value, "Backup SOC", over, max_soc)
+                return REG_BACKUP_SOC, [backup], [soc], f"Backup (reserve) SOC: {backup}% -> {soc}%", True
+            if setting == "max_charge_soc":                              # stays above every other floor
+                soc = self._int(value, "Max charge SOC", max(MIN_MAX_CHARGE_SOC, over + 1, backup, offgrid, eps), 100)
+                return REG_MAX_CHARGE_SOC, [max_soc], [soc], f"Max charge SOC: {max_soc}% -> {soc}%", True
+            soc = self._int(value, "Force-charge SOC", MIN_FORCE_CHARGE_SOC, min(over, offgrid, eps) - 1)
+            return REG_FORCE_CHARGE_SOC, [force], [soc], f"Force-charge SOC: {force}% -> {soc}%", True
 
         if setting == "tou_slot":
             return self._plan_tou(value)

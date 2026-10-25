@@ -175,6 +175,9 @@ export const UK: Record<string, string> = {
   "Normal discharging stops here (keeps a reserve when the grid is up)":
     "Звичайне розряджання зупиняється тут (тримає запас, коли є мережа)",
   "Target kept in reserve battery mode": "Цільовий рівень у резервному режимі батареї",
+  "Charging stops here": "Заряджання зупиняється тут",
+  "Below this the inverter charges the battery from the grid to protect it":
+    "Нижче цього рівня інвертор заряджає батарею від мережі, щоб її захистити",
   "allowed {lo}–{hi}%": "допустимо {lo}–{hi}%",
   "Close": "Закрити", "Enabled": "Увімкнено", "From": "З", "To": "До", "Current, A": "Струм, А", "Charge to, %": "Заряджати до, %",
   "Stop at, %": "Зупинитись на, %",

@@ -10,8 +10,8 @@ import { holdInfo } from '../lib/hold';
 import { locale, t, tx, unit } from '../lib/i18n';
 import type { LiveState } from '../lib/live';
 import {
-  blockedReason, clockOffset, describeChange, describeSlot, label, parseAmps, parseSoc, validateSlot,
-  type ChangeLogEntry, type ChangeResult, type SettingKey, type SettingsPayload, type SlotForm, type TouKind,
+  blockedReason, clockOffset, describeChange, describeSlot, label, parseAmps, parseSoc, socBounds, validateSlot,
+  type ChangeLogEntry, type ChangeResult, type SettingKey, type SettingsPayload, type SlotForm, type SocKey, type TouKind,
   type TouSlot, type TouValue,
 } from '../lib/settings';
 
@@ -118,13 +118,10 @@ function FlagRow({ s, k, wait, onPropose, children }: {
 }
 
 function SocRow({ s, k, wait, onPropose, hint }: {
-  s: SettingsPayload; k: 'overdischarge_soc' | 'backup_soc'; wait: number; onPropose: Propose; hint: string;
+  s: SettingsPayload; k: SocKey; wait: number; onPropose: Propose; hint: string;
 }) {
-  const b = s.battery;
-  const current = b[k];
-  const [lo, hi] = k === 'overdischarge_soc'
-    ? [Math.max(5, b.force_charge_soc + 1), b.max_charge_soc - 1]
-    : [b.overdischarge_soc, b.max_charge_soc];
+  const current = s.battery[k];
+  const [lo, hi] = socBounds(s.battery, k);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const blocked = blockedReason(s, k, wait);
@@ -372,11 +369,13 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
                         hint={tx('Normal discharging stops here (keeps a reserve when the grid is up)')} />
                 <SocRow s={s} k="backup_soc" wait={wait} onPropose={propose}
                         hint={tx('Target kept in reserve battery mode')} />
+                <SocRow s={s} k="max_charge_soc" wait={wait} onPropose={propose}
+                        hint={tx('Charging stops here')} />
+                <SocRow s={s} k="force_charge_soc" wait={wait} onPropose={propose}
+                        hint={tx('Below this the inverter charges the battery from the grid to protect it')} />
                 <CurrentRow s={s} k="max_charge_current_a" wait={wait} onPropose={propose} />
                 <CurrentRow s={s} k="max_discharge_current_a" wait={wait} onPropose={propose} />
                 <dl class="kv kv-tight">
-                  <div><dt>{t('Max charge SOC')}</dt><dd>{s.battery.max_charge_soc}%</dd></div>
-                  <div><dt>{t('Force-charge SOC')}</dt><dd>{s.battery.force_charge_soc}%</dd></div>
                   <div><dt>{t('Discharge floor on backup output')}</dt><dd>{s.battery.eps_dod}%</dd></div>
                   <div><dt>{t('Off-grid floor')}</dt><dd>{s.battery.offgrid_overdischarge_soc}%</dd></div>
                   <div><dt>{t('Rated capacity (setting)')}</dt><dd>{s.battery.rated_capacity_ah} {unit('Ah')}</dd></div>

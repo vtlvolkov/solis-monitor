@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  blockedReason, clockOffset, describeChange, describeSlot, parseAmps, parseSoc, validateSlot,
+  blockedReason, clockOffset, describeChange, describeSlot, parseAmps, parseSoc, socBounds, validateSlot,
   type SettingsPayload, type TouSlot,
 } from './settings';
 
@@ -66,6 +66,17 @@ describe('new settings', () => {
   it('describes flags and SOC', () => {
     expect(describeChange('reserve_mode', false, true)).toBe('Reserve battery mode: off → on');
     expect(describeChange('backup_soc', 80, 40)).toBe('Backup (reserve) SOC: 80% → 40%');
+    expect(describeChange('max_charge_soc', 100, 90)).toBe('Max charge SOC: 100% → 90%');
+    expect(describeChange('force_charge_soc', 10, 15)).toBe('Force-charge SOC: 10% → 15%');
+  });
+  it('socBounds mirrors the poller', () => {
+    const b = base.battery;   // max 100, over-discharge 20, force 10, backup 80, off-grid 30, backup output 20
+    expect(socBounds(b, 'overdischarge_soc')).toEqual([11, 99]);
+    expect(socBounds(b, 'backup_soc')).toEqual([20, 100]);
+    expect(socBounds(b, 'max_charge_soc')).toEqual([80, 100]);
+    expect(socBounds(b, 'force_charge_soc')).toEqual([5, 19]);
+    expect(socBounds({ ...b, backup_soc: 30 }, 'max_charge_soc')).toEqual([70, 100]);
+    expect(socBounds({ ...b, eps_dod: 12 }, 'force_charge_soc')).toEqual([5, 11]);
   });
   it('blocks currents and ToU slots without limits', () => {
     expect(blockedReason(base, 'tou_slot', 0, 'max_discharge_current_a')).toContain('MAX_DISCHARGE_CURRENT_A');

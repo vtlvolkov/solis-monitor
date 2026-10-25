@@ -28,7 +28,8 @@ log = logging.getLogger("solis-web")
 
 SETTING_TYPES = {"grid_charging": bool, "time_of_use_mode": bool, "reserve_mode": bool,
                  "max_charge_current_a": float, "max_discharge_current_a": float,
-                 "overdischarge_soc": int, "backup_soc": int, "tou_slot": dict, "clock_sync": True}
+                 "overdischarge_soc": int, "backup_soc": int, "max_charge_soc": int, "force_charge_soc": int,
+                  "tou_slot": dict, "clock_sync": True}
 TOU_KEYS = {"kind", "slot", "enabled", "start", "end", "current_a", "soc"}
 
 

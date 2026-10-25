@@ -13,13 +13,15 @@ The Settings page reads the inverter's settings live, and can change these:
 | Reserve battery mode on/off | 43110 bit 4 | keeps the battery at the backup SOC for outages |
 | Over-discharge SOC | 43011 | normal discharging stops here; must be above force-charge SOC (43018) and below max charge SOC (43010) |
 | Backup (reserve) SOC | 43024 | between over-discharge SOC and max charge SOC |
+| Max charge SOC | 43010 | charging stops here; 70–100%, and at least the over-discharge SOC + 1, the backup SOC and both backup-output/off-grid floors (43137/43138) |
+| Force-charge SOC | 43018 | below this the inverter charges from the grid to protect the battery; from 5% up to one below the over-discharge SOC and both backup-output/off-grid floors |
 | Max charge / discharge current | 43117 / 43118 | 0 A discharge = the battery won't power loads |
 | Time-of-Use slots, 6 charge + 6 discharge | 43707 (enable bits), 43708–43791 | start/end (may cross midnight), current, target SOC; slot currents are bounded by the same `MAX_*_CURRENT_A` |
 | Inverter clock | 43000–43005 | "Sync to server time" writes the server's local time (`TZ`) |
 
 The **Battery hold** card explains what the charge slots are doing: if an enabled charge slot covers most of the day and grid charging is allowed, the inverter keeps the battery at that slot's target, and the small top-ups every few hours (when the charge sags by 1–2%) are normal. It suggests how to stop them (night-only slot plus Reserve battery mode).
 
-The page also shows read-only values: other SOC floors, rated capacity, charge voltages, and all storage-mode flags. Off-grid and feed-in priority are deliberately not switchable here: switching one by mistake could cut the grid connection.
+The page also shows read-only values: the backup-output and off-grid floors, rated capacity, charge voltages, and all storage-mode flags. Off-grid and feed-in priority are deliberately not switchable here: switching one by mistake could cut the grid connection.
 
 Every write except 43110/43117/43118 uses a multi-register write (FC16), because newer Solis firmware silently ignores some single-register writes. Register addresses were checked against this inverter with read-only probes (this unit uses the six-slot Time-of-Use layout). They were not tested by writing, so make the first change of each kind while watching the inverter display or SolisCloud.
 

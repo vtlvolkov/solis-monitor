@@ -3,6 +3,7 @@ import { t, tx, unit } from './i18n';
 
 export type SettingKey = 'grid_charging' | 'time_of_use_mode' | 'reserve_mode'
   | 'max_charge_current_a' | 'max_discharge_current_a' | 'overdischarge_soc' | 'backup_soc'
+  | 'max_charge_soc' | 'force_charge_soc'
   | 'tou_slot' | 'clock_sync';
 
 export interface TouSlot {
@@ -66,6 +67,8 @@ export const LABELS: Record<SettingKey, string> = {
   max_discharge_current_a: tx('Max discharge current'),
   overdischarge_soc: tx('Over-discharge SOC'),
   backup_soc: tx('Backup (reserve) SOC'),
+  max_charge_soc: tx('Max charge SOC'),
+  force_charge_soc: tx('Force-charge SOC'),
   tou_slot: tx('Time-of-Use slot'),
   clock_sync: tx('Inverter clock'),
 };
@@ -78,7 +81,7 @@ export function describeChange(key: SettingKey, from: boolean | number, to: bool
   const name = label(key);
   if (key === 'grid_charging') return `${name}: ${from ? t('allowed') : t('forbidden')} → ${to ? t('allowed') : t('forbidden')}`;
   if (key === 'time_of_use_mode' || key === 'reserve_mode') return `${name}: ${from ? t('on') : t('off')} → ${to ? t('on') : t('off')}`;
-  if (key === 'overdischarge_soc' || key === 'backup_soc') return `${name}: ${from}% → ${to}%`;
+  if (SOC_KEYS.includes(key as SocKey)) return `${name}: ${from}% → ${to}%`;
   const note = key === 'max_discharge_current_a' && to === 0 ? ` (${t('battery will not power loads')})` : '';
   return `${name}: ${amps(from as number)} → ${amps(to as number)}${note}`;
 }
@@ -107,6 +110,20 @@ export function blockedReason(s: SettingsPayload, key: SettingKey, waitS: number
   }
   if (waitS > 0) return t('Next change allowed in {n} s', { n: waitS });
   return null;
+}
+
+export type SocKey = 'overdischarge_soc' | 'backup_soc' | 'max_charge_soc' | 'force_charge_soc';
+export const SOC_KEYS: SocKey[] = ['overdischarge_soc', 'backup_soc', 'max_charge_soc', 'force_charge_soc'];
+
+/** Allowed [lo, hi] for a SOC setting. Mirrors the poller's checks (which have the final say). */
+export function socBounds(b: SettingsPayload['battery'], key: SocKey): [number, number] {
+  const floors = [b.offgrid_overdischarge_soc, b.eps_dod];
+  switch (key) {
+    case 'overdischarge_soc': return [Math.max(5, b.force_charge_soc + 1), b.max_charge_soc - 1];
+    case 'backup_soc': return [b.overdischarge_soc, b.max_charge_soc];
+    case 'max_charge_soc': return [Math.max(70, b.overdischarge_soc + 1, b.backup_soc, ...floors), 100];
+    case 'force_charge_soc': return [5, Math.min(b.overdischarge_soc, ...floors) - 1];
+  }
 }
 
 export function parseSoc(input: string, lo: number, hi: number, current: number): Parsed {

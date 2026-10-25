@@ -8,7 +8,8 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import control
-from control import (REG_BACKUP_SOC, REG_CLOCK, REG_MAX_CHARGE_A, REG_MAX_DISCHARGE_A, REG_OVERDISCHARGE_SOC,
+from control import (REG_BACKUP_SOC, REG_CLOCK, REG_FORCE_CHARGE_SOC, REG_MAX_CHARGE_A, REG_MAX_CHARGE_SOC,
+                     REG_MAX_DISCHARGE_A, REG_OVERDISCHARGE_SOC,
                      REG_STORAGE_SWITCH, REG_TOU_CHARGE, REG_TOU_DISCHARGE, REG_TOU_SWITCH, Config, ControlError,
                      Controller)
 
@@ -178,6 +179,40 @@ def test_backup_soc_bounds():
     assert err(ctl.apply, "backup_soc", 101).status == 400
     ctl.apply("backup_soc", 40)
     assert inv.writes == [("fc16", REG_BACKUP_SOC, [40])]
+
+
+def test_max_charge_soc_bounds():
+    ctl, inv, clock, _ = make()
+    assert err(ctl.apply, "max_charge_soc", 79).status == 400        # below backup SOC (80)
+    assert err(ctl.apply, "max_charge_soc", 101).status == 400
+    assert err(ctl.apply, "max_charge_soc", 90.5).status == 400
+    r = ctl.apply("max_charge_soc", 90)
+    assert inv.writes == [("fc16", REG_MAX_CHARGE_SOC, [90])] and r["verified"]
+    assert r["applied"] == "Max charge SOC: 100% -> 90%"
+    clock.t += 61
+    assert err(make(regs={43024: 30})[0].apply, "max_charge_soc", 69).status == 400   # absolute minimum 70
+    assert make(regs={43024: 30})[0].apply("max_charge_soc", 70)["verified"]
+
+
+def test_max_charge_soc_stays_above_backup_floors():
+    ctl, *_ = make(regs={43024: 30, 43137: 85})                     # off-grid floor 85%
+    assert err(ctl.apply, "max_charge_soc", 84).status == 400
+    assert ctl.apply("max_charge_soc", 85)["verified"]
+
+
+def test_force_charge_soc_bounds():
+    ctl, inv, *_ = make()
+    assert err(ctl.apply, "force_charge_soc", 4).status == 400       # absolute minimum 5
+    assert err(ctl.apply, "force_charge_soc", 20).status == 400      # must stay below over-discharge / backup floor (20)
+    r = ctl.apply("force_charge_soc", 15)
+    assert inv.writes == [("fc16", REG_FORCE_CHARGE_SOC, [15])] and r["verified"]
+    assert r["applied"] == "Force-charge SOC: 10% -> 15%"
+
+
+def test_force_charge_soc_stays_below_backup_floors():
+    ctl, *_ = make(regs={43011: 40, 43138: 12})                     # backup-output floor 12%
+    assert err(ctl.apply, "force_charge_soc", 12).status == 400
+    assert ctl.apply("force_charge_soc", 11)["verified"]
 
 
 # ---------------------------------------------------------------- time of use

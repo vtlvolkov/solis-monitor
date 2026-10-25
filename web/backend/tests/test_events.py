@@ -98,7 +98,7 @@ TOU = {"kind": "charge", "slot": 1, "enabled": True, "start": "23:00", "end": "0
     ("reserve_mode", True, True), ("reserve_mode", 1, False),
     ("time_of_use_mode", False, True),
     ("backup_soc", 40, True), ("backup_soc", 40.0, True), ("backup_soc", 40.5, False), ("backup_soc", True, False),
-    ("overdischarge_soc", "30", False),
+    ("overdischarge_soc", "30", False), ("max_charge_soc", 90, True), ("force_charge_soc", 10.5, False),
     ("tou_slot", TOU, True), ("tou_slot", {**TOU, "extra": 1}, False), ("tou_slot", [1], False),
     ("clock_sync", True, True), ("clock_sync", False, False),
     ("off_grid", True, False),
