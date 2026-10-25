@@ -170,10 +170,15 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 **Remove everything.**
 
 ```bash
-cd /opt/solis-monitor && sudo docker compose down -v      # -v also deletes the stored history
-sudo systemctl disable --now solis-monitor-update.timer 2>/dev/null
-sudo rm -rf /opt/solis-monitor /usr/local/bin/solis-monitor /etc/systemd/system/solis-monitor-update.*
+(cd /opt/solis-monitor && sudo docker compose down -v)    # -v also deletes the stored history
+sudo systemctl disable --now solis-monitor-update.timer 2>/dev/null               # nightly updates, if turned on
+sudo systemctl disable --now solis-monitor-dashboard-update.path 2>/dev/null      # updates from the dashboard
+sudo rm -rf /opt/solis-monitor /usr/local/bin/solis-monitor /etc/systemd/system/solis-monitor-update.* \
+            /etc/systemd/system/solis-monitor-dashboard-update.*
+sudo systemctl daemon-reload
 ```
+
+If you installed into another folder (`--dir`), use that folder instead of `/opt/solis-monitor`.
 
 ## Safety
 

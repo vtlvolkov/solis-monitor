@@ -26,6 +26,9 @@
 #   --dry-run             show what would be done and change nothing
 #   -h, --help            this text
 set -euo pipefail
+# Started from a folder that was deleted (e.g. right after removing an old install)? Every command would
+# warn "getcwd: cannot access parent directories", so work from / instead.
+pwd -P >/dev/null 2>&1 || cd /
 
 REPO="vtlvolkov/solis-monitor"          # GitHub owner/repo
 DEFAULT_VERSION=""                      # stamped with the release tag by the release workflow
