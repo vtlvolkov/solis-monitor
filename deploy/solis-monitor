@@ -6,15 +6,21 @@
 #   solis-monitor update [--version vX]  install the latest release (or the one named); rolls back on failure
 #   solis-monitor auto-update on|off     check for a new release every night (off by default)
 #   solis-monitor logs [service]         follow the logs (poller, web or influxdb)
+#   solis-monitor edit                   open .env in your editor, then apply the changes
+#   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 cd "$DIR"
 SELF="$DIR/solis-monitor"
 # .env is readable by root only (it holds the passwords) and Docker needs root: ask for sudo ourselves.
+# Never loops: only a non-root user re-runs itself, once (SOLIS_ELEVATED), and root without a .env just stops.
 if [[ ! -r "$DIR/.env" ]]; then
+  if [[ $EUID -eq 0 || -n "${SOLIS_ELEVATED:-}" ]]; then
+    echo "solis-monitor: cannot read $DIR/.env (is this a Solis Monitor install folder?)" >&2; exit 1
+  fi
   command -v sudo >/dev/null || { echo "solis-monitor: needs root (run it as root, or install sudo)" >&2; exit 1; }
-  exec sudo "$SELF" "$@"
+  exec sudo env SOLIS_ELEVATED=1 "SOLIS_EDITOR=${VISUAL:-${EDITOR:-}}" "$SELF" "$@"      # sudo drops EDITOR, so pass it along
 fi
 
 env_value() { grep -E "^$1=" .env 2>/dev/null | sed -n 1p | cut -d= -f2- | sed 's/[[:space:]]#.*//; s/[[:space:]]*$//' || true; }
@@ -122,6 +128,60 @@ wait_healthy() {     # the web container's healthcheck passes and the poller sta
   return 1
 }
 
+# Settings the database only reads on its very first start: changing them in .env afterwards locks the
+# poller and the dashboard out of InfluxDB. Compare .env with what the running container was created with.
+locked_changes() {
+  local pair name init have want changed=""
+  for pair in INFLUX_TOKEN:ADMIN_TOKEN INFLUX_PASSWORD:PASSWORD INFLUX_USER:USERNAME INFLUX_ORG:ORG INFLUX_BUCKET:BUCKET; do
+    name="${pair%%:*}"; init="DOCKER_INFLUXDB_INIT_${pair##*:}"
+    have=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' solis-influxdb 2>/dev/null | sed -n "s/^${init}=//p" | sed -n 1p)
+    want=$(env_value "$name")
+    if [[ -n "$have" && "$have" != "$want" ]]; then changed="$changed $name"; fi
+  done
+  echo "${changed# }"
+}
+
+cmd_apply() {
+  local force=""
+  [[ "${1:-}" == "--force" ]] && force=1
+  compose config -q 2>&1 || die ".env or docker-compose.yml has an error (see above); nothing was changed"
+  local locked; locked="$(locked_changes)"
+  if [[ -n "$locked" && -z "$force" ]]; then
+    die "$locked only count on the database's very first start. Changing them now would lock the poller and the dashboard out of InfluxDB.
+Put the old value(s) back in .env, or rotate the token properly (docs/advanced.md in the repository), or run with --force if you know what you are doing."
+  fi
+  chmod 600 .env
+  compose up -d --remove-orphans
+  if wait_healthy; then
+    echo "Applied: the dashboard is up and the poller is running."
+  else
+    echo "Applied, but the dashboard or the poller is not healthy yet. Look at: solis-monitor logs poller" >&2
+    return 1
+  fi
+}
+
+cmd_edit() {
+  local editor="${SOLIS_EDITOR:-${VISUAL:-${EDITOR:-}}}" ans
+  if [[ -z "$editor" ]]; then
+    for editor in editor nano vi; do command -v "$editor" >/dev/null && break; done
+  fi
+  command -v "${editor%% *}" >/dev/null || die "no text editor found; set EDITOR (for example: EDITOR=nano solis-monitor edit)"
+  backup="$(mktemp)"; cp .env "$backup"; trap 'rm -f "${backup:-}"' EXIT      # (global: the trap runs after this function)
+  while :; do
+    # shellcheck disable=SC2086   # the editor may carry options, e.g. "code --wait"
+    $editor .env
+    if cmp -s .env "$backup"; then echo "No changes."; return 0; fi
+    if compose config -q 2>/dev/null; then break; fi
+    compose config -q 2>&1 | sed -n 1,5p >&2 || true      # pipefail: the failing compose call is the point
+    read -rp "That file has an error. Edit again? [Y/n] (n puts the old file back) " ans
+    if [[ "${ans:-y}" == [nN]* ]]; then cp "$backup" .env; echo "Old .env restored."; return 1; fi
+  done
+  chmod 600 .env
+  read -rp "Apply the changes now? [Y/n] " ans
+  if [[ "${ans:-y}" == [nN]* ]]; then echo "Saved. Apply later with: solis-monitor apply"; return 0; fi
+  cmd_apply || { read -rp "Put the previous .env back? [y/N] " ans; if [[ "${ans:-n}" == [yY]* ]]; then cp "$backup" .env && cmd_apply; fi; return 1; }
+}
+
 cmd_auto_update() {
   case "${1:-}" in
     on)
@@ -162,7 +222,9 @@ case "${1:-}" in
   update) shift; cmd_update "$@" ;;
   auto-update) shift; cmd_auto_update "${1:-}" ;;
   logs) shift; compose logs -f --tail 100 "$@" ;;
+  apply) shift; cmd_apply "${1:-}" ;;
+  edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,8p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,10p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

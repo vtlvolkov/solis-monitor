@@ -368,9 +368,9 @@ cat <<DONE
 Done.
   Dashboard: http://${ip_addr}:${PORT}
   Login (asked when you open Settings): ${USER_NAME} / $([[ -n "$generated" ]] && echo "$PASS   <- generated, note it down" || echo "the password you chose")
-  Settings:  $DIR/.env  (edit, then: cd $DIR && docker compose up -d)
-$([[ -z "$INVERTER" ]] && echo "  The inverter address is not set: put it in INVERTER_HOST in $DIR/.env and run: cd $DIR && docker compose up -d")
-  Useful:    solis-monitor status | logs | update | auto-update on
+  Settings:  solis-monitor edit   (opens $DIR/.env, then applies your changes)
+$([[ -z "$INVERTER" ]] && echo "  The inverter address is not set: set INVERTER_HOST with: solis-monitor edit")
+  Useful:    solis-monitor status | logs | edit | apply | update | auto-update on
 Changing inverter settings from the dashboard is OFF. Read the README ("Settings") before turning it on.
 Do not expose port ${PORT} to the internet; use a VPN such as Tailscale for remote access.
 DONE

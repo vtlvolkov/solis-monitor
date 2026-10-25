@@ -30,7 +30,7 @@ The poller stays the only Modbus client, and it follows the protocol's limits: a
    - display 100 A, page 100 A (raw 1000) → `CURRENT_SCALE=0.1` (the default)
    - display 100 A, page 10 A (raw 100) → set `CURRENT_SCALE=1`
 3. **Set hard limits** no higher than your battery/BMS rating, e.g. `MAX_CHARGE_CURRENT_A=100`, `MAX_DISCHARGE_CURRENT_A=100`. Values above these are refused, and `0` refuses changes to that setting.
-4. Set `CONTROL_ENABLED=true` in `.env`, then run `docker compose up -d` in the install folder (`/opt/solis-monitor` if you used the installer).
+4. Set `CONTROL_ENABLED=true` with `solis-monitor edit` (installer) or in `.env` followed by `docker compose up -d` in the install folder.
 5. **Test with a harmless change** while watching the inverter display, e.g. limit charging to 30 A, then set it back.
 
 How a change works:

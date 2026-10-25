@@ -33,13 +33,15 @@ case "\$1" in
   compose)
     case "\$2" in
       version) echo "Docker Compose version v2.0.0" ;;
-      config) exec "$REAL_DOCKER" "\$@" ;;
+      config) if [[ "\$*" == *" -q"* ]]; then [[ -n "\${SHIM_CONFIG_FAIL:-}" ]] && { echo "error: invalid .env" >&2; exit 1; }; exit 0
+              else exec "$REAL_DOCKER" "\$@"; fi ;;
       *) : ;;
     esac ;;
   inspect)
     case "\$*" in
       *Health*) [[ -n "\${SHIM_UNHEALTHY:-}" ]] && echo unhealthy || echo healthy ;;
       *Running*) echo true ;;
+      *Config.Env*) cat "$T/influx.env" 2>/dev/null ;;
     esac ;;
   volume) printf '%s\n' "\${SHIM_VOLUMES:-}" ;;
   *) : ;;
@@ -129,10 +131,39 @@ echo "solis-monitor as a normal user"
 printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"; chmod +x "$T/bin/sudo"
 chmod 000 "$T/inst/.env"
 upd status > /dev/null 2>&1
-check "an unreadable .env makes it ask for sudo" 'grep -q "^sudo $T/inst/solis-monitor status" "$T/sudo.log"'
+check "an unreadable .env makes it ask for sudo, once" 'grep -q "^sudo env SOLIS_ELEVATED=1 .* $T/inst/solis-monitor status" "$T/sudo.log"'
+: > "$T/sudo.log"
+out=$(SOLIS_ELEVATED=1 upd status 2>&1); rc=$?
+check "already elevated and still no .env: stops instead of looping" '[[ $rc -ne 0 && "$out" == *"cannot read"* && ! -s "$T/sudo.log" ]]'
 chmod 600 "$T/inst/.env"; : > "$T/sudo.log"
 upd version > /dev/null 2>&1
 check "with a readable .env it does not" '[[ ! -s "$T/sudo.log" ]]'
+
+echo "solis-monitor apply and edit"
+{ for pair in ADMIN_TOKEN:INFLUX_TOKEN PASSWORD:INFLUX_PASSWORD USERNAME:INFLUX_USER ORG:INFLUX_ORG BUCKET:INFLUX_BUCKET; do
+    echo "DOCKER_INFLUXDB_INIT_${pair%%:*}=$(env_of "${pair##*:}")"; done; } > "$T/influx.env"      # what the database was created with
+: > "$T/docker.log"
+out=$(upd apply 2>&1); rc=$?
+check "apply restarts what changed and waits for health" '[[ $rc -eq 0 && "$out" == *Applied* ]] && grep -q "^compose up -d --remove-orphans" "$T/docker.log"'
+orig_token=$(env_of INFLUX_TOKEN); sed -i "s|^INFLUX_TOKEN=.*|INFLUX_TOKEN=changed|" "$T/inst/.env"; : > "$T/docker.log"
+out=$(upd apply 2>&1); rc=$?
+check "apply refuses a changed database token" '[[ $rc -ne 0 && "$out" == *INFLUX_TOKEN* ]] && ! grep -q "^compose up" "$T/docker.log"'
+out=$(upd apply --force 2>&1); check "--force applies it anyway" 'grep -q "^compose up" "$T/docker.log"'
+sed -i "s|^INFLUX_TOKEN=.*|INFLUX_TOKEN=$orig_token|" "$T/inst/.env"; : > "$T/docker.log"
+out=$(SHIM_CONFIG_FAIL=1 upd apply 2>&1); rc=$?
+check "apply stops on an invalid file" '[[ $rc -ne 0 && "$out" == *"nothing was changed"* ]] && ! grep -q "^compose up" "$T/docker.log"'
+
+printf '#!/bin/sh\necho "FOO=bar" >> "$1"\n' > "$T/ed.sh"; chmod +x "$T/ed.sh"
+: > "$T/docker.log"
+out=$(SOLIS_EDITOR="$T/ed.sh" upd edit <<< "y" 2>&1); rc=$?
+check "edit: change, then apply" '[[ $rc -eq 0 && "$(env_of FOO)" == bar && "$out" == *Applied* ]] && grep -q "^compose up" "$T/docker.log"'
+sed -i '/^FOO=/d' "$T/inst/.env"; : > "$T/docker.log"
+out=$(SOLIS_EDITOR=true upd edit 2>&1); check "edit: no change, nothing happens" '[[ "$out" == *"No changes"* ]] && ! grep -q "^compose up" "$T/docker.log"'
+out=$(SOLIS_EDITOR="$T/ed.sh" upd edit <<< "n" 2>&1)
+check "edit: answering no keeps the file for a later apply" '[[ "$(env_of FOO)" == bar && "$out" == *"solis-monitor apply"* ]] && ! grep -q "^compose up" "$T/docker.log"'
+sed -i '/^FOO=/d' "$T/inst/.env"
+out=$(SHIM_CONFIG_FAIL=1 SOLIS_EDITOR="$T/ed.sh" upd edit <<< "n" 2>&1); rc=$?
+check "edit: an invalid file is rolled back" '[[ $rc -ne 0 && -z "$(env_of FOO)" && "$out" == *restored* ]]'
 
 echo
 if ((fails)); then echo "$fails check(s) failed"; exit 1; fi

@@ -137,21 +137,23 @@ solis-monitor status            # version, containers, latest poller log lines
 solis-monitor update            # install the newest tagged release (rolls back if it fails to start)
 solis-monitor auto-update on    # optional: look for a new release every night (off by default)
 solis-monitor logs poller       # follow a service's log (poller, web or influxdb)
+solis-monitor edit              # open your settings file (.env) in an editor, then apply the changes
+solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
 ```
 
-Updates only ever install tagged releases, never unreleased code, and your settings (`/opt/solis-monitor/.env`) and history are left alone.
+Updates only ever install tagged releases, never unreleased code, and your settings (`/opt/solis-monitor/.env`) and history are left alone. `solis-monitor apply` stops you from changing the database passwords and token (`INFLUX_*`), which only count on the very first start and would lock the dashboard out of its own database.
 
 ## Troubleshooting
 
 **The pill says Offline, or there are no numbers.** The poller cannot reach the inverter's data logger. Check `solis-monitor logs poller`:
-- `cannot connect` or `No route to host`: the address is wrong, or the logger is off the network. Open `/opt/solis-monitor/.env`, fix `INVERTER_HOST`, then run `cd /opt/solis-monitor && sudo docker compose up -d`.
+- `cannot connect` or `No route to host`: the address is wrong, or the logger is off the network. Run `solis-monitor edit`, fix `INVERTER_HOST`, save and answer yes to apply.
 - It connects but keeps timing out: **the logger accepts one connection at a time.** Stop anything else that reads it (Home Assistant, another monitor, a second copy of this stack), wait a minute and look again.
 
-**The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, find its IP in your router, put it in `INVERTER_HOST` in `/opt/solis-monitor/.env` and run `cd /opt/solis-monitor && sudo docker compose up -d`. (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
+**The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, find its IP in your router, put it in `INVERTER_HOST` with `solis-monitor edit`. (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
 
-**Port 8088 is taken.** Run the installer with `--port 8090` (or change `WEB_PORT` in `.env` later).
+**Port 8088 is taken.** Run the installer with `--port 8090` (or change `WEB_PORT` with `solis-monitor edit` later).
 
-**I forgot the password.** `sudo grep WEB_BASIC_AUTH /opt/solis-monitor/.env` shows it. To change it, edit that line (`user:password`) and run `cd /opt/solis-monitor && sudo docker compose up -d`.
+**I forgot the password.** `sudo grep WEB_BASIC_AUTH /opt/solis-monitor/.env` shows it. To change it, run `solis-monitor edit`, change that line (`user:password`) and apply.
 
 **Remove everything.**
 

@@ -10,7 +10,7 @@ The poller sends Telegram messages for:
 
 `solis-monitor update` also reports each update and each failed update.
 
-Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`, then run `docker compose up -d poller`. For a private chat, the chat ID is your Telegram user ID (send any message to @userinfobot to get it). Send yourself a test:
+Run `solis-monitor edit`, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, and apply. (Without the installer: edit `.env`, then `docker compose up -d poller`.) For a private chat, the chat ID is your Telegram user ID (send any message to @userinfobot to get it). Send yourself a test:
 
 ```bash
 docker exec solis-poller python notify.py --test
@@ -33,7 +33,7 @@ The web service has a read-only MCP server at `http://<server-ip>:8088/mcp` for 
 
 There are no tools that change anything. Settings are changed only on the dashboard (password + confirmation).
 
-1. Generate a token and put it in `.env` as `MCP_TOKEN=` (`openssl rand -hex 32`), then run `docker compose up -d web`. The token is separate from `WEB_BASIC_AUTH` on purpose: the dashboard password can change inverter settings, so the agent shouldn't have it.
+1. Generate a token and put it in `.env` as `MCP_TOKEN=` (`openssl rand -hex 32`; with the installer use `solis-monitor edit`, otherwise edit the file and run `docker compose up -d web`). The token is separate from `WEB_BASIC_AUTH` on purpose: the dashboard password can change inverter settings, so the agent shouldn't have it.
 2. In your agent's MCP configuration (for Hermes: `config.yaml`) add:
    ```yaml
    mcp_servers:
