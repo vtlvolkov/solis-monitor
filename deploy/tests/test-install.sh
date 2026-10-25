@@ -91,6 +91,7 @@ rm -rf "$T/other"
 
 out=$(install --yes --user bob --password 'Secret-pw1' --inverter 127.0.0.1 --site-name Test --port 18088 --version v9.9.9 2>&1); rc=$?
 check "install succeeds" '[[ $rc -eq 0 ]] || { echo "$out"; false; }'
+check "the shared control folder exists" '[[ -d "$T/inst/control" ]]'
 check ".env is private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
 check "login written" '[[ "$(env_of WEB_BASIC_AUTH)" == "bob:Secret-pw1" ]]'
 check "settings-only auth by default" '[[ "$(env_of WEB_AUTH_SETTINGS_ONLY)" == true ]]'
@@ -145,6 +146,44 @@ mkdir -p "$T/units"
 SOLIS_UNIT_DIR="$T/units" upd auto-update on > /dev/null 2>&1
 check "the nightly unit runs as the folder's owner, not root" 'grep -q "^User=$(id -un)$" "$T/units/solis-monitor-update.service" && grep -q "^ExecStart=$T/inst/solis-monitor update --auto" "$T/units/solis-monitor-update.service"'
 check "the timer is enabled" 'grep -q "enable --now solis-monitor-update.timer" "$T/systemctl.log" && grep -q "^OnCalendar=" "$T/units/solis-monitor-update.timer"'
+printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"      # back to the logging stand-in
+
+echo "updates asked for by the dashboard"
+printf '#!/bin/sh\n[ "$1" = -u ] && shift 2\nexec "$@"\n' > "$T/bin/sudo"; chmod +x "$T/bin/sudo"      # a sudo that just runs the command
+: > "$T/systemctl.log"; rm -f "$T/units"/*
+SOLIS_UNIT_DIR="$T/units" upd dashboard-updates on > /dev/null 2>&1
+check "dashboard-updates on: path unit watches the request file" 'grep -q "^PathChanged=$T/inst/control/update-request" "$T/units/solis-monitor-dashboard-update.path"'
+check "dashboard-updates on: the service runs as the folder owner and passes --from-dashboard" 'grep -q "^User=$(id -un)$" "$T/units/solis-monitor-dashboard-update.service" && grep -q "^ExecStart=$T/inst/solis-monitor update --from-dashboard$" "$T/units/solis-monitor-dashboard-update.service"'
+check "dashboard-updates on: bridge file written and unit enabled" 'grep -q "\"enabled\":true" "$T/inst/control/bridge.json" && grep -q "enable --now solis-monitor-dashboard-update.path" "$T/systemctl.log"'
+
+status_of() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/update-status.json"; }
+: > "$T/docker.log"; rm -f "$T/inst/control/update-status.json"
+upd update --from-dashboard > /dev/null 2>&1
+check "no request file: nothing happens and nothing is reported" '[[ ! -e "$T/inst/control/update-status.json" ]] && ! grep -q "^compose" "$T/docker.log"'
+
+release v9.9.20; latest v9.9.20
+echo '{"to":"v9.9.20"}' > "$T/inst/control/update-request"
+upd update --from-dashboard > /dev/null 2>&1; rc=$?
+check "a request updates to the newest release and reports ok" '[[ $rc -eq 0 && "$(status_of state)" == ok && "$(status_of from)" == v9.9.10 && "$(status_of to)" == v9.9.20 && "$(env_of SOLIS_VERSION)" == v9.9.20 ]]'
+check "the request is consumed and the bridge file shows the new version" '[[ ! -e "$T/inst/control/update-request" ]] && grep -q "v9.9.20" "$T/inst/control/bridge.json"'
+check "the status has a start and a finish time" '[[ -n "$(status_of started)" && -n "$(status_of finished)" ]]'
+
+echo '{}' > "$T/inst/control/update-request"
+upd update --from-dashboard > /dev/null 2>&1
+check "already on the newest: reported as ok, nothing restarted" '[[ "$(status_of state)" == ok && "$(status_of message)" == *"Already"* ]]'
+
+release v9.9.21; latest v9.9.21
+echo '{}' > "$T/inst/control/update-request"
+SHIM_UNHEALTHY=1 upd update --from-dashboard > /dev/null 2>&1; rc=$?
+check "a release that does not start is rolled back and reported" '[[ $rc -ne 0 && "$(status_of state)" == rolled_back && "$(env_of SOLIS_VERSION)" == v9.9.20 ]]'
+
+latest v9.9.22      # announced but not downloadable
+echo '{}' > "$T/inst/control/update-request"
+upd update --from-dashboard > /dev/null 2>&1; rc=$?
+check "a failure before anything changes is still reported (never stuck on running)" '[[ $rc -ne 0 && "$(status_of state)" == failed && "$(env_of SOLIS_VERSION)" == v9.9.20 ]]'
+
+SOLIS_UNIT_DIR="$T/units" upd dashboard-updates off > /dev/null 2>&1
+check "dashboard-updates off removes the bridge and disables the unit" '[[ ! -e "$T/inst/control/bridge.json" ]] && grep -q "disable --now solis-monitor-dashboard-update.path" "$T/systemctl.log"'
 printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"      # back to the logging stand-in
 
 echo "solis-monitor apply and edit"

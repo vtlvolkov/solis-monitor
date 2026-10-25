@@ -79,9 +79,14 @@ services:
       TARIFF_NIGHT_START: ${TARIFF_NIGHT_START:-23:00}
       TARIFF_NIGHT_END: ${TARIFF_NIGHT_END:-07:00}
       TARIFF_FILE: /data/tariff.json
+      # "Check for updates" on the Settings page (release installs only; see web/backend/app/updates.py)
+      SOLIS_VERSION: ${SOLIS_VERSION:-}
+      SOLIS_REPO: ${SOLIS_REPO:-}
+      UPDATE_DIR: /control
       TZ: ${TZ:-Europe/Kyiv}
     volumes:
       - web-data:/data        # tariff changes saved from the Settings page
+      - ./control:/control    # requests to and progress from the host's updater; no Docker access for this container
 
 volumes:
   influxdb-data:

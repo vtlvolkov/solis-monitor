@@ -329,6 +329,39 @@ export const UK: Record<string, string> = {
   "Lead-acid battery high temperature": "Висока температура свинцево-кислотної батареї",
   "Lead-acid battery low temperature": "Низька температура свинцево-кислотної батареї",
   "Grid surge (alarm)": "Сплеск у мережі (тривога)", "Fan fault (alarm)": "Несправність вентилятора (тривога)",
+
+  // --- software updates (Settings)
+  "Software": "Програмне забезпечення", "Version": "Версія", "Latest release": "Остання версія",
+  "built from source": "зібрано з вихідного коду",
+  "Check for updates": "Перевірити оновлення", "Checking…": "Перевірка…", "Update now": "Оновити зараз",
+  "{version} is available": "Доступна версія {version}", "Published {date}": "Опубліковано {date}",
+  "What's new": "Що нового",
+  "You have the newest version. Checked {time}.": "У вас найновіша версія. Перевірено {time}.",
+  "You have the newest version.": "У вас найновіша версія.",
+  "Update to {version}?": "Оновити до {version}?", "Update": "Оновити", "Asking the server…": "Звернення до сервера…",
+  "The dashboard restarts and is unavailable for a few minutes, longer on a Raspberry Pi. Readings pause briefly. If the new version does not start, the old one is restored automatically.":
+    "Панель перезапуститься і буде недоступна кілька хвилин, на Raspberry Pi довше. Показники ненадовго призупиняться. Якщо нова версія не запуститься, стару буде відновлено автоматично.",
+  "Waiting for the server to start the update…": "Очікування, поки сервер почне оновлення…",
+  "The dashboard is restarting. This page reconnects by itself.": "Панель перезапускається. Ця сторінка підключиться сама.",
+  "The server did not pick up the request. On the server run: solis-monitor dashboard-updates on":
+    "Сервер не підхопив запит. На сервері виконайте: solis-monitor dashboard-updates on",
+  "Updating to {version}…": "Оновлення до {version}…", "Updated to {version}.": "Оновлено до {version}.",
+  "The update to {version} did not start properly, so {from} was restored.": "Оновлення до {version} не запустилося належним чином, тому відновлено {from}.",
+  "Update failed: {message}": "Оновлення не вдалося: {message}", "see the server log": "дивіться журнал сервера",
+  "Could not reach GitHub to look for a new version.": "Не вдалося зв'язатися з GitHub, щоб знайти нову версію.",
+  "You already have the newest version.": "У вас уже найновіша версія.",
+  "An update is already running.": "Оновлення вже виконується.",
+  "Could not reach the updater on the server.": "Не вдалося зв'язатися з засобом оновлення на сервері.",
+  "This copy was built from source, so it cannot update itself. Update it with git.":
+    "Цю копію зібрано з вихідного коду, тому вона не може оновлюватися сама. Оновіть її через git.",
+  "This copy was built from source, so it has no releases to compare with.":
+    "Цю копію зібрано з вихідного коду, тому немає релізів для порівняння.",
+  "Updating from the dashboard is not set up. On the server run: solis-monitor dashboard-updates on":
+    "Оновлення з панелі не налаштовано. На сервері виконайте: solis-monitor dashboard-updates on",
+  "The updater stopped without reporting. On the server, see: solis-monitor logs":
+    "Засіб оновлення зупинився без звіту. На сервері дивіться: solis-monitor logs",
+  "The update stopped before it finished. See: solis-monitor logs":
+    "Оновлення зупинилося, не завершившись. Дивіться: solis-monitor logs",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */

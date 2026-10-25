@@ -18,6 +18,7 @@
 #   --port N              dashboard port (default: 8088)
 #   --protect-dashboard   ask for the password for the whole dashboard, not only for Settings
 #   --auto-updates        install new tagged releases every night (default: update by hand)
+#   --no-dashboard-updates  do not let the dashboard's Settings page update this install (default: it can)
 #   --version vX.Y.Z      install this release (default: the release this script belongs to)
 #   --dir PATH            install here (default: /opt/solis-monitor)
 #   --yes                 never ask questions, use the defaults
@@ -35,7 +36,7 @@ TEST_MODE="${SOLIS_TEST_MODE:-}"
 DIR="${SOLIS_DIR:-/opt/solis-monitor}"
 VERSION="${SOLIS_VERSION:-$DEFAULT_VERSION}"
 USER_NAME="" PASS="" INVERTER="" SCAN_PREFIX="" SITE="" TZ_NAME="" PORT=8088
-PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN="" NO_SCAN=""
+PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN="" NO_SCAN="" NO_DASH_UPDATES=""
 MODBUS_PORT="${INVERTER_PORT:-502}"
 MODBUS_UNIT="${MODBUS_UNIT:-1}"
 
@@ -57,6 +58,7 @@ while (($#)); do
     --port) PORT="${2:?--port needs a number}"; shift 2 ;;
     --protect-dashboard) PROTECT_ALL=1; shift ;;
     --auto-updates) AUTO_UPDATES=1; shift ;;
+    --no-dashboard-updates) NO_DASH_UPDATES=1; shift ;;
     --version) VERSION="${2:?--version needs a tag}"; shift 2 ;;
     --dir) DIR="${2:?--dir needs a path}"; shift 2 ;;
     --yes|-y) ASSUME_YES=1; shift ;;
@@ -264,7 +266,7 @@ cat <<PLAN
   Inverter       ${INVERTER:-not set yet} (port $MODBUS_PORT)
   Time zone      $TZ_NAME
   Inverter settings can be changed from the dashboard: NO (off; see the README before enabling)
-  Updates        $([[ -n "$AUTO_UPDATES" ]] && echo "automatic, tagged releases, nightly" || echo "by hand: solis-monitor update")
+  Updates        $([[ -n "$AUTO_UPDATES" ]] && echo "automatic, tagged releases, nightly" || echo "by hand: solis-monitor update"); $([[ -n "$NO_DASH_UPDATES" ]] && echo "not from the dashboard" || echo "also from the dashboard (Settings -> Software, after login)")
 PLAN
 if [[ -n "$DRY_RUN" ]]; then say; say "Dry run: nothing was changed."; trap - EXIT; exit 0; fi
 if [[ -n "$interactive" ]]; then yes_no "Install now?" y || { say "Cancelled."; trap - EXIT; exit 0; }; fi
@@ -317,6 +319,7 @@ step "Writing the configuration"
 install -d -m 755 "$DIR"
 install -m 644 "$stage/docker-compose.yml" "$DIR/docker-compose.yml"
 install -m 755 "$stage/solis-monitor" "$DIR/solis-monitor"
+install -d -m 755 "$DIR/control"          # shared with the dashboard for updates; created here so Docker does not make it root-only
 install -m 600 "$stage/.env.example" "$DIR/.env"
 set_var() {    # set_var NAME VALUE: replace the first NAME= line of .env, or add it
   if grep -qE "^$1=" "$DIR/.env"; then sed -i "s|^$1=.*|$1=$2|" "$DIR/.env"; else echo "$1=$2" >> "$DIR/.env"; fi
@@ -343,6 +346,7 @@ docker compose up -d
 if [[ -z "$TEST_MODE" ]]; then
   ln -sf "$DIR/solis-monitor" /usr/local/bin/solis-monitor
   if [[ -n "$AUTO_UPDATES" ]]; then "$DIR/solis-monitor" auto-update on; fi
+  if [[ -z "$NO_DASH_UPDATES" ]]; then "$DIR/solis-monitor" dashboard-updates on; fi
 fi
 
 say "Waiting for the dashboard ..."

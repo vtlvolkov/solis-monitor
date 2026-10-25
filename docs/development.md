@@ -31,6 +31,15 @@ Raw registers are stored too (`meter_power`, `battery_power`, `battery_direction
 
 See also `CLAUDE.md` in the repository root for an architecture overview written for coding agents.
 
+## Updating from the dashboard (how it works)
+
+The web container has no Docker access on purpose. **Settings → Software** (`web/frontend/src/components/UpdateCard.tsx`) calls `/api/settings/update*` (`web/backend/app/main.py`, logic in `updates.py`). Those endpoints sit behind the Settings login and the same same-origin checks as every other change. They only ever:
+
+1. ask GitHub for the newest published release of `SOLIS_REPO` (on button press, at most once per 30 s), and
+2. drop a request file in `control/` (`./control` on the host, `/control` in the container).
+
+On the host, `solis-monitor dashboard-updates on` installs a systemd path unit that watches `control/update-request` and runs `solis-monitor update --from-dashboard` (as the folder's owner, never as root for user-owned folders). The request's content is ignored: the host script finds the newest release itself, never downgrades, rolls back if the new version is unhealthy, and reports progress in `control/update-status.json`, which the page polls. A crashed updater cannot leave the page waiting: a `running` status older than 30 minutes is shown as failed. Builds from source (empty `SOLIS_VERSION`) show the version as "built from source" and never offer an update.
+
 ## Releases and the installer
 
 - `install.sh` (repo root) and `deploy/solis-monitor` are the installer and the management command. `deploy/tests/test-install.sh` tests both without root, Docker containers or the internet (a stand-in `docker`, a fake Modbus logger and `file://` releases); CI also runs shellcheck on them.

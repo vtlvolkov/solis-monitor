@@ -22,3 +22,6 @@ playwright-report/
 # Deploy state on the server
 deploy/deploy.log
 deploy/last-ok
+
+# Files shared with the host's updater (dashboard updates)
+control/

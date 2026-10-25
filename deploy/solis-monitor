@@ -6,6 +6,7 @@
 #   solis-monitor update [--version vX]  install the latest release (or the one named); rolls back on failure
 #   solis-monitor auto-update on|off     check for a new release every night (off by default)
 #   solis-monitor logs [service]         follow the logs (poller, web or influxdb)
+#   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
@@ -28,8 +29,35 @@ set_env() {          # set_env NAME VALUE: replace the NAME= line, or add it
   if grep -qE "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
 }
 die() { echo "solis-monitor: $*" >&2; exit 1; }
-as_root() { if [[ $EUID -eq 0 ]]; then "$@"; else sudo "$@"; fi; }
+as_root() {         # as_root [-u USER] command...
+  local who=()
+  if [[ "${1:-}" == -u ]]; then who=(-u "$2"); shift 2; fi
+  if [[ $EUID -eq 0 ]]; then
+    if ((${#who[@]})); then sudo "${who[@]}" "$@"; else "$@"; fi
+  else sudo "${who[@]}" "$@"; fi
+}
 compose() { docker compose "$@"; }
+CTL="$DIR/control"          # shared with the web container: the dashboard's update requests and our progress
+ensure_ctl() { [[ -d "$CTL" ]] || mkdir -p "$CTL" 2>/dev/null || true; }
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+json_text() { printf '%s' "$1" | tr -d '"\\\n\r' | cut -c1-250; }
+REPORT=""; REPORT_DONE=""; REPORT_FROM=""; REPORT_TO=""; REPORT_STARTED=""
+report() {           # report STATE MESSAGE: progress for the dashboard (only when the dashboard asked for this update)
+  [[ -n "$REPORT" ]] || return 0
+  local finished=""
+  [[ "$1" == running ]] || { finished="$(now_iso)"; REPORT_DONE=1; }
+  printf '{"state":"%s","from":"%s","to":"%s","message":"%s","started":"%s","finished":"%s"}\n' \
+    "$1" "$(json_text "$REPORT_FROM")" "$(json_text "$REPORT_TO")" "$(json_text "$2")" "$REPORT_STARTED" "$finished" \
+    > "$CTL/update-status.json.tmp" 2>/dev/null && mv "$CTL/update-status.json.tmp" "$CTL/update-status.json" 2>/dev/null || true
+}
+finish_report() {    # whatever stopped the update (die, a signal), the dashboard must not wait forever
+  [[ -n "$REPORT" && -z "$REPORT_DONE" ]] && report failed "The update stopped before it finished. See: solis-monitor logs" || true
+}
+refresh_bridge() {   # keep bridge.json (written by `dashboard-updates on`) in step with the installed version
+  [[ -f "$CTL/bridge.json" ]] || return 0
+  printf '{"enabled":true,"version":"%s","updated":"%s"}\n' "$(json_text "$(env_value SOLIS_VERSION)")" "$(now_iso)" \
+    > "$CTL/bridge.json.tmp" 2>/dev/null && mv "$CTL/bridge.json.tmp" "$CTL/bridge.json" 2>/dev/null || true
+}
 
 REPO="$(env_value SOLIS_REPO)"
 RAW_BASE="${SOLIS_RAW_BASE:-https://raw.githubusercontent.com/${REPO}}"
@@ -53,6 +81,7 @@ cmd_status() {
   echo "Version:   $(env_value SOLIS_VERSION)  (repo $REPO)"
   echo "Dashboard: http://$(hostname -I | awk '{print $1}'):$(env_value WEB_PORT | sed 's/^$/8088/')"
   echo "Inverter:  $(env_value INVERTER_HOST || true)"
+  if [[ -f "$CTL/bridge.json" ]]; then echo "Dashboard:  can update itself (Settings -> Software)"; else echo "Dashboard:  cannot update itself (solis-monitor dashboard-updates on)"; fi
   if [[ "$(systemctl is-enabled solis-monitor-update.timer 2>/dev/null || true)" == enabled ]]; then
     echo "Updates:   automatic, nightly (solis-monitor auto-update off to stop)"
   else
@@ -69,24 +98,35 @@ cmd_update() {
     case "$1" in
       --version) target="${2:?--version needs a tag, e.g. v1.2.0}"; shift 2 ;;
       --auto) shift ;;                       # from the nightly timer; same as by hand
+      --from-dashboard) REPORT=1; shift ;;   # started by the dashboard's request file; report progress back
       *) die "unknown option $1" ;;
     esac
   done
   [[ -n "$REPO" ]] || die "SOLIS_REPO is missing from .env"
+  tmp=""; trap 'rm -rf "${tmp:-}"; finish_report' EXIT
+  if [[ -n "$REPORT" ]]; then
+    # The path unit also fires when we delete the request below: with no request there is nothing to do.
+    [[ -e "$CTL/update-request" ]] || { REPORT=""; return 0; }
+    rm -f "$CTL/update-request" || die "cannot remove $CTL/update-request (is the folder owned by the user running this?)"
+    REPORT_STARTED="$(now_iso)"
+  fi
   exec 9>/tmp/solis-monitor-update.lock
-  flock -n 9 || { echo "another update is running"; exit 0; }
+  flock -n 9 || { echo "another update is running"; REPORT=""; exit 0; }
 
   local current explicit="$target"
-  current="$(env_value SOLIS_VERSION)"
+  current="$(env_value SOLIS_VERSION)"; REPORT_FROM="$current"
+  report running "Looking for the newest release"
   [[ -n "$target" ]] || target="$(latest_release)"
   [[ -n "$target" ]] || die "no release found"
-  if [[ "$target" == "$current" ]]; then echo "Already on $current."; return 0; fi
+  REPORT_TO="$target"
+  if [[ "$target" == "$current" ]]; then echo "Already on $current."; report ok "Already on $current"; return 0; fi
   if [[ -z "$explicit" && "$(printf '%s\n%s\n' "$current" "$target" | sort -V | sed -n 2p)" == "$current" ]]; then
-    echo "Latest release $target is not newer than $current."; return 0      # never downgrade by itself
+    echo "Latest release $target is not newer than $current."; report ok "Already on the newest release ($current)"; return 0      # never downgrade by itself
   fi
 
   echo "Updating $current -> $target"
-  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  report running "Downloading $target"
+  tmp="$(mktemp -d)"
   curl -fsS -m 60 -o "$tmp/docker-compose.yml" "$RAW_BASE/$target/docker-compose.yml" || die "could not download $target"
   curl -fsS -m 60 -o "$tmp/solis-monitor" "$RAW_BASE/$target/deploy/solis-monitor" || die "could not download $target"
 
@@ -98,17 +138,21 @@ cmd_update() {
   # A release that names another database version still gets it, because `up` pulls what is missing.
   if ! compose pull --quiet poller web; then
     echo "Could not download the images for $target; staying on $current." >&2
-    restore "$current"; return 1
+    restore "$current"; report failed "Could not download the images for $target. Still on $current."; return 1
   fi
+  report running "Restarting with $target"
+  ensure_ctl
   compose up -d --remove-orphans
   if wait_healthy; then
     install -m 755 "$tmp/solis-monitor" "$SELF.new" && mv "$SELF.new" "$SELF"      # mv: the running copy is not overwritten in place
     echo "Updated to $target."
+    refresh_bridge; report ok "Updated to $target"
     notify "🚀 Solis Monitor updated to $target"
   else
     echo "$target did not start properly; going back to $current." >&2
     restore "$current"
     compose up -d --remove-orphans
+    report rolled_back "$target did not start properly, so $current was restored."
     notify "❌ Solis Monitor update to $target failed; still on $current"
     return 1
   fi
@@ -155,6 +199,7 @@ cmd_apply() {
 Put the old value(s) back in .env, or rotate the token properly (docs/advanced.md in the repository), or run with --force if you know what you are doing."
   fi
   chmod 600 .env
+  ensure_ctl
   compose up -d --remove-orphans
   if wait_healthy; then
     echo "Applied: the dashboard is up and the poller is running."
@@ -184,6 +229,50 @@ cmd_edit() {
   read -rp "Apply the changes now? [Y/n] " ans
   if [[ "${ans:-y}" == [nN]* ]]; then echo "Saved. Apply later with: solis-monitor apply"; return 0; fi
   cmd_apply || { read -rp "Put the previous .env back? [y/N] " ans; if [[ "${ans:-n}" == [yY]* ]]; then cp "$backup" .env && cmd_apply; fi; return 1; }
+}
+
+# The "Update" button on the dashboard's Settings page cannot run Docker (that container has no access to it).
+# It drops a request file in control/; this path unit notices it and runs `update --from-dashboard` here on the host.
+cmd_dashboard_updates() {
+  local unit_dir="${SOLIS_UNIT_DIR:-/etc/systemd/system}" owner user_line=""
+  owner="$(stat -c %U "$SELF")"
+  if [[ "$owner" != root ]]; then user_line="User=$owner"; fi
+  case "${1:-}" in
+    on)
+      [[ -n "$(env_value SOLIS_VERSION)" ]] || die "this copy was built from source; the dashboard can only update release installs"
+      as_root install -d -o "$owner" -m 755 "$CTL"      # not left to Docker, which would create it as root
+      as_root tee "$unit_dir/solis-monitor-dashboard-update.service" >/dev/null <<UNIT
+[Unit]
+Description=Update Solis Monitor (asked for on the dashboard)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+$user_line
+ExecStart=$SELF update --from-dashboard
+UNIT
+      as_root tee "$unit_dir/solis-monitor-dashboard-update.path" >/dev/null <<UNIT
+[Unit]
+Description=Watch for update requests from the Solis Monitor dashboard
+
+[Path]
+PathChanged=$CTL/update-request
+Unit=solis-monitor-dashboard-update.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+      printf '{"enabled":true,"version":"%s","updated":"%s"}\n' "$(json_text "$(env_value SOLIS_VERSION)")" "$(now_iso)" | as_root -u "$owner" tee "$CTL/bridge.json" >/dev/null
+      as_root systemctl daemon-reload
+      as_root systemctl enable --now solis-monitor-dashboard-update.path
+      echo "Updating from the dashboard is on: Settings -> Software." ;;
+    off)
+      as_root systemctl disable --now solis-monitor-dashboard-update.path 2>/dev/null || true
+      rm -f "$CTL/bridge.json" "$CTL/update-request"
+      echo "Updating from the dashboard is off." ;;
+    *) die "usage: solis-monitor dashboard-updates on|off" ;;
+  esac
 }
 
 cmd_auto_update() {
@@ -233,8 +322,9 @@ case "${1:-}" in
   auto-update) shift; cmd_auto_update "${1:-}" ;;
   logs) shift; compose logs -f --tail 100 "$@" ;;
   apply) shift; cmd_apply "${1:-}" ;;
+  dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,10p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,11p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

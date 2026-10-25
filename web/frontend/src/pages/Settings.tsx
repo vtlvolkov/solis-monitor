@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
 import { TariffCard } from '../components/TariffCard';
+import { UpdateCard } from '../components/UpdateCard';
 import { ApiError, getJson } from '../lib/api';
 import { holdInfo } from '../lib/hold';
 import { locale, t, tx, unit } from '../lib/i18n';
@@ -439,6 +440,7 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
           <TariffCard />
           <div class="settings-stack">
             {s && <ClockCard s={s} wait={wait} onPropose={propose} />}
+            <UpdateCard />
             <Card title="Storage mode">
               {!s ? <Skeleton h={120} /> : (
                 <>

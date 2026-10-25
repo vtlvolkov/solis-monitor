@@ -19,6 +19,7 @@ from . import shaping
 from .tariff import Tariff, TariffError, TariffStore, next_boundary, validate, version_dict
 from .config import Settings
 from .control import ControlClient, PollerUnavailable
+from .updates import Bridge, ReleaseLookupError, fetch_latest_release, is_newer, parse_version
 from .validation import (ENERGY_FIELDS, WINDOWS, parse_agg, parse_days, parse_every,
                          parse_fields, parse_range)
 
@@ -55,7 +56,7 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def create_app(repo=None, settings: Settings | None = None, now=_now, control=None) -> FastAPI:
+def create_app(repo=None, settings: Settings | None = None, now=_now, control=None, releases=None) -> FastAPI:
     s = settings or Settings()
     if repo is None:
         from .influx import InfluxRepo
@@ -371,6 +372,87 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         history_cache.clear()
         log.warning("tariff changed from %s: %s", effective.isoformat(), tariff.as_dict())
         return {"effective_from": effective.isoformat(), **tariff_payload(t)}
+
+    # ------------------------------------------------------------------ updating from the dashboard
+    bridge = Bridge(s.update_dir)
+    lookup = releases or (lambda: fetch_latest_release(s.solis_repo, s.github_api))
+    checked: dict = {}
+
+    @app.get("/api/version")
+    async def api_version():
+        return {"version": s.solis_version or None, "installed": bool(s.solis_version)}
+
+    def update_state(t):
+        latest = checked.get("release")
+        available = bool(latest) and is_newer(latest["tag"], s.solis_version)
+        reason = None
+        if not s.basic_auth:
+            reason = "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."
+        elif not s.solis_version or parse_version(s.solis_version) is None:
+            reason = "This copy was built from source, so it cannot update itself. Update it with git."
+        elif not bridge.ready():
+            reason = "Updating from the dashboard is not set up. On the server run: solis-monitor dashboard-updates on"
+        status = bridge.status()
+        if status and status["state"] == "running":       # a crashed updater must not leave the page waiting forever
+            try:
+                started = datetime.fromisoformat((status["started"] or "").replace("Z", "+00:00"))
+            except ValueError:
+                started = None
+            if started is None or (t - started).total_seconds() > 1800:
+                status = {**status, "state": "failed", "message": "The updater stopped without reporting. On the server, see: solis-monitor logs"}
+        busy = bridge.pending() or bool(status and status["state"] == "running")
+        return {"version": s.solis_version or None, "can_update": reason is None, "reason": reason, "busy": busy,
+                "latest": {**latest, "checked_at": checked["at"].isoformat(), "available": available} if latest else None,
+                "status": status}
+
+    async def check_release(t, max_age_s):
+        if not checked.get("at") or (t - checked["at"]).total_seconds() > max_age_s:
+            try:
+                release = await asyncio.to_thread(lookup)
+            except ReleaseLookupError as exc:
+                log.warning("release lookup failed: %s", exc)
+                return JSONResponse({"detail": "Could not reach GitHub to look for a new version."}, status_code=502)
+            checked.update(at=t, release=release)
+        return None
+
+    @app.get("/api/settings/update")
+    async def api_update():
+        return update_state(now())
+
+    @app.post("/api/settings/update/check")
+    async def api_update_check(request: Request):
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        if not s.solis_version:
+            return JSONResponse({"detail": "This copy was built from source, so it has no releases to compare with."}, status_code=400)
+        t = now()
+        if (failed := await check_release(t, 30)) is not None:       # at most one GitHub request per 30 s
+            return failed
+        return update_state(t)
+
+    @app.post("/api/settings/update")
+    async def api_update_start(request: Request):
+        """Drop a request for the host. What gets installed is decided there: the newest release, with rollback."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        t = now()
+        state = update_state(t)
+        if not state["can_update"]:
+            return JSONResponse({"detail": state["reason"]}, status_code=409)
+        if state["busy"]:
+            return JSONResponse({"detail": "An update is already running."}, status_code=409)
+        if (failed := await check_release(t, 300)) is not None:
+            return failed
+        state = update_state(t)
+        if not state["latest"] or not state["latest"]["available"]:
+            return JSONResponse({"detail": "You already have the newest version."}, status_code=409)
+        try:
+            bridge.request(state["latest"]["tag"], t)
+        except OSError as exc:
+            log.error("could not write the update request: %s", exc)
+            return JSONResponse({"detail": "Could not reach the updater on the server."}, status_code=500)
+        log.warning("update to %s requested from the dashboard", state["latest"]["tag"])
+        return JSONResponse({**update_state(t), "busy": True}, status_code=202)
 
     @app.get("/api/devices")
     async def api_devices():

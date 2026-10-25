@@ -141,6 +141,10 @@ solis-monitor edit              # open your settings file (.env) in an editor, t
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
 ```
 
+**From the dashboard:** open **Settings → Software**, press **Check for updates**, and if a newer release exists, **Update now**. The dashboard restarts for a few minutes and reconnects by itself; if the new version fails to start, the old one is restored automatically. This works on installs made by the installer (turn it off with `--no-dashboard-updates` or `solis-monitor dashboard-updates off`), needs your Settings login, and the page only contacts GitHub when you press the button.
+
+<img src="docs/img/update.png" width="420" alt="Software card on the Settings page">
+
 Updates only ever install tagged releases, never unreleased code, and your settings (`/opt/solis-monitor/.env`) and history are left alone. `solis-monitor apply` stops you from changing the database passwords and token (`INFLUX_*`), which only count on the very first start and would lock the dashboard out of its own database.
 
 ## Troubleshooting
