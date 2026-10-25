@@ -139,6 +139,14 @@ chmod 600 "$T/inst/.env"; : > "$T/sudo.log"
 upd version > /dev/null 2>&1
 check "with a readable .env it does not" '[[ ! -s "$T/sudo.log" ]]'
 
+echo "solis-monitor auto-update"
+printf '#!/bin/sh\nexec "$@"\n' > "$T/bin/sudo"; printf '#!/bin/sh\necho "systemctl $*" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/sudo" "$T/bin/systemctl"
+mkdir -p "$T/units"
+SOLIS_UNIT_DIR="$T/units" upd auto-update on > /dev/null 2>&1
+check "the nightly unit runs as the folder's owner, not root" 'grep -q "^User=$(id -un)$" "$T/units/solis-monitor-update.service" && grep -q "^ExecStart=$T/inst/solis-monitor update --auto" "$T/units/solis-monitor-update.service"'
+check "the timer is enabled" 'grep -q "enable --now solis-monitor-update.timer" "$T/systemctl.log" && grep -q "^OnCalendar=" "$T/units/solis-monitor-update.timer"'
+printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"      # back to the logging stand-in
+
 echo "solis-monitor apply and edit"
 { for pair in ADMIN_TOKEN:INFLUX_TOKEN PASSWORD:INFLUX_PASSWORD USERNAME:INFLUX_USER ORG:INFLUX_ORG BUCKET:INFLUX_BUCKET; do
     echo "DOCKER_INFLUXDB_INIT_${pair%%:*}=$(env_of "${pair##*:}")"; done; } > "$T/influx.env"      # what the database was created with

@@ -189,7 +189,12 @@ cmd_edit() {
 cmd_auto_update() {
   case "${1:-}" in
     on)
-      as_root tee /etc/systemd/system/solis-monitor-update.service >/dev/null <<UNIT
+      # If this folder belongs to a normal user, the nightly job runs as that user, never as root: root would be
+      # executing a script that user (or anything running as them) can edit. That user needs Docker access.
+      local owner user_line=""
+      owner="$(stat -c %U "$SELF")"
+      if [[ "$owner" != root ]]; then user_line="User=$owner"; fi
+      as_root tee ${SOLIS_UNIT_DIR:-/etc/systemd/system}/solis-monitor-update.service >/dev/null <<UNIT
 [Unit]
 Description=Update Solis Monitor to the latest release
 After=network-online.target docker.service
@@ -197,9 +202,10 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+$user_line
 ExecStart=$SELF update --auto
 UNIT
-      as_root tee /etc/systemd/system/solis-monitor-update.timer >/dev/null <<UNIT
+      as_root tee ${SOLIS_UNIT_DIR:-/etc/systemd/system}/solis-monitor-update.timer >/dev/null <<UNIT
 [Unit]
 Description=Look for a new Solis Monitor release every night
 
