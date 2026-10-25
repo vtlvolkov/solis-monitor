@@ -217,13 +217,15 @@ else
     say "Scanning ${prefix}.1-254 for Modbus TCP on port ${MODBUS_PORT} (takes a few seconds) ..."
     mapfile -t found < <(scan "$prefix" "${me:-}")
     if ((${#found[@]} == 1)); then
-      INVERTER="${found[0]}"; say "Found the logger at $INVERTER"
+      INVERTER="${found[0]}"; say "Found a Modbus device at $INVERTER"
+      yes_no "Is that your inverter's data logger?" y || INVERTER=""      # no: ask for the address below
     elif ((${#found[@]} > 1)); then
       say "Several Modbus devices answered:"
       for i in "${!found[@]}"; do say "  $((i + 1))) ${found[$i]}"; done
       if [[ -n "$interactive" ]]; then
-        pick=""; ask pick "Which one is the inverter's logger? (number)" 1
-        INVERTER="${found[$((${pick:-1} - 1))]:-}"
+        pick=""; ask pick "Which one is the inverter's logger? (number, or 0 to type the address yourself)" 1
+        INVERTER=""
+        if [[ "$pick" =~ ^[1-9][0-9]*$ ]]; then INVERTER="${found[$((pick - 1))]:-}"; fi
       else
         warn "not choosing for you; pass --inverter IP"
       fi

@@ -43,7 +43,8 @@ Name of this installation (shown as the dashboard title; Enter to skip): Home
 == Inverter
 Look for the inverter on 192.168.1.0/24 now? [Y/n]
 Scanning 192.168.1.1-254 for Modbus TCP on port 502 (takes a few seconds) ...
-Found the logger at 192.168.1.50
+Found a Modbus device at 192.168.1.50
+Is that your inverter's data logger? [Y/n]
 
 Install now? [Y/n]
 ...
