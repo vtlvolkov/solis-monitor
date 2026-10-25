@@ -44,9 +44,9 @@ cd web/frontend && npm run build                                                
 
 ## Deployment
 
-A second site runs the same stack on a Raspberry Pi (own InfluxDB, own `.env`, reached over Tailscale; see README "Second site on a Raspberry Pi"). `deploy/pi/setup.sh` prepares the Pi, `deploy/pi/find-inverter.sh` finds the logger on its LAN. `SITE_NAME` (poller + web) labels the site. Both sites deploy from `main`.
+A second site runs the same stack on a Raspberry Pi (own InfluxDB, own `.env`, reached over Tailscale; see README "Second site on a Raspberry Pi"). `deploy/pi/setup.sh` prepares the Pi, `deploy/pi/find-inverter.sh` finds the logger on its LAN. `SITE_NAME` (poller + web) labels the site.
 
-Production runs on an Umbrel host that pulls `main` from a private GitHub repo every 3 minutes (`deploy/deploy.sh` + `deploy/solis-deploy.timer`) and runs `docker compose up -d --build`. `.env` lives only on that host. Anything pushed to `main` is deployed and can write inverter settings, so keep the test suites meaningful.
+Production runs on an Umbrel host. Both sites now update only to tagged releases (`solis-monitor update`, or from the dashboard), never from `main` directly: the 3-minute `deploy/deploy.sh` + `deploy/solis-deploy.timer` auto-deploy still exists for building from source but is disabled on both. To try unreleased work on one site, push a test tag (`v1.2.0-rc.1`, see below) and run `solis-monitor update --version v1.2.0-rc.1` there. `.env` lives only on each host. A release can write inverter settings, so keep the test suites meaningful.
 
 ## Installer and releases (public install path)
 
@@ -54,7 +54,7 @@ Production runs on an Umbrel host that pulls `main` from a private GitHub repo e
 - `deploy/solis-monitor` is the management command installed next to it (`status`, `update`, `auto-update on|off`, `logs`). `update` only moves to tagged GitHub releases, restores the old compose file and version if the new one is not healthy, and never edits `.env` except `SOLIS_VERSION`.
 - `docker-compose.yml` has both `image:` and `build:` for poller and web: the image defaults to `solis-monitor-<service>:latest` (what a local build is called), the installer sets `SOLIS_IMAGE_PREFIX`/`SOLIS_VERSION` in `.env` to use the registry images. The maintainer's own sites still build from `main` through `deploy/deploy.sh`.
 - **Updating from the dashboard** (release installs only): `web/backend/app/updates.py` + `/api/settings/update*` in `main.py` + `UpdateCard.tsx`. The web container writes only `control/update-request`; a host systemd path unit (`solis-monitor dashboard-updates on`) runs `solis-monitor update --from-dashboard`, which finds the release itself, rolls back on failure and writes `control/update-status.json`. The server (not the browser) looks for a newer release every `UPDATE_CHECK_HOURS` and `/api/version` feeds the header badge (`UpdateBadge.tsx`), which opens Settings with the confirmation, never updating on a single click. Never give the web container Docker access or let the request choose what is installed.
-- `.github/workflows/release.yml` builds amd64+arm64 images for a `v*` tag and creates the release with `install.sh` attached (its `DEFAULT_VERSION=` line is stamped with the tag). Keep every new compose variable optional (`${VAR:-default}`): updates replace the compose file but not `.env`.
+- `.github/workflows/release.yml` builds amd64+arm64 images for a `v*` tag and creates the release with `install.sh` attached (its `DEFAULT_VERSION=` line is stamped with the tag). A suffixed tag (`v1.2.0-rc.1`) becomes a pre-release without the `latest` image tag, for testing on one site with `solis-monitor update --version`. Keep every new compose variable optional (`${VAR:-default}`): updates replace the compose file but not `.env`.
 - `deploy/tests/test-install.sh` tests both scripts with a stand-in `docker`, a fake Modbus logger and `file://` releases; it runs in CI together with shellcheck.
 
 ## Changing things

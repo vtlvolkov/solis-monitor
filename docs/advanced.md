@@ -22,7 +22,7 @@ If the port clashes with an Umbrel app, change `WEB_PORT` in `.env`. InfluxDB ha
 
 ## Auto-deploy from your own GitHub repo
 
-This is how the author runs their own sites, building from `main` instead of using the releases; you do not need it for the quick install. The Umbrel host checks the GitHub repo every 3 minutes and redeploys when `main` has new commits (`deploy/deploy.sh`, run by a systemd timer). The Docker builds run all test suites, so a commit with failing tests stops at the build and the running version stays up. GitHub Actions (`.github/workflows/test.yml`) runs the same tests on every push. `.env` exists only on the Umbrel host and is never committed.
+An optional way to build from `main` instead of using the releases; you do not need it for the quick install. (The author's own sites used to run like this; they now update only to tagged releases, and try unreleased work with a test release first, see [Development](development.md).) With it, the host checks the GitHub repo every 3 minutes and redeploys when `main` has new commits (`deploy/deploy.sh`, run by a systemd timer). The Docker builds run all test suites, so a commit with failing tests stops at the build and the running version stays up. GitHub Actions (`.github/workflows/test.yml`) runs the same tests on every push. `.env` exists only on the host and is never committed.
 
 Pushing to `main` changes code that can write inverter settings. If you deploy like this from your own fork, keep it private (or at least protect `main`) and use 2FA on your GitHub account.
 
@@ -70,7 +70,7 @@ Prepare the Pi where you are now, then move it:
 4. Settings changes start **off** (`CONTROL_ENABLED=false`). Before turning them on, verify `CURRENT_SCALE` against the inverter's display and set `MAX_*_CURRENT_A` (see [Changing inverter settings](settings.md)). You can't see that inverter, so be extra careful.
 5. For alerts, add `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` to the Pi's `.env` (the same bot works) and run `docker compose up -d poller`. Leave them empty until the Pi is at the site, or you'll get "inverter offline" alerts.
 
-Both sites deploy from `main`, so a push updates both. A failed build or test stops at the build and leaves the old version running (the Pi sends the Telegram notice). To keep Tailscale tight, use an ACL so only your own devices reach the Pi, and don't publish its port to the internet.
+If both sites use the auto-deploy, a push to `main` updates both. A failed build or test stops at the build and leaves the old version running (the Pi sends the Telegram notice). To keep Tailscale tight, use an ACL so only your own devices reach the Pi, and don't publish its port to the internet.
 
 ## Maintenance
 

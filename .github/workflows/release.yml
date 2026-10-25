@@ -3,6 +3,10 @@ name: release
 # Pushing a tag like v1.2.0 publishes the poller and web images (amd64 + arm64) to GitHub's container
 # registry and a GitHub release with install.sh and the Android TV app (solis-tv.apk) attached. The Dockerfiles run the test suites, so a
 # release with failing tests is never published.
+#
+# A tag with a suffix, like v1.2.0-rc.1, is a test release: it is marked as a pre-release and its images are
+# not tagged latest, so nightly updates, the dashboard's update badge and new installs (which all ask GitHub
+# for the latest release) never pick it. Install it on one site with: solis-monitor update --version v1.2.0-rc.1
 on:
   push:
     tags: ["v[0-9]*"]
@@ -41,7 +45,7 @@ jobs:
           push: ${{ github.ref_type == 'tag' }}      # a manual run only checks that everything builds
           tags: |
             ${{ steps.meta.outputs.image }}:${{ github.ref_name }}
-            ${{ steps.meta.outputs.image }}:latest
+            ${{ !contains(github.ref_name, '-') && format('{0}:latest', steps.meta.outputs.image) || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
@@ -86,5 +90,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          pre=""; case "${{ github.ref_name }}" in *-*) pre="--prerelease" ;; esac
           gh release create "${{ github.ref_name }}" install.sh docker-compose.yml solis-tv.apk \
-            --title "${{ github.ref_name }}" --generate-notes --verify-tag
+            --title "${{ github.ref_name }}" --generate-notes --verify-tag $pre
