@@ -116,7 +116,7 @@ out=$(upd update 2>&1); check "up to date: nothing to do" '[[ "$out" == *"Alread
 release v9.9.10; latest v9.9.10; : > "$T/docker.log"
 out=$(upd update 2>&1); rc=$?
 check "update moves to the new release" '[[ $rc -eq 0 && "$(env_of SOLIS_VERSION)" == v9.9.10 ]] || { echo "$out"; false; }'
-check "images pulled and restarted" 'grep -q "^compose pull" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
+check "images pulled and restarted" 'grep -q "^compose pull --quiet poller web$" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
 latest v9.9.9
 out=$(upd update 2>&1); check "never downgrades by itself" '[[ "$out" == *"not newer"* && "$(env_of SOLIS_VERSION)" == v9.9.10 ]]'
 release v9.9.11; latest v9.9.11

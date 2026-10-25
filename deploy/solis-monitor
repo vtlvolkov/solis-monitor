@@ -84,7 +84,9 @@ cmd_update() {
   install -m 644 "$tmp/docker-compose.yml" docker-compose.yml
   set_env SOLIS_VERSION "$target"
 
-  if ! compose pull --quiet; then
+  # Only our own images: the database image is not refreshed behind your back (that restart took ~2 minutes on a Pi).
+  # A release that names another database version still gets it, because `up` pulls what is missing.
+  if ! compose pull --quiet poller web; then
     echo "Could not download the images for $target; staying on $current." >&2
     restore "$current"; return 1
   fi
