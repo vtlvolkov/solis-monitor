@@ -225,9 +225,9 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    while not INVERTER_HOST and not stop.is_set():          # a Pi prepared before it reaches its site
-        log.error("INVERTER_HOST is not set: run deploy/pi/find-inverter.sh, or set it in .env and run "
-                  "`docker compose up -d poller`")
+    while not INVERTER_HOST and not stop.is_set():          # installed with --no-scan, address not set yet
+        log.error("INVERTER_HOST is not set: set it with `solis-monitor edit` (or in .env, then run "
+                  "`docker compose up -d poller`)")
         stop.wait(60)
     if stop.is_set():
         return

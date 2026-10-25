@@ -22,7 +22,7 @@ If the port clashes with an Umbrel app, change `WEB_PORT` in `.env`. InfluxDB ha
 
 ## Auto-deploy from your own GitHub repo
 
-An optional way to build from `main` instead of using the releases; you do not need it for the quick install. (The author's own sites used to run like this; they now update only to tagged releases, and try unreleased work with a test release first, see [Development](development.md).) With it, the host checks the GitHub repo every 3 minutes and redeploys when `main` has new commits (`deploy/deploy.sh`, run by a systemd timer). The Docker builds run all test suites, so a commit with failing tests stops at the build and the running version stays up. GitHub Actions (`.github/workflows/test.yml`) runs the same tests on every push. `.env` exists only on the host and is never committed.
+An optional way to build from `main` instead of using the releases; you do not need it for the quick install. With it, the host checks the GitHub repo every 3 minutes and redeploys when `main` has new commits (`deploy/deploy.sh`, run by a systemd timer). The Docker builds run all test suites, so a commit with failing tests stops at the build and the running version stays up. GitHub Actions (`.github/workflows/test.yml`) runs the same tests on every push. `.env` exists only on the host and is never committed.
 
 Pushing to `main` changes code that can write inverter settings. If you deploy like this from your own fork, keep it private (or at least protect `main`) and use 2FA on your GitHub account.
 
@@ -57,20 +57,16 @@ If systemd units can't be installed, use cron instead: `crontab -e`, then add `*
 
 To see what ran: `tail deploy/deploy.log` ("OK abc1234" or "FAILED …"); `deploy/last-ok` holds the last deployed commit. An agent such as Hermes can read these to report deployments without having any host access itself. Never edit files in the checkout on the server: the deploy only fast-forwards, and it stops with an error if the checkout has diverged.
 
-## A second site on a Raspberry Pi
+## A second site
 
-A second inverter at another place runs its own copy of this stack on a Raspberry Pi (Pi 4 or 5, 4 GB or more, Ubuntu Server 24.04 LTS 64-bit or 64-bit Raspberry Pi OS Lite, ideally an SSD or a good USB drive instead of an SD card). Each site keeps its own database, so a dropped link loses nothing. You reach it over Tailscale at `http://<pi-tailscale-name>:8088`. Set `SITE_NAME` in `.env`: it becomes the dashboard title and prefixes Telegram alerts (`[Cottage] ⚡ Power outage …`), so one chat can serve both sites. The TV app can show either site: change its address in the app.
+A second inverter at another place gets its own install, made with the same one-command installer as the first (a Raspberry Pi 4 or 5 with 64-bit Raspberry Pi OS or Ubuntu Server works well, ideally with an SSD or a good USB drive instead of an SD card). Each site keeps its own database, so a dropped link between them loses nothing.
 
-Prepare the Pi where you are now, then move it:
+1. Install **at the site**, on the same network as that inverter's data logger, so the installer finds the right one. Don't run it at home: it would find your home inverter, which allows only one Modbus client. Give the site a name: `curl -fsSL https://github.com/vtlvolkov/solis-monitor/releases/latest/download/install.sh | sudo bash -s -- --site-name Cottage`. The name becomes the dashboard title and prefixes Telegram alerts (`[Cottage] ⚡ Power outage …`), so one chat can serve both sites.
+2. For remote access, install [Tailscale](https://tailscale.com) on it (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`) and open `http://<tailscale-name>:8088`. Use an ACL so only your own devices reach it, and never forward its port to the internet. Use an Ethernet cable if you can: you can't fix Wi-Fi remotely.
+3. Settings changes start **off** (`CONTROL_ENABLED=false`). Before turning them on with `solis-monitor edit`, verify `CURRENT_SCALE` against the inverter's display and set `MAX_*_CURRENT_A` (see [Changing inverter settings](settings.md)). You can't see that inverter, so be extra careful.
+4. For alerts, add `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` with `solis-monitor edit` (the same bot works for both sites).
 
-1. In Raspberry Pi Imager choose *Other general-purpose OS → Ubuntu → Ubuntu Server 24.04 LTS (64-bit)* and use *Edit settings* to set a host name (e.g. `cottage-solis`), a user and password (or your SSH key), enable SSH, and set your time zone. Use an Ethernet cable at the site: Imager can store only one Wi-Fi network, and you can't fix Wi-Fi remotely. The first boot takes a few minutes (cloud-init); find the Pi with `ssh <user>@<host>.local` or in your router.
-2. If your repo is private, either clone it on the Pi with your own credentials (an HTTPS clone with a GitHub token, or `ssh -A` from your laptop with the key loaded in your agent) and run `bash ~/solis-monitor/deploy/pi/setup.sh "Cottage"`, or just copy the one script over (`scp deploy/pi/setup.sh <user>@<pi>:`, then `bash setup.sh "Cottage"`) and let it clone with its own deploy key. Either way it installs Docker (with buildx) and Tailscale (you approve the login link in a browser), adds a read-only deploy key (you paste it into GitHub), clones the repo, writes a `.env` with fresh random secrets, turns on the 3-minute auto-deploy like the Umbrel box, and does the first build (10–20 minutes). It prints a generated Settings password; it is also in `.env` as `WEB_BASIC_AUTH`.
-3. At the site: plug the Pi into the router, SSH in over Tailscale, and run `~/solis-monitor/deploy/pi/find-inverter.sh`. Do **not** run it at home: it would find your home inverter, which allows only one Modbus client (it asks you to confirm). It stops the poller, scans the LAN for a Modbus TCP device on port 502, saves it as `INVERTER_HOST` and restarts the poller. If it finds several or none, it says what to check; you can also edit `INVERTER_HOST` in `.env` and run `docker compose up -d poller`.
-`~/solis-monitor/deploy/pi/status.sh` prints a one-screen health check (network, containers, configured inverter, last deploy, last poller log lines) when you're logged in remotely.
-4. Settings changes start **off** (`CONTROL_ENABLED=false`). Before turning them on, verify `CURRENT_SCALE` against the inverter's display and set `MAX_*_CURRENT_A` (see [Changing inverter settings](settings.md)). You can't see that inverter, so be extra careful.
-5. For alerts, add `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` to the Pi's `.env` (the same bot works) and run `docker compose up -d poller`. Leave them empty until the Pi is at the site, or you'll get "inverter offline" alerts.
-
-If both sites use the auto-deploy, a push to `main` updates both. A failed build or test stops at the build and leaves the old version running (the Pi sends the Telegram notice). To keep Tailscale tight, use an ACL so only your own devices reach the Pi, and don't publish its port to the internet.
+The TV app can show either site: change its address in the app. Each site updates on its own (`solis-monitor update`, from the dashboard, or nightly with `solis-monitor auto-update on`), so you can try a new release on one site first.
 
 ## Maintenance
 
