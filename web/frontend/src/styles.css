@@ -174,6 +174,9 @@ button { font: inherit; color: inherit; }
 .chart-error { color: #f0a9a9; padding: 40px 0; text-align: center; }
 .tchart { position: relative; }
 .tchart-plot { width: 100%; }
+/* fill: the plot takes the height left by the parent (it cannot push the parent taller) */
+.tchart-fill { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tchart-fill .tchart-plot { flex: 1 1 0; min-height: 0; overflow: hidden; }
 .tchart-empty { position: absolute; inset: 0 0 auto 0; height: 200px; display: grid; place-items: center; color: var(--c-muted); pointer-events: none; }
 .legend { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .legend th { color: var(--c-muted); font-weight: 500; text-align: right; padding: 2px 6px; }
@@ -512,6 +515,7 @@ html.tv-mode, html.tv-mode body { overflow: hidden; height: 100%; font-size: 20p
 .tv-grid .gbar-sub { font-size: 0.82rem; }
 .tv-today .today { grid-template-columns: repeat(6, 1fr); }
 .tv-stage .chart-card { padding: 12px 8px 8px; }
+.tv-stage .chart-fill { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .legend-inline { display: flex; flex-wrap: wrap; gap: 4px 26px; font-size: 1.05rem; margin: 6px 0 0 8px; font-variant-numeric: tabular-nums; }
 .legend-inline strong { margin-left: 4px; }
 .tv-stage .card h2 { font-size: 1.3rem; }

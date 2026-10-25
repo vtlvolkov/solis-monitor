@@ -84,12 +84,14 @@ const hexA = (hex: string, a: number) => {
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-export function TimeChart({ data, series, height = 220, zeroLine = false, minY, maxY, font = 12, inline = false }: {
+export function TimeChart({ data, series, height = 220, zeroLine = false, minY, maxY, font = 12, inline = false, fill = false }: {
   data: HistoryPayload; series: SeriesDef[]; height?: number; zeroLine?: boolean; minY?: number; maxY?: number;
   /** Axis label size in px; the axis widths scale with it (for the TV page). */
   font?: number;
   /** One-line legend with the latest values (wall display). */
   inline?: boolean;
+  /** Take the height the parent leaves (the TV page keeps its columns level this way); `height` is then the fallback. */
+  fill?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
@@ -110,7 +112,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
     const k = font / 12;
     const opts: Options = {
       width: el.clientWidth || 600,
-      height,
+      height: fill ? el.clientHeight || height : height,
       legend: { show: false },
       cursor: { drag: { x: false, y: false }, points: { size: 7 } },
       scales: {
@@ -153,19 +155,19 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
       },
     };
     plot.current = new uPlot(opts, aligned, el);
-    const ro = new ResizeObserver(() => plot.current?.setSize({ width: el.clientWidth, height }));
+    const ro = new ResizeObserver(() => plot.current?.setSize({ width: el.clientWidth, height: fill ? el.clientHeight || height : height }));
     ro.observe(el);
     return () => { ro.disconnect(); plot.current?.destroy(); plot.current = null; };
     // Rebuild only when the series definition changes; data updates go through setData.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, height, zeroLine, leftUnit, rightUnit, font, lang]);
+  }, [series, height, fill, zeroLine, leftUnit, rightUnit, font, lang]);
 
   useEffect(() => { plot.current?.setData(aligned); }, [aligned]);
 
   const empty = data.t.length === 0;
   return (
-    <div class="tchart">
-      <div ref={box} class="tchart-plot" style={{ minHeight: `${height}px` }} />
+    <div class={`tchart ${fill ? 'tchart-fill' : ''}`}>
+      <div ref={box} class="tchart-plot" style={fill ? undefined : { minHeight: `${height}px` }} />
       {empty && <div class="tchart-empty">{t('No data in this range')}</div>}
       {inline ? (
         <div class="legend-inline">

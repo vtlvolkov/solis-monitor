@@ -60,8 +60,8 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
   const outage = hasPoint && (gridLost(fields) || !!events?.outage_now);
   const hoursLeft = runtimeHours(fields?.battery_soc, info?.backup.eps_dod_pct ?? info?.battery.overdischarge_soc,
                                  info?.battery.capacity_kwh, fields?.total_load_power);
-  const chart = (title: string, series: typeof POWER, height: number, opts: { zeroLine?: boolean; minY?: number; maxY?: number } = {}) => (
-    <Card title={title} class="chart-card">
+  const chart = (title: string, series: typeof POWER, height: number, opts: { zeroLine?: boolean; minY?: number; maxY?: number; fill?: boolean } = {}) => (
+    <Card title={title} class={`chart-card ${opts.fill ? 'chart-fill' : ''}`}>
       {h ? <TimeChart data={h} series={series} height={height} font={18} inline {...opts} />
         : hist.error ? <div class="chart-error">{hist.error}</div> : <Skeleton h={height} />}
     </Card>
@@ -73,7 +73,7 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
     ? <BatteryCard fields={fields} extra={<Runtime live={live} info={info} avgLoad={avgLoad} />} />
     : <Card title="Battery"><Skeleton h={100} /></Card>;
   const today = <div class="tv-today">{fields ? <TodayRow fields={fields} /> : <Card title="Today"><Skeleton h={60} /></Card>}</div>;
-  const power_ = chart('Power flows', POWER, 496, { zeroLine: true });
+  const power_ = chart('Power flows', POWER, 400, { zeroLine: true, fill: true });     // fills the rest of the column, so it ends level with the left one
 
   return (
     <div class="tv-viewport">
