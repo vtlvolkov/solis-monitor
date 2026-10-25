@@ -53,7 +53,11 @@ cmd_status() {
   echo "Version:   $(env_value SOLIS_VERSION)  (repo $REPO)"
   echo "Dashboard: http://$(hostname -I | awk '{print $1}'):$(env_value WEB_PORT | sed 's/^$/8088/')"
   echo "Inverter:  $(env_value INVERTER_HOST || true)"
-  echo "Updates:   $(systemctl is-enabled solis-monitor-update.timer 2>/dev/null | sed 's/^enabled$/automatic, nightly/; s/^disabled$/manual (solis-monitor update)/' || true)"
+  if [[ "$(systemctl is-enabled solis-monitor-update.timer 2>/dev/null || true)" == enabled ]]; then
+    echo "Updates:   automatic, nightly (solis-monitor auto-update off to stop)"
+  else
+    echo "Updates:   manual (solis-monitor update)"
+  fi
   compose ps --format 'table {{.Name}}\t{{.Status}}'
   echo "--- poller, last lines ---"
   compose logs --tail 5 poller 2>&1 || true
