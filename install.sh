@@ -12,6 +12,7 @@
 #   --password PASS       dashboard password (default: asked, or generated when not interactive)
 #   --inverter IP         inverter data logger address (default: scan this network)
 #   --scan-network A.B.C  scan A.B.C.1-254 instead of this machine's own network
+#   --no-scan             do not look for the inverter (set INVERTER_HOST in .env later)
 #   --site-name NAME      title of the dashboard and prefix of alerts (default: none)
 #   --timezone ZONE       e.g. Europe/Kyiv (default: this machine's)
 #   --port N              dashboard port (default: 8088)
@@ -34,7 +35,7 @@ TEST_MODE="${SOLIS_TEST_MODE:-}"
 DIR="${SOLIS_DIR:-/opt/solis-monitor}"
 VERSION="${SOLIS_VERSION:-$DEFAULT_VERSION}"
 USER_NAME="" PASS="" INVERTER="" SCAN_PREFIX="" SITE="" TZ_NAME="" PORT=8088
-PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN=""
+PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN="" NO_SCAN=""
 MODBUS_PORT="${INVERTER_PORT:-502}"
 MODBUS_UNIT="${MODBUS_UNIT:-1}"
 
@@ -50,6 +51,7 @@ while (($#)); do
     --password) PASS="${2:?--password needs a value}"; shift 2 ;;
     --inverter) INVERTER="${2:?--inverter needs an address}"; shift 2 ;;
     --scan-network) SCAN_PREFIX="${2:?--scan-network needs A.B.C}"; shift 2 ;;
+    --no-scan) NO_SCAN=1; shift ;;
     --site-name) SITE="${2:?--site-name needs a value}"; shift 2 ;;
     --timezone) TZ_NAME="${2:?--timezone needs a value}"; shift 2 ;;
     --port) PORT="${2:?--port needs a number}"; shift 2 ;;
@@ -209,8 +211,8 @@ else
   prefix="${SCAN_PREFIX:-${me%.*}}"
   if [[ -z "$prefix" ]]; then
     warn "no network route to scan"
-  elif ! yes_no "Look for the inverter on ${prefix}.0/24 now?" y; then
-    say "Skipped the scan."
+  elif [[ -n "$NO_SCAN" ]] || ! yes_no "Look for the inverter on ${prefix}.0/24 now?" y; then
+    say "Not scanning."
   else
     say "Scanning ${prefix}.1-254 for Modbus TCP on port ${MODBUS_PORT} (takes a few seconds) ..."
     mapfile -t found < <(scan "$prefix" "${me:-}")
@@ -281,6 +283,16 @@ fi
 docker compose version >/dev/null 2>&1 || die "Docker Compose is not available"
 if docker ps -a --format '{{.Names}}' | grep -qE '^solis-(influxdb|poller|web)$'; then
   die "containers named solis-* already exist on this machine (another install?). Remove them first."
+fi
+# Volumes left by an earlier stack would be reused with their old database, which does not accept the new passwords.
+project=$(basename "$DIR" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-')
+old_volumes=$(docker volume ls -q | grep -E "^${project}_(influxdb-data|influxdb-config|web-data)$" || true)
+if [[ -n "$old_volumes" ]]; then
+  die "Docker volumes from an earlier install exist:
+$(echo "$old_volumes" | sed 's/^/  /')
+A new install would reuse that old database, which does not accept the new passwords.
+To start clean (this DELETES the stored history):  docker volume rm $(echo "$old_volumes" | tr '\n' ' ')
+To keep it, restore the .env of that install instead of running the installer."
 fi
 
 # ---------------------------------------------------------------- download and pull before touching $DIR

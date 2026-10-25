@@ -41,6 +41,7 @@ case "\$1" in
       *Health*) [[ -n "\${SHIM_UNHEALTHY:-}" ]] && echo unhealthy || echo healthy ;;
       *Running*) echo true ;;
     esac ;;
+  volume) printf '%s\n' "\${SHIM_VOLUMES:-}" ;;
   *) : ;;
 esac
 exit 0
@@ -80,6 +81,12 @@ check "a password with a space is refused" '[[ $rc -ne 0 && "$out" == *password*
 out=$(install --yes --password short 2>&1); check "a short password is refused" '[[ $? -ne 0 && ! -e "$T/inst" ]]'
 out=$(install --yes --inverter 999.1.1.1 2>&1); check "a bad address is refused" '[[ $? -ne 0 && ! -e "$T/inst" ]]'
 
+out=$(SHIM_VOLUMES=$'inst_influxdb-data\ninst_web-data' install --yes --inverter 127.0.0.1 2>&1); rc=$?
+check "leftover volumes of an earlier stack stop the install" '[[ $rc -ne 0 && "$out" == *"docker volume rm inst_influxdb-data inst_web-data"* && ! -e "$T/inst" ]]'
+out=$(SHIM_VOLUMES=inst_influxdb-data SOLIS_DIR="$T/other" bash "$ROOT/install.sh" --yes --inverter 127.0.0.1 --version v9.9.9 2>&1); rc=$?
+check "volumes of another project do not matter" '[[ $rc -eq 0 && -e "$T/other/.env" ]]'
+rm -rf "$T/other"
+
 out=$(install --yes --user bob --password 'Secret-pw1' --inverter 127.0.0.1 --site-name Test --port 18088 --version v9.9.9 2>&1); rc=$?
 check "install succeeds" '[[ $rc -eq 0 ]] || { echo "$out"; false; }'
 check ".env is private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
@@ -95,6 +102,9 @@ if [[ -n "$REAL_DOCKER" ]] && "$REAL_DOCKER" compose version >/dev/null 2>&1; th
 fi
 out=$(install --yes 2>&1); check "a second install is refused" '[[ $? -ne 0 && "$out" == *"already installed"* ]]'
 
+rm -rf "$T/inst"
+out=$(install --yes --no-scan --scan-network 127.0.0 2>&1)
+check "--no-scan installs without an inverter address" '[[ -z "$(env_of INVERTER_HOST)" && "$out" != *Scanning* ]]'
 rm -rf "$T/inst"
 out=$(install --yes --scan-network 127.0.0 2>&1)
 check "scan finds the logger; a generated password is shown" '[[ "$(env_of INVERTER_HOST)" == 127.0.0.1 && "$(env_of WEB_BASIC_AUTH)" =~ ^admin:[0-9a-f]{16}$ && "$out" == *"generated"* ]]'
