@@ -1,0 +1,43 @@
+# Dashboard guide
+
+What each page shows, how the numbers are calculated and which settings in `.env` affect them. For a short tour with pictures see the [README](../README.md#a-tour).
+
+- **Overview**: live power-flow diagram (PV, Grid, Grid Load, Battery, Backup Load), battery SOC bar, today's kWh, a backup-runtime estimate, and a red banner during a grid outage.
+- **Devices**: inverter, battery, logger and meter cards with status, like the Solis app. Tap a card for details:
+  - inverter: serial number, firmware, state, fault codes, clock drift, AC/PV/grid values
+  - battery: SOC/SOH, voltage, current, today's kWh, plus BMS voltage/current, BMS charge and discharge limits, BMS failure codes
+  - meter: voltage, current, active/reactive/apparent power, power factor, frequency, lifetime import/export
+  - logger: address, link status, last data
+
+  Device details are read from the inverter by the poller on request (cached 30 s). Their register meanings were checked against a live S6-EH1P.
+- **Events**: grid connected or out (with time left on battery), active alarms, outage history (start, end, duration, battery SOC before → after, totals) and alarm history with decoded fault names.
+- **Settings**: see [Changing inverter settings](settings.md).
+- **Charts**: stats, power flows, SOC, battery voltage and current, grid and backup-output voltage, frequency, energy today, an energy summary (today / yesterday / month / year / lifetime), and daily kWh for the last 30 days. The time range is kept in the URL (`?view=charts&range=24h`).
+
+**Backup runtime** = usable energy ÷ load, where usable energy is capacity × (SOC − the discharge floor on the backup output, 33298). The load is the 1-hour average. Capacity comes from `BATTERY_CAPACITY_KWH`; if that's unset, it's the inverter's rated-Ah setting (43019) × 51.2 V. Set it if you know your battery's usable kWh.
+
+**Outages and alarms** are recorded by the poller into measurement `solis_event`, when the "No grid" fault bit is set, the status is 0x1015, or grid voltage drops below 100 V. A change must be seen in 2 consecutive polls. History starts when you install this version.
+
+The Overview and the TV page show four power gauges as horizontal bars: **Grid** (the size of the grid power in either direction, with an Importing/Exporting note; scale 0–6 kW), **Backup load** (0–6 kW, the inverter's maximum), and **Battery charge** and **Battery discharge** (the battery's power in each direction, 0 while it goes the other way, with a note). The battery bars' maximum follows the **Max charge current** / **Max discharge current** setting times a voltage: the inverter's equalize voltage for charging (40 A × 55 V = 2.2 kW) and its float voltage for discharging (60 A × 53.5 V = 3.21 kW), or the nominal 51.2 V if they can't be read. It changes when you change those settings, and charging at the current limit fills the bar. Each bar turns amber from 60% and red from 85% of its maximum, with a short status under it. On the Overview the bars sit under the power diagram (at the bottom of the page on a phone); on the TV page they are a 2×2 block at the top right. The limits are `WARN_AT`, `DANGER_AT` and the grid bar's `GAUGE_GRID_MAX_W` in `web/frontend/src/lib/gauge.ts`.
+
+Live values arrive over Server-Sent Events every ~10 s. If SSE fails, the page falls back to polling (`?transport=poll` forces polling). The status pill turns red when the newest point is older than 45 s.
+
+| Env var | Default | |
+|---|---|---|
+| `WEB_PORT` | `8088` | Host port |
+| `WEB_BASIC_AUTH` | empty | `user:pass` turns on HTTP Basic auth (`/healthz` stays open for the Docker healthcheck) |
+| `SITE_NAME` | empty | Name of this installation: dashboard title, browser tab and a prefix on Telegram alerts |
+| `WEB_AUTH_SETTINGS_ONLY` | empty | `true` = only `/api/settings*` needs the password, so the dashboard is open and the browser asks for the username and password when you open the Settings tab. Needs `WEB_BASIC_AUTH`. |
+| `TARIFF_*` | empty | Starting electricity prices; change them later on the Settings page (see "Electricity cost" below) |
+| `INFLUX_*`, `TZ` | shared | Same values as the poller. `TZ` sets the day boundaries for daily kWh |
+
+**Electricity cost.** Set `TARIFF_DAY` (and, for a two-zone meter, `TARIFF_NIGHT`, `TARIFF_NIGHT_START`, `TARIFF_NIGHT_END`, `TARIFF_CURRENCY`) in `.env` and the Overview shows today's and this month's grid cost, the tariff zone that is active now (from the server's clock) and a day-zone / night-zone table with each zone's kWh and cost. The card's **History** link opens a page for any month since the first stored reading (`?view=cost&month=2026-10&day=2026-10-18`): month totals, a stacked bar chart of every day (night zone and day zone, in cost or kWh), a table of all days, and, for a selected day, the day/night split with its cost, plus the house consumption, export, PV and battery energy. Day and night are split from the grid-import counter every 15 minutes, with the zone hours of the tariff in force at that time.
+
+**Changing the prices.** Use the *Electricity tariff* card on the Settings page (it needs `WEB_BASIC_AUTH`, like the other changes). A change starts at the next quarter-hour, or on a date you pick, and only prices consumption from then on: every earlier 15-minute window keeps the price and the night hours it had, so past days and months do not change (the cost page lists the prices that applied in the month). A newer save replaces changes that were scheduled to start later. The currency stays the one in `.env`. The `TARIFF_*` values in `.env` are the prices before your first change; after that the saved list (`/data/tariff.json` in the `web-data` Docker volume) is the source and `.env` is ignored. Each site keeps its own. To start over, delete that file and restart the web service.
+
+MCP (agents): `/mcp`, see [Alerts and AI agents](alerts-and-agents.md). API (GET): `/api/live`, `/api/stream` (SSE), `/api/history?fields=a,b&range=6h&every=auto&agg=mean`, `/api/energy/daily?days=30`, `/api/energy/summary`, `/api/cost/history?month=2026-10`, `/api/events?days=30`, `/api/devices`, `/api/settings`, `/api/settings/log`, `/healthz`. `POST /api/settings` changes a setting.
+Ranges: `1h 3h 6h 12h 24h 2d 7d 30d`. `every=auto` keeps each series at 500 points or fewer.
+
+**Language:** the dashboard is available in English and Ukrainian. The **EN / УК** button in the page header switches it and remembers the choice in the browser. Without a saved choice it follows the browser or TV language, and `?lang=uk` / `?lang=en` in the URL forces one. Fault and alarm names from the inverter are translated too; a name with no translation is shown in English. Telegram alerts are not translated (yet). To add a string: wrap it in `t('English text')` and add the Ukrainian text to `web/frontend/src/lib/i18n.uk.ts` (a test fails if one is missing).
+
+Code: `web/backend` (FastAPI) and `web/frontend` (Vite + Preact + uPlot). `web/Dockerfile` builds both into one image.

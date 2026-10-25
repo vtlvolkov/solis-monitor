@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Docker Compose stack that monitors a Solis S6-EH1P hybrid inverter over Modbus TCP: `poller` (Python) → `influxdb` (2.7) → `web` (FastAPI + Preact dashboard). Deployed on an Umbrel box; README.md is the operator guide. The dashboard's Settings page can change three battery settings through the poller (off unless `CONTROL_ENABLED=true` and `WEB_BASIC_AUTH` are set).
+A Docker Compose stack that monitors a Solis S6-EH1P hybrid inverter over Modbus TCP: `poller` (Python) → `influxdb` (2.7) → `web` (FastAPI + Preact dashboard). Deployed on an Umbrel box; README.md is the user-facing guide (with screenshots in `docs/img/`) and `docs/` holds the detailed guides. The dashboard's Settings page can change three battery settings through the poller (off unless `CONTROL_ENABLED=true` and `WEB_BASIC_AUTH` are set).
 
 ## Commands
 
