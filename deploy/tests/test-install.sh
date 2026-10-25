@@ -92,6 +92,7 @@ rm -rf "$T/other"
 out=$(install --yes --user bob --password 'Secret-pw1' --inverter 127.0.0.1 --site-name Test --port 18088 --version v9.9.9 2>&1); rc=$?
 check "install succeeds" '[[ $rc -eq 0 ]] || { echo "$out"; false; }'
 check "the shared control folder exists" '[[ -d "$T/inst/control" ]]'
+check "background update checks default to every 6 hours" '[[ "$(env_of UPDATE_CHECK_HOURS)" == 6 ]]'
 check ".env is private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
 check "login written" '[[ "$(env_of WEB_BASIC_AUTH)" == "bob:Secret-pw1" ]]'
 check "settings-only auth by default" '[[ "$(env_of WEB_AUTH_SETTINGS_ONLY)" == true ]]'
@@ -105,6 +106,9 @@ if [[ -n "$REAL_DOCKER" ]] && "$REAL_DOCKER" compose version >/dev/null 2>&1; th
 fi
 out=$(install --yes 2>&1); check "a second install is refused" '[[ $? -ne 0 && "$out" == *"already installed"* ]]'
 
+rm -rf "$T/inst"
+out=$(install --yes --no-scan --no-update-check --scan-network 127.0.0 2>&1)
+check "--no-update-check turns the background checks off" '[[ "$(env_of UPDATE_CHECK_HOURS)" == 0 ]]'
 rm -rf "$T/inst"
 out=$(install --yes --no-scan --scan-network 127.0.0 2>&1)
 check "--no-scan installs without an inverter address" '[[ -z "$(env_of INVERTER_HOST)" && "$out" != *Scanning* ]]'

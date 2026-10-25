@@ -18,6 +18,7 @@
 #   --port N              dashboard port (default: 8088)
 #   --protect-dashboard   ask for the password for the whole dashboard, not only for Settings
 #   --auto-updates        install new tagged releases every night (default: update by hand)
+#   --no-update-check     never look for new releases in the background (no "Update available" badge)
 #   --no-dashboard-updates  do not let the dashboard's Settings page update this install (default: it can)
 #   --version vX.Y.Z      install this release (default: the release this script belongs to)
 #   --dir PATH            install here (default: /opt/solis-monitor)
@@ -36,7 +37,7 @@ TEST_MODE="${SOLIS_TEST_MODE:-}"
 DIR="${SOLIS_DIR:-/opt/solis-monitor}"
 VERSION="${SOLIS_VERSION:-$DEFAULT_VERSION}"
 USER_NAME="" PASS="" INVERTER="" SCAN_PREFIX="" SITE="" TZ_NAME="" PORT=8088
-PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN="" NO_SCAN="" NO_DASH_UPDATES=""
+PROTECT_ALL="" AUTO_UPDATES="" ASSUME_YES="" DRY_RUN="" NO_SCAN="" NO_DASH_UPDATES="" NO_UPDATE_CHECK=""
 MODBUS_PORT="${INVERTER_PORT:-502}"
 MODBUS_UNIT="${MODBUS_UNIT:-1}"
 
@@ -59,6 +60,7 @@ while (($#)); do
     --protect-dashboard) PROTECT_ALL=1; shift ;;
     --auto-updates) AUTO_UPDATES=1; shift ;;
     --no-dashboard-updates) NO_DASH_UPDATES=1; shift ;;
+    --no-update-check) NO_UPDATE_CHECK=1; shift ;;
     --version) VERSION="${2:?--version needs a tag}"; shift 2 ;;
     --dir) DIR="${2:?--dir needs a path}"; shift 2 ;;
     --yes|-y) ASSUME_YES=1; shift ;;
@@ -338,6 +340,7 @@ set_var MCP_TOKEN ""
 set_var SOLIS_IMAGE_PREFIX "$IMAGE_PREFIX"
 set_var SOLIS_VERSION "$VERSION"
 set_var SOLIS_REPO "$REPO"
+set_var UPDATE_CHECK_HOURS "$([[ -n "$NO_UPDATE_CHECK" ]] && echo 0 || echo 6)"
 
 # ---------------------------------------------------------------- start
 step "Starting"

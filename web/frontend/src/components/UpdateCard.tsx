@@ -30,6 +30,16 @@ export function UpdateCard() {
       setU(next);
       setLoadError(null);
       if (next.busy) setFollowing(true);
+      // Arrived from the header badge: show the confirmation straight away (once), then forget the hint.
+      const params = new URLSearchParams(location.search);
+      if (params.get('update') === '1') {
+        params.delete('update');
+        history.replaceState(null, '', params.toString() ? `?${params}` : location.pathname);
+        if (next.latest?.available && next.can_update && !next.busy) {
+          setConfirm(true);
+          setTimeout(() => document.querySelector('.update-card')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 150);
+        }
+      }
     } catch (e) {
       setLoadError(e instanceof ApiError && e.status === 401 ? 'Sign in to open Settings' : e instanceof ApiError ? e.message : 'Could not read settings');
     }

@@ -48,3 +48,16 @@ export function describeStatus(s: UpdateStatus): { text: string; tone: Tone } {
 /** True when the page should reload to pick up the new dashboard: the update finished and the version moved. */
 export const shouldReload = (before: string | null, now: UpdatePayload): boolean =>
   !now.busy && now.status?.state === 'ok' && now.version !== null && now.version !== before;
+
+/** Shape of the public /api/version: the badge only needs this. */
+export interface VersionPayload {
+  version: string | null;
+  installed: boolean;
+  update: { available: boolean; tag: string | null };
+}
+
+/** The "Update available" badge in the header, or null when there is nothing to offer. */
+export function updateBadge(v: VersionPayload | null): { label: string; title: string } | null {
+  if (!v?.update?.available || !v.update.tag) return null;
+  return { label: t('Update available'), title: t('{version} is available. Click to review and update.', { version: v.update.tag }) };
+}

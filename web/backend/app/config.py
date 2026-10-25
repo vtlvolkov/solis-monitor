@@ -28,6 +28,9 @@ class Settings:
     solis_repo: str = field(default_factory=lambda: os.getenv("SOLIS_REPO", "").strip())
     update_dir: str = field(default_factory=lambda: os.getenv("UPDATE_DIR", "/control"))     # shared with the host, see updates.py
     github_api: str = field(default_factory=lambda: os.getenv("GITHUB_API", "https://api.github.com"))
+    # Look for a newer release in the background every N hours (0 = never; only for release installs).
+    update_check_hours: float = field(default_factory=lambda: _float(os.getenv("UPDATE_CHECK_HOURS", "6")) or 0.0)
+    update_check_first_delay_s: float = 120.0
     mcp_token: str = field(default_factory=lambda: os.getenv("MCP_TOKEN", ""))
     poller_url: str = field(default_factory=lambda: os.getenv("POLLER_URL", "http://poller:8780"))
     # Electricity tariff for the cost card. No day price = not configured.

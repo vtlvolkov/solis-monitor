@@ -83,6 +83,7 @@ services:
       SOLIS_VERSION: ${SOLIS_VERSION:-}
       SOLIS_REPO: ${SOLIS_REPO:-}
       UPDATE_DIR: /control
+      UPDATE_CHECK_HOURS: ${UPDATE_CHECK_HOURS:-6}
       TZ: ${TZ:-Europe/Kyiv}
     volumes:
       - web-data:/data        # tariff changes saved from the Settings page

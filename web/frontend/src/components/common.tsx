@@ -4,6 +4,7 @@ import { currentAge, isOnline, type LiveState } from '../lib/live';
 import type { Fields } from '../lib/api';
 import { getLang, setLang, t, tx } from '../lib/i18n';
 import { useSite } from '../lib/site';
+import { UpdateBadge } from './UpdateBadge';
 
 export function StatusPill({ live, now }: { live: LiveState; now: number }) {
   if (!live.data && !live.error) return <span class="pill pill-wait" data-testid="status">{t('Connecting…')}</span>;
@@ -31,6 +32,7 @@ export function Header({ live, now, title }: { live: LiveState; now: number; tit
       <h1>{title ? t(title) : site || t('Home')}</h1>
       <div class="top-meta">
         <StatusPill live={live} now={now} />
+        <UpdateBadge />
         <span class="updated" data-testid="updated">
           {live.data?.time ? t('Updated {time}', { time: clockTime(live.data.time) }) : ''}
         </span>

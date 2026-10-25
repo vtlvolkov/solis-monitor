@@ -32,15 +32,22 @@ def is_newer(latest, current) -> bool:
     return a is not None and b is not None and a > b
 
 
-def fetch_latest_release(repo: str, api_base: str = "https://api.github.com", timeout: float = 8) -> dict:
-    """The newest published (not draft, not pre-release) release of `repo`: {tag, url, published}."""
+def _request(repo: str, api_base: str, timeout: float, etag: str | None) -> tuple[dict | None, str | None]:
+    """(release, etag), or (None, etag) when GitHub says nothing changed (HTTP 304, free against its rate limit)."""
     if not REPO.fullmatch(repo or ""):
         raise ReleaseLookupError("no repository configured")
-    req = urllib.request.Request(f"{api_base.rstrip('/')}/repos/{repo}/releases/latest",
-                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "solis-monitor"})
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "solis-monitor"}
+    if etag:
+        headers["If-None-Match"] = etag
+    req = urllib.request.Request(f"{api_base.rstrip('/')}/repos/{repo}/releases/latest", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = json.loads(r.read(200_000))
+            new_etag = r.headers.get("ETag") if getattr(r, "headers", None) else None
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304:
+            return None, etag
+        raise ReleaseLookupError(f"GitHub answered {exc.code}") from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ReleaseLookupError(str(exc)) from exc
     tag = body.get("tag_name") if isinstance(body, dict) else None
@@ -48,9 +55,40 @@ def fetch_latest_release(repo: str, api_base: str = "https://api.github.com", ti
         raise ReleaseLookupError("the latest release has no version tag")
     url = body.get("html_url")
     published = body.get("published_at")
-    return {"tag": tag,
-            "url": url if isinstance(url, str) and url.startswith("https://github.com/") else None,
-            "published": published if isinstance(published, str) and len(published) <= 40 else None}
+    return ({"tag": tag,
+             "url": url if isinstance(url, str) and url.startswith("https://github.com/") else None,
+             "published": published if isinstance(published, str) and len(published) <= 40 else None},
+            new_etag if isinstance(new_etag, str) and len(new_etag) <= 200 else None)
+
+
+def fetch_latest_release(repo: str, api_base: str = "https://api.github.com", timeout: float = 8) -> dict:
+    """The newest published (not draft, not pre-release) release of `repo`: {tag, url, published}."""
+    release, _ = _request(repo, api_base, timeout, None)
+    return release
+
+
+class ReleaseFeed:
+    """Asks for the newest release again and again, sending the last ETag so an unchanged answer costs nothing."""
+
+    def __init__(self, repo: str, api_base: str = "https://api.github.com", timeout: float = 8):
+        self.repo, self.api_base, self.timeout = repo, api_base, timeout
+        self.etag: str | None = None
+        self.release: dict | None = None
+
+    def latest(self) -> dict:
+        release, self.etag = _request(self.repo, self.api_base, self.timeout, self.etag if self.release else None)
+        if release is not None:
+            self.release = release
+        return self.release
+
+
+def next_delay(hours: float, failures: int, rand: float) -> float:
+    """Seconds until the next background check. `rand` is 0..1. After a failure retry sooner, backing off
+    (1 h, 2 h, 4 h ...) but never later than the normal interval; normally +-10 % so installs do not all ask at once."""
+    base = hours * 3600
+    if failures:
+        return min(base, 3600 * 2 ** (failures - 1))
+    return base * (0.9 + 0.2 * rand)
 
 
 def _text(v, limit=300):

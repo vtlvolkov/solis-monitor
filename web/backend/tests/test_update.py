@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 from app import updates
 from app.config import Settings
 from app.main import create_app
-from app.updates import Bridge, ReleaseLookupError, fetch_latest_release, is_newer, parse_version
+from app.updates import Bridge, ReleaseFeed, ReleaseLookupError, fetch_latest_release, is_newer, next_delay, parse_version
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 AUTH = ("me", "pw")
@@ -53,9 +54,11 @@ def test_versions():
 
 def test_version_endpoint_is_open(tmp_path):
     e = Env(tmp_path)
-    assert e.client.get("/api/version", auth=AUTH).json() == {"version": "v0.1.3", "installed": True}
+    assert e.client.get("/api/version", auth=AUTH).json() == {"version": "v0.1.3", "installed": True, "update": {"available": False, "tag": None}}
     src = Env(tmp_path, version="")
-    assert src.client.get("/api/version", auth=AUTH).json() == {"version": None, "installed": False}
+    assert src.client.get("/api/version", auth=AUTH).json() == {"version": None, "installed": False, "update": {"available": False, "tag": None}}
+    e.post("/check")                                                   # a manual check also feeds the badge
+    assert e.client.get("/api/version", auth=AUTH).json()["update"] == {"available": True, "tag": "v0.1.4"}
 
 
 def test_state_before_any_check(tmp_path):
@@ -202,3 +205,89 @@ def test_fetch_latest_release(monkeypatch):
     for bad_repo in ("", "no-slash", "a/b; rm -rf /", "../../x"):
         with pytest.raises(ReleaseLookupError):
             fetch_latest_release(bad_repo)
+
+
+# ---------------------------------------------------------------- background checks (the badge)
+def background_app(tmp_path, hours=6, version="v0.1.3", lookup=None):
+    calls = []
+    def feed():
+        calls.append(1)
+        return (lookup or (lambda: release()))()
+    s = Settings(static_dir="/nonexistent", basic_auth="me:pw", solis_version=version, solis_repo="o/r", update_dir=str(tmp_path),
+                 update_check_hours=hours, update_check_first_delay_s=0.0)
+    return create_app(repo=object(), control=object(), settings=s, now=lambda: NOW, releases=feed), calls
+
+
+def wait_for(fn, seconds=2.0):
+    end = time.time() + seconds
+    while time.time() < end:
+        if fn():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_background_check_feeds_the_badge_without_any_click(tmp_path):
+    app, calls = background_app(tmp_path)
+    with TestClient(app) as c:
+        assert wait_for(lambda: c.get("/api/version", auth=AUTH).json()["update"]["available"])
+        assert c.get("/api/version", auth=AUTH).json()["update"]["tag"] == "v0.1.4"
+        assert len(calls) == 1                                         # one request, then it sleeps for hours
+
+
+def test_no_badge_when_up_to_date(tmp_path):
+    app, calls = background_app(tmp_path, lookup=lambda: release("v0.1.3"))
+    with TestClient(app) as c:
+        assert wait_for(lambda: calls)
+        assert c.get("/api/version", auth=AUTH).json()["update"] == {"available": False, "tag": None}
+
+
+def test_background_checks_can_be_switched_off_and_skip_source_builds(tmp_path):
+    for kwargs in ({"hours": 0}, {"version": ""}):
+        app, calls = background_app(tmp_path, **kwargs)
+        with TestClient(app):
+            time.sleep(0.3)
+        assert calls == [], kwargs
+
+
+def test_a_failed_background_check_does_not_break_anything(tmp_path):
+    def boom():
+        raise ReleaseLookupError("offline")
+    app, calls = background_app(tmp_path, lookup=boom)
+    with TestClient(app) as c:
+        assert wait_for(lambda: calls)
+        assert c.get("/api/version", auth=AUTH).json()["update"]["available"] is False
+        assert c.get("/api/settings/update", auth=AUTH).status_code == 200
+
+
+def test_check_schedule():
+    for r in (0.0, 0.5, 1.0):
+        assert 6 * 3600 * 0.9 <= next_delay(6, 0, r) <= 6 * 3600 * 1.1          # jittered, so installs do not all ask together
+    assert [next_delay(6, n, 0.5) for n in (1, 2, 3, 4, 5)] == [3600, 7200, 14400, 21600, 21600]   # back off, never beyond the interval
+    assert next_delay(1, 3, 0.5) == 3600
+
+
+def test_feed_sends_the_etag_and_keeps_the_answer_on_304(monkeypatch):
+    class Resp:
+        headers = {"ETag": 'W/"abc"'}
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n=-1): return json.dumps({"tag_name": "v1.2.3", "html_url": "https://github.com/o/r/releases/tag/v1.2.3"}).encode()
+
+    sent = []
+    answers = [Resp(), "304"]
+    def fake(req, timeout):
+        sent.append(req.get_header("If-none-match"))
+        a = answers.pop(0)
+        if a == "304":
+            raise updates.urllib.error.HTTPError(req.full_url, 304, "Not Modified", {}, None)
+        return a
+    monkeypatch.setattr(updates.urllib.request, "urlopen", fake)
+    feed = ReleaseFeed("o/r")
+    assert feed.latest()["tag"] == "v1.2.3"
+    assert feed.latest()["tag"] == "v1.2.3"                            # unchanged: the earlier answer is kept
+    assert sent == [None, 'W/"abc"']
+    monkeypatch.setattr(updates.urllib.request, "urlopen", lambda req, timeout: (_ for _ in ()).throw(
+        updates.urllib.error.HTTPError(req.full_url, 403, "rate limited", {}, None)))
+    with pytest.raises(ReleaseLookupError):
+        ReleaseFeed("o/r").latest()

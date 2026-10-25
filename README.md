@@ -141,7 +141,11 @@ solis-monitor edit              # open your settings file (.env) in an editor, t
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
 ```
 
-**From the dashboard:** open **Settings → Software**, press **Check for updates**, and if a newer release exists, **Update now**. The dashboard restarts for a few minutes and reconnects by itself; if the new version fails to start, the old one is restored automatically. This works on installs made by the installer (turn it off with `--no-dashboard-updates` or `solis-monitor dashboard-updates off`), needs your Settings login, and the page only contacts GitHub when you press the button.
+**From the dashboard:** when a newer release exists, an **Update available** badge appears next to the Online pill on every page (the server looks for one every 6 hours). Click it to open **Settings → Software** with the update ready to confirm, or press **Check for updates** there yourself.
+
+<img src="docs/img/update-badge.png" width="420" alt="Update available badge next to the Online pill">
+
+Then **Update now**. The dashboard restarts for a few minutes and reconnects by itself; if the new version fails to start, the old one is restored automatically. This works on installs made by the installer (turn it off with `--no-dashboard-updates` or `solis-monitor dashboard-updates off`), needs your Settings login, and the update itself never starts without your confirmation. **Privacy:** the background check sends one normal HTTPS request to `api.github.com` every ~6 hours (your IP address and the name `solis-monitor`, nothing else). Turn it off with `--no-update-check` when installing, or `UPDATE_CHECK_HOURS=0` in `.env` (then only the button checks).
 
 <img src="docs/img/update.png" width="420" alt="Software card on the Settings page">
 

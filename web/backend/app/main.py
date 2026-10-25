@@ -19,7 +19,8 @@ from . import shaping
 from .tariff import Tariff, TariffError, TariffStore, next_boundary, validate, version_dict
 from .config import Settings
 from .control import ControlClient, PollerUnavailable
-from .updates import Bridge, ReleaseLookupError, fetch_latest_release, is_newer, parse_version
+import random
+from .updates import Bridge, ReleaseFeed, ReleaseLookupError, is_newer, next_delay, parse_version
 from .validation import (ENERGY_FIELDS, WINDOWS, parse_agg, parse_days, parse_every,
                          parse_fields, parse_range)
 
@@ -79,12 +80,18 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
 
     @asynccontextmanager
     async def lifespan(_app):
-        manager = mcp_state.get("manager")
-        if manager is None:
-            yield
-        else:
-            async with manager.run():                 # the MCP transport needs its task group
+        # Look for a new release now and then (release installs only), so the badge needs no click.
+        checker = asyncio.create_task(periodic_check()) if s.solis_version and s.update_check_hours > 0 else None
+        try:
+            manager = mcp_state.get("manager")
+            if manager is None:
                 yield
+            else:
+                async with manager.run():             # the MCP transport needs its task group
+                    yield
+        finally:
+            if checker:
+                checker.cancel()
 
     app = FastAPI(title="Solis web", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
@@ -375,12 +382,16 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
 
     # ------------------------------------------------------------------ updating from the dashboard
     bridge = Bridge(s.update_dir)
-    lookup = releases or (lambda: fetch_latest_release(s.solis_repo, s.github_api))
+    lookup = releases or ReleaseFeed(s.solis_repo, s.github_api).latest
     checked: dict = {}
 
     @app.get("/api/version")
     async def api_version():
-        return {"version": s.solis_version or None, "installed": bool(s.solis_version)}
+        """Public: the version, and whether the last (background or manual) check found a newer release."""
+        latest = checked.get("release")
+        newer = bool(latest) and is_newer(latest["tag"], s.solis_version)
+        return {"version": s.solis_version or None, "installed": bool(s.solis_version),
+                "update": {"available": newer, "tag": latest["tag"] if newer else None}}
 
     def update_state(t):
         latest = checked.get("release")
@@ -414,6 +425,15 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
                 return JSONResponse({"detail": "Could not reach GitHub to look for a new version."}, status_code=502)
             checked.update(at=t, release=release)
         return None
+
+    async def periodic_check():
+        failures = 0
+        delay = s.update_check_first_delay_s
+        while True:
+            await asyncio.sleep(delay)
+            failed = await check_release(now(), -1)
+            failures = failures + 1 if failed is not None else 0
+            delay = next_delay(s.update_check_hours, failures, random.random())
 
     @app.get("/api/settings/update")
     async def api_update():

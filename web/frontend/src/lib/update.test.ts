@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeStatus, shouldReload, type UpdatePayload, type UpdateStatus } from './update';
+import { describeStatus, shouldReload, updateBadge, type UpdatePayload, type UpdateStatus, type VersionPayload } from './update';
 
 const st = (patch: Partial<UpdateStatus>): UpdateStatus =>
   ({ state: 'ok', from: 'v0.1.3', to: 'v0.1.4', message: null, started: null, finished: null, ...patch });
@@ -30,5 +30,19 @@ describe('reload after an update', () => {
     expect(shouldReload('v0.1.3', payload({ version: 'v0.1.3', status: st({ state: 'rolled_back' }) }))).toBe(false);
     expect(shouldReload('v0.1.4', payload({}))).toBe(false);
     expect(shouldReload('v0.1.3', payload({ status: null }))).toBe(false);
+  });
+});
+
+describe('header badge', () => {
+  const v = (update: VersionPayload['update']): VersionPayload => ({ version: 'v0.1.3', installed: true, update });
+  it('appears only when a newer release is known', () => {
+    expect(updateBadge(null)).toBeNull();
+    expect(updateBadge(v({ available: false, tag: null }))).toBeNull();
+    expect(updateBadge(v({ available: true, tag: null }))).toBeNull();
+    expect(updateBadge(v({ available: true, tag: 'v0.1.4' }))).toEqual({
+      label: 'Update available', title: 'v0.1.4 is available. Click to review and update.' });
+  });
+  it('is absent on servers that predate the field', () => {
+    expect(updateBadge({ version: null, installed: false } as unknown as VersionPayload)).toBeNull();
   });
 });

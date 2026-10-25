@@ -33,6 +33,9 @@ button { font: inherit; color: inherit; }
 .pill-ok { color: var(--c-ok); background: var(--c-ok-bg); }
 .pill-bad { color: var(--c-danger); background: var(--c-danger-bg); }
 .pill-warn { color: var(--c-warn); background: #3d2c14; }
+.pill-update { color: var(--c-warn); background: #3d2c14; border: 0; cursor: pointer; font-family: inherit; }
+.pill-update:hover { background: #4f3818; }
+.pill-update:focus-visible { outline: 2px solid var(--c-warn); outline-offset: 2px; }
 .pill-wait { color: var(--c-muted); background: var(--c-surface2); }
 
 .banner {
