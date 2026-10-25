@@ -1,9 +1,0 @@
-[Unit]
-Description=Check GitHub for new solis-monitor commits every 3 minutes
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=3min
-
-[Install]
-WantedBy=timers.target

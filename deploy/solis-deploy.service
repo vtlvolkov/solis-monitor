@@ -1,9 +1,0 @@
-[Unit]
-Description=Deploy solis-monitor from GitHub when main changes
-After=network-online.target docker.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=umbrel
-ExecStart=/home/umbrel/solis-monitor/deploy/deploy.sh

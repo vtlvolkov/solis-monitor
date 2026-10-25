@@ -1,4 +1,4 @@
-# Advanced: building from source, auto-deploy and a second site
+# Advanced: building from source and a second site
 
 Everything here is optional. The [quick install](../README.md#install) needs none of it.
 
@@ -19,43 +19,6 @@ docker compose logs -f poller      # expect "Polling <inverter-ip>:502 unit 1 ev
 
 Dashboard: `http://<umbrel-ip>:8088`. Get the IP with `hostname -I` on the Umbrel box.
 If the port clashes with an Umbrel app, change `WEB_PORT` in `.env`. InfluxDB has no published port: only the poller and web service reach it, over the Docker network.
-
-## Auto-deploy from your own GitHub repo
-
-An optional way to build from `main` instead of using the releases; you do not need it for the quick install. With it, the host checks the GitHub repo every 3 minutes and redeploys when `main` has new commits (`deploy/deploy.sh`, run by a systemd timer). The Docker builds run all test suites, so a commit with failing tests stops at the build and the running version stays up. GitHub Actions (`.github/workflows/test.yml`) runs the same tests on every push. `.env` exists only on the host and is never committed.
-
-Pushing to `main` changes code that can write inverter settings. If you deploy like this from your own fork, keep it private (or at least protect `main`) and use 2FA on your GitHub account.
-
-One-time setup on the Umbrel host (over SSH):
-
-```bash
-git --version                                   # git must be available on the host
-
-# 1. Read-only deploy key: it can pull this one repo and nothing else
-ssh-keygen -t ed25519 -f ~/.ssh/solis_deploy -N "" -C "umbrel solis deploy"
-cat ~/.ssh/solis_deploy.pub                     # GitHub repo -> Settings -> Deploy keys -> Add (leave "write access" off)
-cat >> ~/.ssh/config <<'CFG'
-Host github-solis
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/solis_deploy
-  IdentitiesOnly yes
-CFG
-
-# 2. Clone and configure (stop any other copy of the stack first)
-git clone git@github-solis:<you>/solis-monitor.git ~/solis-monitor
-cd ~/solis-monitor
-cp .env.example .env && chmod 600 .env && nano .env   # new INFLUX_TOKEN: openssl rand -hex 32
-deploy/deploy.sh --force                        # first build + start; log in deploy/deploy.log
-
-# 3. Check for new commits every 3 minutes
-sudo cp deploy/solis-deploy.service deploy/solis-deploy.timer /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now solis-deploy.timer
-```
-
-If systemd units can't be installed, use cron instead: `crontab -e`, then add `*/3 * * * * /home/umbrel/solis-monitor/deploy/deploy.sh`. Both expect the checkout at `/home/umbrel/solis-monitor`; edit the paths if yours differs.
-
-To see what ran: `tail deploy/deploy.log` ("OK abc1234" or "FAILED …"); `deploy/last-ok` holds the last deployed commit. An agent such as Hermes can read these to report deployments without having any host access itself. Never edit files in the checkout on the server: the deploy only fast-forwards, and it stops with an error if the checkout has diverged.
 
 ## A second site
 
