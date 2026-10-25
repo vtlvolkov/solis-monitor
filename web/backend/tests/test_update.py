@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from app import updates
 from app.config import Settings
 from app.main import create_app
-from app.updates import Bridge, ReleaseFeed, ReleaseLookupError, fetch_latest_release, is_newer, next_delay, parse_version
+from app.updates import (Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, fetch_latest_release,
+                         is_newer, next_delay, parse_version)
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 AUTH = ("me", "pw")
@@ -300,3 +301,58 @@ def test_feed_sends_the_etag_and_keeps_the_answer_on_304(monkeypatch):
         updates.urllib.error.HTTPError(req.full_url, 403, "rate limited", {}, None)))
     with pytest.raises(ReleaseLookupError):
         ReleaseFeed("o/r").latest()
+
+
+# ---------------------------------------------------------------- GitHub's anonymous rate limit
+def http_error(code, headers):
+    return updates.urllib.error.HTTPError("https://api.github.com/x", code, "refused", headers, None)
+
+
+def test_a_rate_limit_is_recognised_from_the_headers(monkeypatch):
+    reset = int((NOW + timedelta(minutes=21)).timestamp())
+    def refuse(headers, code=403):
+        def fake(req, timeout):
+            raise http_error(code, headers)
+        return fake
+    monkeypatch.setattr(updates.urllib.request, "urlopen", refuse({"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": str(reset)}))
+    with pytest.raises(RateLimited) as e:
+        fetch_latest_release("o/r")
+    assert e.value.reset_at == datetime.fromtimestamp(reset, timezone.utc)
+    monkeypatch.setattr(updates.urllib.request, "urlopen", refuse({"Retry-After": "120"}, 429))
+    with pytest.raises(RateLimited) as e:
+        fetch_latest_release("o/r")
+    assert 100 < (e.value.reset_at - datetime.now(timezone.utc)).total_seconds() <= 121
+    # a 403 that is not about the limit stays an ordinary failure
+    for headers in ({}, {"X-RateLimit-Remaining": "12"}, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "soon"}):
+        monkeypatch.setattr(updates.urllib.request, "urlopen", refuse(headers))
+        with pytest.raises(ReleaseLookupError) as e:
+            fetch_latest_release("o/r")
+        assert not isinstance(e.value, RateLimited), headers
+
+
+def test_the_button_says_when_to_try_again_and_stops_asking_until_then(tmp_path):
+    until = NOW + timedelta(minutes=20)
+    calls = []
+    def lookup():
+        calls.append(1)
+        raise RateLimited(until)
+    s = Settings(static_dir="/nonexistent", basic_auth="me:pw", solis_version="v0.1.3", solis_repo="o/r", update_dir=str(tmp_path), tz="UTC")
+    state = {"t": NOW}
+    c = TestClient(create_app(repo=object(), control=object(), settings=s, now=lambda: state["t"], releases=lookup))
+    post = lambda: c.post("/api/settings/update/check", headers=JSON, json={}, auth=AUTH)
+    r = post()
+    assert r.status_code == 429 and r.json()["detail"] == "GitHub's limit for your network is used up. Try again after 12:20."
+    assert r.json()["retry_at"] == until.isoformat()
+    for _ in range(3):
+        assert post().status_code == 429                                # pressing again does not ask GitHub again
+    assert len(calls) == 1
+    state["t"] = until + timedelta(seconds=1)
+    assert post().status_code == 429 and len(calls) == 2                # the limit lifted: one new try (still refused here)
+    assert c.post("/api/settings/update", headers=JSON, json={}, auth=AUTH).status_code in (409, 429)    # starting an update cannot bypass it
+
+
+def test_the_background_check_waits_for_the_limit_to_lift():
+    reset = NOW + timedelta(minutes=20)
+    assert delay_after_limit(reset, NOW, 6) == 21 * 60                  # just after the reset
+    assert delay_after_limit(NOW - timedelta(minutes=5), NOW, 6) == 60  # already over: a minute, never a tight loop
+    assert delay_after_limit(NOW + timedelta(hours=10), NOW, 6) == 6 * 3600   # never later than the normal interval

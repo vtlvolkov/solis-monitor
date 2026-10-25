@@ -145,6 +145,12 @@ chmod 600 "$T/inst/.env"; : > "$T/sudo.log"
 upd version > /dev/null 2>&1
 check "with a readable .env it does not" '[[ ! -s "$T/sudo.log" ]]'
 
+echo "solis-monitor logs"
+: > "$T/docker.log"; upd logs poller > /dev/null 2>&1
+check "logs shows recent lines and exits (no follow)" 'grep -q "^compose logs --tail 100 poller$" "$T/docker.log"'
+: > "$T/docker.log"; upd logs -f web > /dev/null 2>&1
+check "logs -f follows" 'grep -q "^compose logs -f --tail 100 web$" "$T/docker.log"'
+
 echo "solis-monitor auto-update"
 printf '#!/bin/sh\nexec "$@"\n' > "$T/bin/sudo"; printf '#!/bin/sh\necho "systemctl $*" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/sudo" "$T/bin/systemctl"
 mkdir -p "$T/units"

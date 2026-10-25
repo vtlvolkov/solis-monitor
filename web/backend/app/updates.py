@@ -10,7 +10,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 TAG = re.compile(r"v(\d{1,4})\.(\d{1,4})\.(\d{1,4})")
 REPO = re.compile(r"[A-Za-z0-9_.-]{1,60}/[A-Za-z0-9_.-]{1,100}")
@@ -20,6 +20,35 @@ REQUEST, STATUS, BRIDGE = "update-request", "update-status.json", "bridge.json"
 
 class ReleaseLookupError(Exception):
     pass
+
+
+class RateLimited(ReleaseLookupError):
+    """GitHub refused because the anonymous limit (60 requests an hour per public IP) is used up."""
+
+    def __init__(self, reset_at: datetime):
+        super().__init__(f"GitHub rate limit, resets at {reset_at.isoformat()}")
+        self.reset_at = reset_at
+
+
+def delay_after_limit(reset_at: datetime, now: datetime, hours: float) -> float:
+    """Seconds until the background check should try again after a rate limit: just after the reset (never
+    sooner than a minute, never later than the normal interval)."""
+    return min(max(60.0, (reset_at - now).total_seconds() + 60), hours * 3600)
+
+
+def _rate_limit_reset(exc: urllib.error.HTTPError, now: datetime | None = None) -> datetime | None:
+    """When GitHub says the limit lifts, if this error is a rate limit at all (403/429 with the usual headers)."""
+    if exc.code not in (403, 429) or not getattr(exc, "headers", None):
+        return None
+    h = exc.headers
+    try:
+        if h.get("Retry-After"):
+            return (now or datetime.now(timezone.utc)) + timedelta(seconds=min(int(h["Retry-After"]), 3600 * 2))
+        if str(h.get("X-RateLimit-Remaining", "")).strip() == "0" and h.get("X-RateLimit-Reset"):
+            return datetime.fromtimestamp(int(h["X-RateLimit-Reset"]), timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+    return None
 
 
 def parse_version(tag) -> tuple[int, int, int] | None:
@@ -47,6 +76,8 @@ def _request(repo: str, api_base: str, timeout: float, etag: str | None) -> tupl
     except urllib.error.HTTPError as exc:
         if exc.code == 304:
             return None, etag
+        if (reset := _rate_limit_reset(exc)) is not None:
+            raise RateLimited(reset) from exc
         raise ReleaseLookupError(f"GitHub answered {exc.code}") from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ReleaseLookupError(str(exc)) from exc

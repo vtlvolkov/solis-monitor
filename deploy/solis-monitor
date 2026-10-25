@@ -5,7 +5,7 @@
 #   solis-monitor status                 version, containers, latest reading
 #   solis-monitor update [--version vX]  install the latest release (or the one named); rolls back on failure
 #   solis-monitor auto-update on|off     check for a new release every night (off by default)
-#   solis-monitor logs [service]         follow the logs (poller, web or influxdb)
+#   solis-monitor logs [-f] [service]    recent log lines (poller, web or influxdb); -f keeps following
 #   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
@@ -75,7 +75,7 @@ notify() {           # Telegram notice if the bot is set up in .env
 
 latest_release() {
   local json
-  json=$(curl -fsS -m 20 "$API_BASE/releases/latest") || die "could not reach GitHub to look for a release"
+  json=$(curl -fsS -m 20 "$API_BASE/releases/latest") || die "could not look up the latest release on GitHub. If you or other devices on your network asked a lot just now, GitHub's anonymous limit (60 requests an hour per network) may be used up: try again later, or name the version: solis-monitor update --version vX.Y.Z"
   printf '%s' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed -n 1p
 }
 
@@ -330,7 +330,7 @@ case "${1:-}" in
   status) cmd_status ;;
   update) shift; cmd_update "$@" ;;
   auto-update) shift; cmd_auto_update "${1:-}" ;;
-  logs) shift; compose logs -f --tail 100 "$@" ;;
+  logs) shift; follow=""; if [[ "${1:-}" == -f ]]; then follow=-f; shift; fi; compose logs ${follow:+"$follow"} --tail 100 "$@" ;;
   apply) shift; cmd_apply "${1:-}" ;;
   dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
   edit) cmd_edit ;;

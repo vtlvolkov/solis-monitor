@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { UK_PATTERNS } from './i18n.uk';
 import { describeStatus, progressOf, shouldReload, updateBadge, type UpdatePayload, type UpdateStatus, type VersionPayload } from './update';
 
 const st = (patch: Partial<UpdateStatus>): UpdateStatus =>
@@ -60,5 +61,15 @@ describe('progress bar', () => {
     expect(progressOf(st({ state: 'running', message: 'Looking for the newest release', percent: null })).percent).toBeNull();
     expect(progressOf(null)).toEqual({ percent: null, label: 'Waiting for the server to start the update…' });
     expect(progressOf(st({ state: 'ok' })).percent).toBeNull();            // an earlier update's result is not progress
+  });
+});
+
+describe('Ukrainian texts for messages that carry a value', () => {
+  const uk = (s: string) => { for (const [re, out] of UK_PATTERNS) if (re.test(s)) return s.replace(re, out); return s; };
+  it('translates the rate-limit message and the updater steps', () => {
+    expect(uk("GitHub's limit for your network is used up. Try again after 17:34.")).toBe('Ліміт GitHub для вашої мережі вичерпано. Спробуйте знову після 17:34.');
+    expect(uk('Downloading the files of v0.1.8')).toBe('Завантаження файлів версії v0.1.8');
+    expect(uk('Restarting with v0.1.8')).toBe('Перезапуск з v0.1.8');
+    expect(uk('Could not download the images for v0.1.8. Still on v0.1.7.')).toBe('Не вдалося завантажити образи для v0.1.8. Залишається v0.1.7.');
   });
 });

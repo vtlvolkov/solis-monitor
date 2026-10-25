@@ -136,7 +136,7 @@ The installer puts a small command on your machine:
 solis-monitor status            # version, containers, latest poller log lines
 solis-monitor update            # install the newest tagged release (rolls back if it fails to start)
 solis-monitor auto-update on    # optional: look for a new release every night (off by default)
-solis-monitor logs poller       # follow a service's log (poller, web or influxdb)
+solis-monitor logs poller       # recent log lines of a service (poller, web or influxdb); add -f to follow
 solis-monitor edit              # open your settings file (.env) in an editor, then apply the changes
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
 ```
@@ -158,6 +158,8 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 - It connects but keeps timing out: **the logger accepts one connection at a time.** Stop anything else that reads it (Home Assistant, another monitor, a second copy of this stack), wait a minute and look again.
 
 **`No route to host` / `Destination Host Unreachable`, though your router lists the logger as connected.** The WiFi stick can hang while staying associated, so the router still shows it but it no longer answers anyone (`ip neigh show <logger ip>` says `INCOMPLETE`, and no device on the network can ping it). Unplug the stick from the inverter for about 10 seconds, plug it back in and wait a minute or two; the poller reconnects by itself and the missing time shows as a gap in the charts. If it keeps happening, improve the WiFi signal at the stick (a closer router or a repeater).
+
+**"GitHub's limit for your network is used up" when checking for updates.** GitHub lets each public IP address make 60 anonymous requests an hour, shared by every device at your home that talks to it. The message says when the limit lifts; the dashboard does not ask again until then, and `solis-monitor update --version vX.Y.Z` works the same way. The automatic check is one request every ~6 hours, so this only happens after a lot of manual checking.
 
 **The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, find its IP in your router, put it in `INVERTER_HOST` with `solis-monitor edit`. (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
 

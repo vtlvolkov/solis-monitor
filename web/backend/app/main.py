@@ -20,7 +20,7 @@ from .tariff import Tariff, TariffError, TariffStore, next_boundary, validate, v
 from .config import Settings
 from .control import ControlClient, PollerUnavailable
 import random
-from .updates import Bridge, ReleaseFeed, ReleaseLookupError, is_newer, next_delay, parse_version
+from .updates import Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, is_newer, next_delay, parse_version
 from .validation import (ENERGY_FIELDS, WINDOWS, parse_agg, parse_days, parse_every,
                          parse_fields, parse_range)
 
@@ -416,14 +416,27 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
                 "latest": {**latest, "checked_at": checked["at"].isoformat(), "available": available} if latest else None,
                 "status": status}
 
+    def limited_response(until):
+        at = until.astimezone(ZoneInfo(s.tz)).strftime("%H:%M")
+        return JSONResponse({"detail": f"GitHub's limit for your network is used up. Try again after {at}.",
+                             "retry_at": until.isoformat()}, status_code=429)
+
     async def check_release(t, max_age_s):
+        until = checked.get("blocked_until")
+        if until and t < until:                    # GitHub already said no: do not ask again before it lifts
+            return limited_response(until)
         if not checked.get("at") or (t - checked["at"]).total_seconds() > max_age_s:
             try:
                 release = await asyncio.to_thread(lookup)
+            except RateLimited as exc:
+                log.warning("release lookup refused: GitHub rate limit until %s", exc.reset_at.isoformat())
+                checked["blocked_until"] = exc.reset_at
+                return limited_response(exc.reset_at)
             except ReleaseLookupError as exc:
                 log.warning("release lookup failed: %s", exc)
                 return JSONResponse({"detail": "Could not reach GitHub to look for a new version."}, status_code=502)
             checked.update(at=t, release=release)
+            checked.pop("blocked_until", None)
         return None
 
     async def periodic_check():
@@ -433,7 +446,10 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
             await asyncio.sleep(delay)
             failed = await check_release(now(), -1)
             failures = failures + 1 if failed is not None else 0
-            delay = next_delay(s.update_check_hours, failures, random.random())
+            if failed is not None and checked.get("blocked_until"):
+                delay = delay_after_limit(checked["blocked_until"], now(), s.update_check_hours)    # just after the limit lifts
+            else:
+                delay = next_delay(s.update_check_hours, failures, random.random())
 
     @app.get("/api/settings/update")
     async def api_update():

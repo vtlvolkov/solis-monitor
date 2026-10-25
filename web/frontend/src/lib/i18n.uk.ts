@@ -378,6 +378,7 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^BMS fault (\d+) bit (\d+)$/, "Помилка BMS $1, біт $2"],
   [/^Rate limit: next change allowed in (\d+) s\.$/, "Обмеження частоти: наступна зміна дозволена через $1 с."],
   [/^Inverter not reachable: (.*)$/, "Інвертор недоступний: $1"],
+  [/^GitHub's limit for your network is used up\. Try again after (\d{2}:\d{2})\.$/, "Ліміт GitHub для вашої мережі вичерпано. Спробуйте знову після $1."],
   [/^Downloading the files of (\S+)$/, "Завантаження файлів версії $1"],
   [/^Restarting with (\S+)$/, "Перезапуск з $1"],
   [/^Could not download the images for (\S+)\. Still on (\S+)\.$/, "Не вдалося завантажити образи для $1. Залишається $2."],
