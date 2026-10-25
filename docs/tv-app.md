@@ -4,14 +4,19 @@
 
 `?view=tv` is a wall-display page on one screen with no scrolling: the power-flow diagram (big, top left) with the Battery card under it (charge bars, voltage, current, SOH and the backup-runtime estimate), and on the right the four gauges as a 2×2 block of bars (Grid, Backup load, Battery charge, Battery discharge), a tall Power flows chart and a strip with today's energy. Left/right on the remote (or arrow keys) change the chart range. It only reads data, so it works with `WEB_AUTH_SETTINGS_ONLY=true` and no password.
 
-`android/` is a small app that opens this page full screen (a WebView, plus a screen for the host and port). It needs only Docker to build:
+The Android TV app opens that page full screen (a WebView, plus a screen for the host and port).
+
+**Install it:** download `solis-tv.apk` from the [latest release](https://github.com/vtlvolkov/solis-monitor/releases/latest/download/solis-tv.apk), then either
+
+- copy it to the TV with a USB stick and open it with a file manager (allow "install unknown apps"), or
+- install it over the network: enable Developer options and network debugging on the TV, then `adb connect <tv-ip>:5555` and `adb install -r solis-tv.apk`.
+
+On first start the app asks for the host and port of the dashboard (for example `192.168.1.50` and `8088`). Later, hold OK (or press Menu) to change them. If the dashboard can't be reached, the app shows Retry / Settings and retries every 15 s, so it recovers when the TV boots before the network is up.
+
+**Build it yourself** (needs only Docker; the first build downloads the Android SDK, a few minutes):
 
 ```bash
-sh android/build.sh          # -> android/dist/solis-tv.apk (first build downloads the Android SDK, a few minutes)
-adb connect <tv-ip>:5555     # enable Developer options -> USB/Network debugging on the TV first
-adb install -r android/dist/solis-tv.apk
+sh android/build.sh          # -> android/dist/solis-tv.apk
 ```
 
-Or copy the APK to the TV with a USB stick and open it with a file manager (allow "install unknown apps"). On first start the app asks for the host and port of the dashboard (for example `192.168.1.50` and `8088`). Later, hold OK (or press Menu) to change them. If the dashboard can't be reached, the app shows Retry / Settings and retries every 15 s, so it recovers when the TV boots before the network is up.
-
-The app talks plain HTTP (the dashboard has no TLS), so only use it on your own network. It keeps the screen on and reloads the page every 6 hours. The signing key is created in `android/.keystore/` (not committed): keep it, or the next build won't install over the old one.
+The signing key is created once in `android/.keystore/` and reused, so a newer build installs over the old one. Releases are signed with the key stored in the repository secret `ANDROID_KEYSTORE_B64` (see [Development](development.md#releases-and-the-installer)); an APK signed with a different key has to be uninstalled before it can replace another.

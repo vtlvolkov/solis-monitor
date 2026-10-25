@@ -115,7 +115,7 @@ The same pages, rearranged for a narrow screen.
 
 ![TV view](docs/img/tv.png)
 
-`http://<machine-ip>:8088/?view=tv` (or the **TV view** link in the header) fills a wall display with the diagram, gauges and a chart. There is also a small [Android TV app](docs/tv-app.md) that opens it full screen.
+`http://<machine-ip>:8088/?view=tv` (or the **TV view** link in the header) fills a wall display with the diagram, gauges and a chart. There is also a small [Android TV app](docs/tv-app.md) that opens it full screen: download [`solis-tv.apk`](https://github.com/vtlvolkov/solis-monitor/releases/latest/download/solis-tv.apk) from the latest release.
 
 ## Optional features
 

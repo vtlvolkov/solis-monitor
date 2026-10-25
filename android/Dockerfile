@@ -17,4 +17,6 @@ COPY .keystore/debug.keystore /root/.android/debug.keystore
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY app app
 # A failing unit test fails the build, like the other Dockerfiles in this repo.
-RUN gradle --no-daemon --console=plain testDebugUnitTest assembleRelease
+ARG APP_VERSION=1.0
+ARG APP_VERSION_CODE=1
+RUN gradle --no-daemon --console=plain -PappVersion=$APP_VERSION -PappVersionCode=$APP_VERSION_CODE testDebugUnitTest assembleRelease

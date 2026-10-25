@@ -11,8 +11,9 @@ android {
         applicationId = "com.solismonitor.tv"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // A release build passes the tag (android/build.sh, APP_VERSION=1.2.3); local builds stay at 1 / "1.0".
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("appVersion") as String?) ?: "1.0"
     }
 
     buildTypes {
