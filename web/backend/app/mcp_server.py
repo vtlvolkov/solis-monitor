@@ -9,8 +9,9 @@ from typing import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import ToolAnnotations
 
-from .validation import FIELD_SET, RANGES
+from .validation import FIELD_SET, RANGES, auto_window
 
 INSTRUCTIONS = (
     "Read-only tools for the user's home Solis S6-EH1P hybrid inverter and 48 V battery (no PV yet; all house "
@@ -23,13 +24,14 @@ INSTRUCTIONS = (
 # Hours -> the dashboard's whitelisted range covering them.
 _RANGE_FOR_HOURS = sorted((sec / 3600, name) for name, sec in RANGES.items())
 MAX_POINTS = 120
+READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
 
 @dataclass
 class DataApi:
     """Async data functions provided by the web app (see main.create_app)."""
     live: Callable[[], Awaitable[dict]]
-    history: Callable[[list[str], str, str], Awaitable[dict]]
+    history: Callable[[list[str], str, str, str], Awaitable[dict]]   # fields, range, every, agg
     events: Callable[[int], Awaitable[dict]]
     energy_summary: Callable[[], Awaitable[dict]]
     cost: Callable[[], Awaitable[dict]]
@@ -42,13 +44,6 @@ def _range_for(hours: float) -> str:
         if hours <= h:
             return name
     return _RANGE_FOR_HOURS[-1][1]
-
-
-def _thin(points: list, n: int = MAX_POINTS) -> list:
-    if len(points) <= n:
-        return points
-    step = len(points) / n
-    return [points[int(i * step)] for i in range(n)]
 
 
 def _poller_body(result: tuple[int, dict], what: str) -> dict:
@@ -70,19 +65,21 @@ def build_mcp(api: DataApi) -> FastMCP:
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_status() -> dict:
         """Live inverter status: online/age, grid connected or outage, battery SOC/power/state, grid power and
         voltage, loads, inverter temperature, today's kWh, and an estimate of how long the battery would
         last on backup at the current load."""
         p = await api.live()
         f = p["fields"]
+        # same rule as poller/faults.py grid_lost() and the dashboard's lib/runtime.ts
         lost = bool(int(f.get("fault_code_01") or 0) & 1) or f.get("status_code") == 0x1015 or \
             (f.get("grid_voltage") is not None and f["grid_voltage"] < 100)
         bp = f.get("battery_power_signed")
         out = {
-            "time": p["time"], "online": p["online"], "age_s": p["age_s"],
-            "grid": {"state": "outage" if lost else "connected", "power_w": f.get("grid_power"),
+            "time": p["time"], "online": p["online"], "age_s": p["age_s"], "stale": not p["online"],
+            # without fresh data the values below are the last reading, not the current state
+            "grid": {"state": "unknown" if not p["online"] else "outage" if lost else "connected", "power_w": f.get("grid_power"),
                      "voltage_v": f.get("grid_voltage"), "frequency_hz": f.get("grid_frequency")},
             "battery": {"soc_pct": f.get("battery_soc"), "power_w": bp, "voltage_v": f.get("battery_voltage"),
                         "state": None if bp is None else "charging" if bp >= 20 else "discharging" if bp <= -20 else "idle",
@@ -105,32 +102,33 @@ def build_mcp(api: DataApi) -> FastMCP:
                                      "down_to_soc_pct": floor, "capacity_kwh": cap, "at_load_w": f.get("total_load_power")}
             out["inverter_state"] = d["inverter"]["status"]
             out["active_alarms"] = [a["name"] for a in d["inverter"]["alarms"]]
-        except RuntimeError:
+        except (RuntimeError, KeyError, TypeError):   # poller down or device details incomplete
             pass
         return out
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_history(field: str, hours: float = 24, agg: str = "mean") -> dict:
         """History of one measurement. field: e.g. battery_soc, grid_power, battery_power_signed,
         total_load_power, grid_voltage, backup_voltage, grid_frequency, inverter_temperature,
         grid_import_today. hours: lookback, 1..720. agg: mean | max | min | last.
-        Returns up to 120 (time, value) points plus min/max/mean."""
+        Returns up to about 120 (time, value) points, each aggregated over its window, plus min/max/mean."""
         if field not in FIELD_SET:
             raise ValueError(f"unknown field {field!r}; choose from {sorted(FIELD_SET)}")
         if agg not in ("mean", "max", "min", "last"):
             raise ValueError("agg must be mean, max, min or last")
         rng = _range_for(max(1.0, min(float(hours), 720.0)))
-        h = await api.history([field], rng, agg)
+        # InfluxDB aggregates into windows coarse enough for MAX_POINTS, so no peak is dropped by sampling
+        h = await api.history([field], rng, auto_window(RANGES[rng], MAX_POINTS), agg)
         pts = [(t, v) for t, v in zip(h["t"], h["series"][field]) if v is not None]
         vals = [v for _, v in pts]
         return {
             "field": field, "range": rng, "window": h["every"], "agg": agg,
             "min": min(vals) if vals else None, "max": max(vals) if vals else None,
             "mean": round(sum(vals) / len(vals), 2) if vals else None,
-            "points": [(datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="minutes"), v) for t, v in _thin(pts)],
+            "points": [(datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="minutes"), v) for t, v in pts],
         }
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_outages_and_alarms(days: int = 7) -> dict:
         """Grid outages (start, end, duration, battery SOC before/after) and inverter/BMS alarms recorded in the
         last `days` days (1..366), newest first, plus whether an outage or alarm is active right now."""
@@ -141,7 +139,7 @@ def build_mcp(api: DataApi) -> FastMCP:
                 "outage_count": len(e["outages"]),
                 "outage_total_s": sum(o["duration_s"] or 0 for o in e["outages"])}
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_energy() -> dict:
         """Energy in kWh: today, yesterday and lifetime (from the inverter's counters), this month and year
         (from the dashboard's daily records), and electricity cost if a tariff is configured."""
@@ -157,15 +155,19 @@ def build_mcp(api: DataApi) -> FastMCP:
                          "month": summ["month"].get(t) if name != "pv" else f.get("pv_energy_month"),
                          "year": summ["year"].get(t) if name != "pv" else f.get("pv_energy_year")}
                   for name, (t, y, tot) in rows.items()}
-        return {"unit": "kWh", "energy": energy, "records_since": summ.get("first_day"), "cost": await api.cost()}
+        try:
+            cost = await api.cost()
+        except Exception:                     # the kWh figures are still useful without the cost
+            cost = None
+        return {"unit": "kWh", "energy": energy, "records_since": summ.get("first_day"), "cost": cost}
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_devices() -> dict:
         """Details of the inverter (serial, firmware, state, alarms, clock), backup output, battery/BMS
         (capacity, SOC limits, BMS limits) and grid meter."""
         return _poller_body(await api.devices(), "device details")
 
-    @mcp.tool()
+    @mcp.tool(annotations=READ_ONLY)
     async def get_schedule() -> dict:
         """The inverter's charging setup: work-mode flags, grid charging, SOC limits, current limits, the enabled
         Time-of-Use charge/discharge slots, and the inverter clock vs server time. Read-only."""

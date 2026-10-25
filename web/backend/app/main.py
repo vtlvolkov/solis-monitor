@@ -116,7 +116,8 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
     async def mcp_auth(request: Request, call_next):
         if request.url.path.rstrip("/") == "/mcp":
             token = request.headers.get("authorization", "")
-            if not s.mcp_token or not secrets.compare_digest(token, f"Bearer {s.mcp_token}"):
+            # bytes: compare_digest raises TypeError on non-ASCII str (headers are decoded as latin-1)
+            if not s.mcp_token or not secrets.compare_digest(token.encode("latin-1"), f"Bearer {s.mcp_token}".encode()):
                 return Response("unauthorized", status_code=401)
         return await call_next(request)
 
@@ -506,8 +507,8 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
     if s.mcp_token:
         from .mcp_server import DataApi, build_mcp
 
-        async def mcp_history(fields, rng, agg):
-            return await api_history(",".join(fields), rng, "auto", agg)
+        async def mcp_history(fields, rng, every, agg):
+            return await api_history(",".join(fields), rng, every, agg)
 
         mcp = build_mcp(DataApi(
             live=live, history=mcp_history, events=lambda d: api_events(d),
