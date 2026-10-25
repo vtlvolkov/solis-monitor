@@ -157,6 +157,8 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 - `cannot connect` or `No route to host`: the address is wrong, or the logger is off the network. Run `solis-monitor edit`, fix `INVERTER_HOST`, save and answer yes to apply.
 - It connects but keeps timing out: **the logger accepts one connection at a time.** Stop anything else that reads it (Home Assistant, another monitor, a second copy of this stack), wait a minute and look again.
 
+**`No route to host` / `Destination Host Unreachable`, though your router lists the logger as connected.** The WiFi stick can hang while staying associated, so the router still shows it but it no longer answers anyone (`ip neigh show <logger ip>` says `INCOMPLETE`, and no device on the network can ping it). Unplug the stick from the inverter for about 10 seconds, plug it back in and wait a minute or two; the poller reconnects by itself and the missing time shows as a gap in the charts. If it keeps happening, improve the WiFi signal at the stick (a closer router or a repeater).
+
 **The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, find its IP in your router, put it in `INVERTER_HOST` with `solis-monitor edit`. (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
 
 **Port 8088 is taken.** Run the installer with `--port 8090` (or change `WEB_PORT` with `solis-monitor edit` later).
