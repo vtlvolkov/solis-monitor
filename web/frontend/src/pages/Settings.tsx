@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
+import { CapacityCard } from '../components/CapacityCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { goTo } from '../lib/nav';
@@ -474,7 +475,7 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
         <>
           <div class="settings-row">
             <div class="settings-col">{workCard}{logCard}</div>
-            {limitsCard}
+            <div class="settings-col">{limitsCard}<CapacityCard /></div>
           </div>
           {s && <HoldCard s={s} />}
         </>

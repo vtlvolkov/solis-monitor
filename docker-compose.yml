@@ -45,13 +45,16 @@ services:
       MAX_CHARGE_CURRENT_A: ${MAX_CHARGE_CURRENT_A:-0}
       MAX_DISCHARGE_CURRENT_A: ${MAX_DISCHARGE_CURRENT_A:-0}
       MIN_WRITE_INTERVAL_S: ${MIN_WRITE_INTERVAL_S:-60}
-      BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}
+      BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}   # the Settings page can override it (saved in poller-data)
+      CAPACITY_FILE: /data/battery-capacity.json
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       ALERT_SOC_LEVELS: ${ALERT_SOC_LEVELS:-50,30,20}
       ALERT_OFFLINE_MIN: ${ALERT_OFFLINE_MIN:-5}
       SITE_NAME: ${SITE_NAME:-}
       TZ: ${TZ:-Europe/Kyiv}
+    volumes:
+      - poller-data:/data     # battery capacity saved from the Settings page
 
   web:
     image: ${SOLIS_IMAGE_PREFIX:-solis-monitor}-web:${SOLIS_VERSION:-latest}
@@ -93,3 +96,4 @@ volumes:
   influxdb-data:
   influxdb-config:
   web-data:
+  poller-data:

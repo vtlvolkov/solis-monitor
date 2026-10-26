@@ -4,9 +4,12 @@ Device details read from inverter input registers (FC04), for the dashboard's De
 Register meanings were checked against a live S6-EH1P on 2026-10-18: the serial number
 matches SolisCloud, BMS voltage matches 33133, meter V/W/Hz match the grid readings.
 Values with no confirmed meaning are left out rather than guessed. Battery capacity comes
-from BATTERY_CAPACITY_KWH, else rated Ah (43019) x 51.2 V nominal.
+from the Settings page (CapacityStore), else BATTERY_CAPACITY_KWH, else rated Ah (43019) x 51.2 V nominal.
 """
+import json
+import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -16,6 +19,9 @@ import faults
 BLOCKS = ((33000, 28), (33071, 35), (33116, 6), (33137, 24), (33250, 37), (33297, 4))
 HOLDING = ((43010, 15),)        # 43010..43024: SOC limits and rated capacity
 NOMINAL_CELL_V = 51.2           # LV LiFePO4 nominal pack voltage, for Ah -> kWh
+MAX_CAPACITY_KWH = 1000
+
+log = logging.getLogger("solis-device")
 
 BATTERY_MODELS = {0x0000: "No battery", 0x0001: "Pylontech LV", 0x0002: "User defined", 0x0003: "BYD B-Box LV",
                   0x0004: "Dyness LV"}      # confirmed on this unit: Dyness DL5.0C reports 0x0004
@@ -42,8 +48,10 @@ def _ascii(regs):
     return "".join(c for c in chars if c.isprintable() and c != "\x00").strip()
 
 
-def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: float | None = None) -> dict:
-    """r: input register -> raw value for every register in BLOCKS; h: holding registers in HOLDING."""
+def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: float | None = None,
+           source: str = "BATTERY_CAPACITY_KWH") -> dict:
+    """r: input register -> raw value for every register in BLOCKS; h: holding registers in HOLDING.
+    capacity_kwh overrides the rated-Ah estimate; source says where it came from ("saved" or "BATTERY_CAPACITY_KWH")."""
     h = h or {}
     y, mo, d, hh, mi, s = (r[33022 + i] for i in range(6))
     try:
@@ -58,8 +66,8 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
     meter_v = r[33251] / 10
     meter_cfg = r[33300]
     rated_ah = h.get(43019)
-    if capacity_kwh is None and rated_ah:
-        capacity_kwh = round(rated_ah * NOMINAL_CELL_V / 1000, 2)
+    if capacity_kwh is None:
+        capacity_kwh, source = rated_kwh(rated_ah), "inverter"
     return {
         "inverter": {
             "serial": _ascii([r[33004 + i] for i in range(16)]) or None,
@@ -95,7 +103,7 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
             "connected": r[33141] > 0,
             "rated_capacity_ah": rated_ah,
             "capacity_kwh": capacity_kwh,
-            "capacity_source": "BATTERY_CAPACITY_KWH" if os.getenv("BATTERY_CAPACITY_KWH") else "inverter",
+            "capacity_source": source,
             "max_charge_soc": h.get(43010),
             "overdischarge_soc": h.get(43011),
             "force_charge_soc": h.get(43018),
@@ -118,12 +126,72 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
     }
 
 
+def rated_kwh(rated_ah) -> float | None:
+    return round(rated_ah * NOMINAL_CELL_V / 1000, 2) if rated_ah else None
+
+
+def check_kwh(v) -> float:
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= MAX_CAPACITY_KWH:
+        raise ValueError(f"capacity must be a number of kWh above 0 and at most {MAX_CAPACITY_KWH}")
+    return round(float(v), 2)
+
+
+class CapacityStore:
+    """Battery capacity for the runtime estimate: the value saved from the Settings page (a small JSON file in the
+    poller's volume, so a battery moved to another inverter needs no .env edit), else BATTERY_CAPACITY_KWH.
+    Nothing is written to the inverter."""
+
+    def __init__(self, path: str | None = None, env_kwh: str | None = None):
+        self.path = path or None
+        self.env_kwh = float(env_kwh) if env_kwh else None
+        self.lock = threading.Lock()
+        self.saved = self._load()
+
+    def _load(self) -> float | None:
+        if not self.path or not os.path.exists(self.path):
+            return None
+        try:
+            with open(self.path) as f:
+                return check_kwh(json.load(f)["kwh"])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            log.error("battery capacity file %s is unreadable (%s): using .env / the inverter", self.path, exc)
+            return None
+
+    def value(self) -> tuple[float | None, str | None]:
+        """(kWh, source) or (None, None) when the inverter's rated Ah should be used."""
+        if self.saved is not None:
+            return self.saved, "saved"
+        if self.env_kwh is not None:
+            return self.env_kwh, "BATTERY_CAPACITY_KWH"
+        return None, None
+
+    def set(self, kwh: float | None) -> None:
+        """Save a new capacity; None removes the saved one (back to .env or the inverter)."""
+        kwh = None if kwh is None else check_kwh(kwh)
+        with self.lock:
+            if self.path:
+                if kwh is None:
+                    if os.path.exists(self.path):
+                        os.remove(self.path)
+                else:
+                    os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+                    tmp = self.path + ".tmp"
+                    with open(tmp, "w") as f:
+                        json.dump({"kwh": kwh}, f)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, self.path)             # a crash never leaves half a file
+            self.saved = kwh
+
+
 class DeviceReader:
     """Reads and decodes device details, cached briefly to keep Modbus traffic low."""
 
-    def __init__(self, inverter, ttl=30, clock=time.monotonic):
+    def __init__(self, inverter, ttl=30, clock=time.monotonic, capacity: CapacityStore | None = None):
         self.inv, self.ttl, self.clock = inverter, ttl, clock
+        self.capacity = capacity or CapacityStore(env_kwh=os.getenv("BATTERY_CAPACITY_KWH"))
         self._cache, self._at = None, -1e9
+        self._raw = None                              # last (input, holding) registers, to re-decode after a capacity change
 
     def read(self) -> dict:
         if self._cache is None or self.clock() - self._at > self.ttl:
@@ -142,8 +210,27 @@ class DeviceReader:
         for start, n in HOLDING:
             for i, v in enumerate(self.inv.read_holding(start, n)):
                 hold[start + i] = v
-        env_kwh = os.getenv("BATTERY_CAPACITY_KWH")
-        self._cache = {**decode(regs, hold, float(env_kwh) if env_kwh else None),
-                       "logger": {"host": self.inv.host, "port": self.inv.port, "unit": self.inv.unit},
-                       "read_at": datetime.now(timezone.utc).isoformat()}
+        self._raw = (regs, hold, datetime.now(timezone.utc).isoformat())
+        self._decode()
         self._at = self.clock()
+
+    def _decode(self) -> None:
+        regs, hold, read_at = self._raw
+        kwh, source = self.capacity.value()
+        self._cache = {**decode(regs, hold, kwh, source or "inverter"),
+                       "logger": {"host": self.inv.host, "port": self.inv.port, "unit": self.inv.unit},
+                       "read_at": read_at}
+
+    def capacity_info(self) -> dict:
+        """The capacity in use and every value it could come from (the inverter's from the last read, if any)."""
+        kwh, source = self.capacity.value()
+        inverter = rated_kwh(self._raw[1].get(43019)) if self._raw else None
+        return {"capacity_kwh": kwh if kwh is not None else inverter, "source": source or "inverter",
+                "saved_kwh": self.capacity.saved, "env_kwh": self.capacity.env_kwh, "inverter_kwh": inverter,
+                "rated_capacity_ah": self._raw[1].get(43019) if self._raw else None, "max_kwh": MAX_CAPACITY_KWH}
+
+    def set_capacity(self, kwh: float | None) -> dict:
+        self.capacity.set(kwh)
+        if self._raw:
+            self._decode()                            # runtime estimates and alerts use it right away
+        return self.capacity_info()

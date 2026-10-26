@@ -298,7 +298,7 @@ if docker ps -a --format '{{.Names}}' | grep -qE '^solis-(influxdb|poller|web)$'
 fi
 # Volumes left by an earlier stack would be reused with their old database, which does not accept the new passwords.
 project=$(basename "$DIR" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-')
-old_volumes=$(docker volume ls -q | grep -E "^${project}_(influxdb-data|influxdb-config|web-data)$" || true)
+old_volumes=$(docker volume ls -q | grep -E "^${project}_(influxdb-data|influxdb-config|web-data|poller-data)$" || true)
 if [[ -n "$old_volumes" ]]; then
   die "Docker volumes from an earlier install exist:
 $(echo "$old_volumes" | sed 's/^/  /')

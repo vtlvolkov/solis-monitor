@@ -4,6 +4,7 @@ import { usePoll } from '../lib/poll';
 import { Card, ErrorBanner, Header, Skeleton } from '../components/common';
 import { DeviceArt } from '../components/DeviceArt';
 import type { Fields } from '../lib/api';
+import { describeSource } from '../lib/capacity';
 import { clockDrift, DEVICES, deviceStatus, type DeviceId, type DeviceInfo, type DeviceStatus } from '../lib/devices';
 import { ago, clockTime, kwh, power, withUnit } from '../lib/format';
 import { t, unit } from '../lib/i18n';
@@ -106,7 +107,7 @@ function detailSections(id: DeviceId, info: DeviceInfo | null, f: Fields, live: 
         ['Battery', i && [
           ['Model', t(i.battery.model)],
           ['Capacity', i.battery.capacity_kwh != null
-            ? <>{i.battery.capacity_kwh} {unit('kWh')} <span class="muted">({i.battery.capacity_source === 'inverter' ? t('{n} Ah setting', { n: i.battery.rated_capacity_ah ?? '--' }) : t('from .env')})</span></> : '--'],
+            ? <>{i.battery.capacity_kwh} {unit('kWh')} <span class="muted">({describeSource({ source: i.battery.capacity_source, rated_capacity_ah: i.battery.rated_capacity_ah })})</span></> : '--'],
           ['Max charge SOC', withUnit(i.battery.max_charge_soc, '%', 0)],
           ['Over-discharge SOC', withUnit(i.battery.overdischarge_soc, '%', 0)],
           ['Force-charge SOC', withUnit(i.battery.force_charge_soc, '%', 0)],

@@ -34,6 +34,19 @@ class FakeControl:
             raise PollerUnavailable("connection refused")
         return 200, {"inverter": {"serial": "1234567890123456"}}
 
+    capacity = {"capacity_kwh": 6.45, "source": "inverter", "saved_kwh": None, "env_kwh": None, "inverter_kwh": 6.45}
+
+    def battery_capacity(self):
+        if self.down:
+            raise PollerUnavailable("connection refused")
+        return 200, dict(self.capacity)
+
+    def set_battery_capacity(self, kwh):
+        if self.down:
+            raise PollerUnavailable("connection refused")
+        self.applied.append(("battery_capacity", kwh))
+        return self.status, {**self.capacity, "capacity_kwh": kwh, "source": "saved", "saved_kwh": kwh}
+
 
 class Repo:
     def control_log(self, limit):
@@ -158,3 +171,40 @@ def test_settings_only_auth_leaves_dashboard_open():
         assert c.get(path, auth=AUTH).status_code == 200
     assert c.post("/api/settings", json={"setting": "grid_charging", "value": False}, headers=JSON).status_code == 401
     assert post(c, {"setting": "grid_charging", "value": False}).status_code == 200
+
+
+# ---------------------------------------------------------------- battery capacity (works with CONTROL_ENABLED=false)
+
+def post_capacity(c, body, headers=JSON, auth=AUTH):
+    return c.post("/api/settings/battery-capacity", json=body, headers=headers, auth=auth)
+
+
+def test_capacity_get_and_set_even_with_control_disabled():
+    ctl = FakeControl(enabled=False)
+    c = client(ctl)
+    body = c.get("/api/settings/battery-capacity", auth=AUTH).json()
+    assert body["capacity_kwh"] == 6.45 and body["web"] == {"can_change": True, "reason": None}
+    r = post_capacity(c, {"kwh": 10.24})
+    assert r.status_code == 200 and r.json()["source"] == "saved" and ctl.applied == [("battery_capacity", 10.24)]
+    assert post_capacity(c, {"kwh": None}).status_code == 200 and ctl.applied[-1] == ("battery_capacity", None)
+
+
+@pytest.mark.parametrize("body", [{"kwh": "10"}, {"kwh": True}, {}, {"kwh": 5, "x": 1}, [5]])
+def test_capacity_rejects_bad_body(body):
+    ctl = FakeControl()
+    assert post_capacity(client(ctl), body).status_code == 400 and ctl.applied == []
+
+
+def test_capacity_needs_password_and_same_origin():
+    ctl = FakeControl()
+    assert client(ctl, auth="").get("/api/settings/battery-capacity").json()["web"]["can_change"] is False
+    assert post_capacity(client(ctl, auth=""), {"kwh": 5}, auth=None).status_code == 403
+    assert post_capacity(client(ctl), {"kwh": 5}, auth=None).status_code == 401
+    assert post_capacity(client(ctl), {"kwh": 5}, headers={**JSON, "Origin": "http://evil.example"}).status_code == 403
+    assert ctl.applied == []
+
+
+def test_capacity_poller_down():
+    c = client(FakeControl(down=True))
+    assert c.get("/api/settings/battery-capacity", auth=AUTH).status_code == 502
+    assert post_capacity(c, {"kwh": 5}).status_code == 502

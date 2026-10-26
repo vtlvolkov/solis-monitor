@@ -247,7 +247,8 @@ def main():
             log.warning("audit write failed: %s", exc)
 
     ctl = control.Controller(inv, control.Config(), audit=audit)
-    ctl.devices = device.DeviceReader(inv, ttl=90)
+    ctl.devices = device.DeviceReader(inv, ttl=90, capacity=device.CapacityStore(
+        os.getenv("CAPACITY_FILE", "/data/battery-capacity.json"), os.getenv("BATTERY_CAPACITY_KWH")))
     server = control.serve(ctl)
 
     def keep_caches_warm():                       # device/settings reads take seconds; serve them from cache
