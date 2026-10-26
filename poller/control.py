@@ -196,6 +196,25 @@ class Controller:
         finally:
             self.lock.release()
 
+    def battery_capacity(self) -> dict:
+        if self.devices is None:
+            raise ControlError(503, "Device details are not ready yet.")
+        return self.devices.capacity_info()
+
+    def set_battery_capacity(self, kwh) -> dict:
+        """The capacity used for runtime estimates and outage alerts (the app's own value, nothing is written
+        to the inverter, so CONTROL_ENABLED does not apply). None = back to BATTERY_CAPACITY_KWH or the inverter."""
+        before = self.battery_capacity()
+        try:
+            after = self.devices.set_capacity(kwh)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+        summary = (f"Battery capacity: {before['capacity_kwh'] if before['capacity_kwh'] is not None else '--'}"
+                   f" → {after['capacity_kwh'] if after['capacity_kwh'] is not None else '--'} kWh"
+                   + ("" if after["source"] == "saved" else f" (from {after['source']})"))
+        self.audit("battery_capacity", before=str(before["capacity_kwh"]), written=str(kwh), verified=True, summary=summary)
+        return {**after, "applied": summary}
+
     # ------------------------------------------------------------------ validation helpers
     @staticmethod
     def _int(value, name, lo, hi):
@@ -399,24 +418,34 @@ def make_handler(ctl: Controller):
                 log.warning("control request failed: %s", exc)
                 self._send(502, {"detail": f"Inverter not reachable: {exc}"})
 
+        def _body(self) -> dict:
+            length = int(self.headers.get("Content-Length") or 0)
+            if length <= 0 or length > 1024:
+                raise ControlError(400, "invalid body")
+            try:
+                body = json.loads(self.rfile.read(length))
+            except ValueError:
+                raise ControlError(400, "body must be JSON")
+            if not isinstance(body, dict):
+                raise ControlError(400, "body must be a JSON object")
+            return body
+
         def do_GET(self):
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
-                      "/device": ctl.devices and ctl.devices.read}
+                      "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity}
             self._run(routes.get(self.path))
 
         def do_POST(self):
             def apply():
-                length = int(self.headers.get("Content-Length") or 0)
-                if length <= 0 or length > 1024:
-                    raise ControlError(400, "invalid body")
-                try:
-                    body = json.loads(self.rfile.read(length))
-                except ValueError:
-                    raise ControlError(400, "body must be JSON")
-                if not isinstance(body, dict):
-                    raise ControlError(400, "body must be a JSON object")
+                body = self._body()
                 return ctl.apply(body.get("setting"), body.get("value"))
-            self._run(apply if self.path == "/settings" else None)
+
+            def capacity():
+                body = self._body()
+                if set(body) != {"kwh"}:
+                    raise ControlError(400, "body must be {kwh}")
+                return ctl.set_battery_capacity(body["kwh"])
+            self._run({"/settings": apply, "/battery-capacity": capacity}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet
             pass

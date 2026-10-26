@@ -39,3 +39,9 @@ class ControlClient:
 
     def devices(self) -> tuple[int, dict]:
         return self._call("GET", "/device")
+
+    def battery_capacity(self) -> tuple[int, dict]:
+        return self._call("GET", "/battery-capacity")
+
+    def set_battery_capacity(self, kwh: float | None) -> tuple[int, dict]:
+        return self._call("POST", "/battery-capacity", {"kwh": kwh})

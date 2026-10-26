@@ -1,4 +1,5 @@
 // Devices tab: device list and status logic (pure, unit-tested).
+import type { CapacitySource } from './capacity';
 
 export type DeviceId = 'inverter' | 'battery' | 'logger' | 'meter';
 export type DeviceStatus = 'online' | 'offline' | 'fault';
@@ -14,7 +15,7 @@ export interface DeviceInfo {
   battery: {
     bms_voltage: number; bms_current: number; bms_charge_limit_a: number; bms_discharge_limit_a: number;
     bms_failure_codes: string[]; has_fault: boolean; connected: boolean;
-    model: string; rated_capacity_ah: number | null; capacity_kwh: number | null; capacity_source: string;
+    model: string; rated_capacity_ah: number | null; capacity_kwh: number | null; capacity_source: CapacitySource;
     max_charge_soc: number | null; overdischarge_soc: number | null; force_charge_soc: number | null; backup_soc: number | null;
   };
   meter: {

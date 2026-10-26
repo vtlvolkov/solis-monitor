@@ -245,6 +245,38 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         status, result = await poller(control.apply, setting, value)
         return JSONResponse(result, status_code=status)
 
+    # ------------------------------------------------------------------ battery capacity (the app's own value, kept by the poller)
+    def capacity_web():
+        return {"can_change": bool(s.basic_auth),
+                "reason": None if s.basic_auth else "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."}
+
+    @app.get("/api/settings/battery-capacity")
+    async def api_battery_capacity():
+        status, body = await poller(control.battery_capacity)
+        if status == 200:
+            body["web"] = capacity_web()
+        return JSONResponse(body, status_code=status)
+
+    @app.post("/api/settings/battery-capacity")
+    async def api_battery_capacity_change(request: Request):
+        """Usable battery capacity for the runtime estimate and outage alerts; null = back to .env / the inverter.
+        Nothing is written to the inverter, so this works with CONTROL_ENABLED=false."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        kwh = body.get("kwh") if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or set(body) != {"kwh"} or isinstance(kwh, bool)
+                or not (kwh is None or isinstance(kwh, (int, float)))):
+            return JSONResponse({"detail": "body must be {kwh: number or null}"}, status_code=400)
+        log.warning("battery capacity change requested: %s", kwh)
+        status, result = await poller(control.set_battery_capacity, kwh)
+        if status == 200:
+            result["web"] = capacity_web()
+        return JSONResponse(result, status_code=status)
+
     @app.get("/api/events")
     async def api_events(days: int = Query(30)):
         if not 1 <= days <= 366:

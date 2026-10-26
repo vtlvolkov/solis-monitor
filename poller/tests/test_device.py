@@ -1,5 +1,6 @@
 import json
 import threading
+import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -74,7 +75,55 @@ def test_faults_and_status_names():
 
 
 def test_capacity_override():
-    assert device.decode(REGS, HOLD, 10.0)["battery"]["capacity_kwh"] == 10.0
+    bat = device.decode(REGS, HOLD, 10.0)["battery"]
+    assert bat["capacity_kwh"] == 10.0 and bat["capacity_source"] == "BATTERY_CAPACITY_KWH"
+    assert device.decode(REGS, HOLD)["battery"]["capacity_source"] == "inverter"
+
+
+def test_capacity_store_order_and_file(tmp_path):
+    path = tmp_path / "sub" / "battery-capacity.json"
+    st = device.CapacityStore(str(path), "10")
+    assert st.value() == (10.0, "BATTERY_CAPACITY_KWH")
+    st.set(5.12)
+    assert st.value() == (5.12, "saved") and json.loads(path.read_text()) == {"kwh": 5.12}
+    assert device.CapacityStore(str(path), "10").value() == (5.12, "saved")      # survives a restart
+    st.set(None)
+    assert not path.exists() and st.value() == (10.0, "BATTERY_CAPACITY_KWH")
+    assert device.CapacityStore(None).value() == (None, None)
+
+
+def test_capacity_store_refuses_bad_values(tmp_path):
+    st = device.CapacityStore(str(tmp_path / "c.json"))
+    for bad in (0, -1, 1001, "5", True, float("nan")):
+        try:
+            st.set(bad)
+            assert False, f"accepted {bad!r}"
+        except ValueError:
+            pass
+    assert st.value() == (None, None) and not (tmp_path / "c.json").exists()
+
+
+def test_capacity_store_ignores_a_broken_file(tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text("{not json")
+    assert device.CapacityStore(str(path), "7").value() == (7.0, "BATTERY_CAPACITY_KWH")
+
+
+def test_reader_applies_a_capacity_change_without_reading_again(tmp_path):
+    inv = FakeInverter()
+    r = device.DeviceReader(inv, capacity=device.CapacityStore(str(tmp_path / "c.json")))
+    assert r.capacity_info()["inverter_kwh"] is None                            # nothing read yet
+    r.refresh()
+    assert r.cached()["battery"]["capacity_kwh"] == 6.45
+    n = inv.reads
+    info = r.set_capacity(10.24)
+    assert inv.reads == n
+    assert r.cached()["battery"]["capacity_kwh"] == 10.24 and r.cached()["battery"]["capacity_source"] == "saved"
+    assert info == {"capacity_kwh": 10.24, "source": "saved", "saved_kwh": 10.24, "env_kwh": None,
+                    "inverter_kwh": 6.45, "rated_capacity_ah": 126, "max_kwh": 1000}
+    info = r.set_capacity(None)
+    assert info["capacity_kwh"] == 6.45 and info["source"] == "inverter"
+    assert r.cached()["battery"]["capacity_kwh"] == 6.45
 
 
 def test_disconnected_bms_and_meter_and_bad_clock():
@@ -114,5 +163,38 @@ def test_http_device_endpoint():
             assert False, "expected 401"
         except urllib.error.HTTPError as e:
             assert e.code == 401
+    finally:
+        srv.shutdown()
+
+
+def test_http_battery_capacity(tmp_path):
+    audit = []
+    ctl = control.Controller(FakeInverter(), control.Config({"INFLUX_TOKEN": "secret"}),
+                             audit=lambda action, **f: audit.append((action, f)))
+    ctl.devices = device.DeviceReader(ctl.inv, capacity=device.CapacityStore(str(tmp_path / "c.json")))
+    ctl.devices.refresh()
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    def call(method, body=None, token="secret"):
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/battery-capacity", method=method,
+                                     data=None if body is None else json.dumps(body).encode(),
+                                     headers={"Authorization": f"Bearer {token}"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+    try:
+        assert call("GET")[1]["capacity_kwh"] == 6.45
+        assert call("POST", {"kwh": 10}, token="wrong")[0] == 401
+        assert call("POST", {"kwh": 0})[0] == 400
+        assert call("POST", {"kwh": 10, "extra": 1})[0] == 400
+        assert ctl.devices.capacity.saved is None and audit == []
+        status, body = call("POST", {"kwh": 10})
+        assert status == 200 and body["capacity_kwh"] == 10.0 and body["applied"] == "Battery capacity: 6.45 → 10.0 kWh"
+        assert audit[-1][0] == "battery_capacity" and audit[-1][1]["verified"] is True
+        status, body = call("POST", {"kwh": None})
+        assert status == 200 and body["source"] == "inverter" and body["applied"].endswith("(from inverter)")
     finally:
         srv.shutdown()
