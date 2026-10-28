@@ -14,9 +14,9 @@ description: >-
   and optional Telegram alerts.
 
 
-  Before it can show data, tell it where the inverter's data logger is: open the app's settings file
-  (umbrel/app-data/vtlvolkov-solis-monitor/data/config/settings.env), set INVERTER_HOST to the logger's IP address and restart the
-  app. The logger accepts only one connection at a time, so stop anything else that reads it (Home Assistant, another monitor).
+  Before it can show data, tell it where the inverter's data logger is: open Settings, General, Inverter connection, type the
+  logger's IP address or press Find inverter. The logger accepts only one connection at a time, so stop anything else that reads
+  it (Home Assistant, another monitor).
 
 
   The dashboard is open on your home network. The Settings page asks for the login shown in this app's page in umbrelOS

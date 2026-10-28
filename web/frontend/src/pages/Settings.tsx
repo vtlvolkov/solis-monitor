@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
 import { CapacityCard } from '../components/CapacityCard';
+import { InverterCard } from '../components/InverterCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { goTo } from '../lib/nav';
@@ -463,13 +464,16 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
       </nav>
 
       {tab === 'general' && (
-        <div class="settings-row settings-general">
-          <TariffCard />
-          <div class="settings-col">
-            {s && <ClockCard s={s} wait={wait} onPropose={propose} />}
+        <>
+          <div class="settings-row settings-general">
+            <InverterCard />
+            {s ? <ClockCard s={s} wait={wait} onPropose={propose} /> : <Card title="Inverter clock"><Skeleton h={120} /></Card>}
+          </div>
+          <div class="settings-row settings-general">
+            <TariffCard />
             {storageCard}
           </div>
-        </div>
+        </>
       )}
       {tab === 'battery' && (
         <>

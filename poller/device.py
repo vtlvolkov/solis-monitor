@@ -198,6 +198,10 @@ class DeviceReader:
             self.refresh()
         return self._cache
 
+    def invalidate(self) -> None:
+        """Forget what was read from the previous logger (the address was changed)."""
+        self._cache, self._at, self._raw = None, -1e9, None
+
     def cached(self) -> dict | None:
         """Last read without touching the inverter (None until the first refresh)."""
         return self._cache

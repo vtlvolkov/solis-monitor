@@ -29,6 +29,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
+import scan
+
 log = logging.getLogger("solis-control")
 
 REG_CLOCK = 43000                # 43000..43005: year-2000, month, day, hour, minute, second
@@ -151,6 +153,10 @@ class Controller:
         self.last_write = 0.0
         self.lock = threading.Lock()                 # one change at a time
         self.devices = None                          # device.DeviceReader, set by poller.main
+        self.addresses = None                        # address.AddressStore, set by poller.main
+        self.poll_status = None                      # address.PollStatus, set by poller.main
+        self.poll_interval = 10.0
+        self.scan_lock = threading.Lock()            # one network scan at a time
         self._settings_cache = None                  # last settings() result, for /settings/cached
         self._settings_at = -1e9
 
@@ -214,6 +220,51 @@ class Controller:
                    + ("" if after["source"] == "saved" else f" (from {after['source']})"))
         self.audit("battery_capacity", before=str(before["capacity_kwh"]), written=str(kwh), verified=True, summary=summary)
         return {**after, "applied": summary}
+
+    # ------------------------------------------------------------------ where the logger is (the app's own setting)
+    def inverter_address(self) -> dict:
+        if self.addresses is None:
+            raise ControlError(503, "The poller is still starting.")
+        a = self.addresses.value()
+        info = self.poll_status.info(self.poll_interval) if self.poll_status else {}
+        return {**a, "configured": bool(a["host"]), "env_host": self.addresses.env["host"],
+                "saved": self.addresses.saved is not None, **info}
+
+    def set_inverter_address(self, host, port=502, unit=1) -> dict:
+        """Point the poller at another logger, no restart needed. host None = back to INVERTER_HOST. Nothing is
+        written to the inverter, so CONTROL_ENABLED does not apply."""
+        before = self.inverter_address()
+        try:
+            after = self.addresses.set(host, port, unit)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+        self.inv.reconfigure(after["host"], after["port"], after["unit"])
+        if self.poll_status:
+            self.poll_status.reset()
+        if self.devices:
+            self.devices.invalidate()                # the cached device details belong to the old logger
+        self._settings_cache = None
+        log.warning("inverter address: %s -> %s:%s (unit %s, %s)", before["host"] or "none", after["host"], after["port"], after["unit"], after["source"])
+        summary = f"Inverter address: {before['host'] or '--'} → {after['host'] or '--'}" + ("" if after["source"] == "saved" else f" (from {after['source']})")
+        self.audit("inverter_address", before=before["host"] or "", written=str(host or ""), verified=True, summary=summary)
+        return {**self.inverter_address(), "applied": summary}
+
+    def scan_network(self, network) -> dict:
+        """Look for the data logger on a home network (a /24). The poller's own connection is closed meanwhile."""
+        try:
+            prefix = scan.parse_network(network)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+        if not self.scan_lock.acquire(blocking=False):
+            raise ControlError(409, "A scan is already running.")
+        try:
+            a = self.addresses.value() if self.addresses else {"port": 502, "unit": 1}
+            with self.inv.paused():
+                found = scan.scan_network(prefix, a["port"], a["unit"])
+        finally:
+            self.scan_lock.release()
+        log.warning("scan of %s.0/24 found %s", prefix, found or "nothing")
+        return {"network": f"{prefix}.0/24", "found": found}
 
     # ------------------------------------------------------------------ validation helpers
     @staticmethod
@@ -432,7 +483,8 @@ def make_handler(ctl: Controller):
 
         def do_GET(self):
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
-                      "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity}
+                      "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity,
+                      "/inverter": ctl.inverter_address}
             self._run(routes.get(self.path))
 
         def do_POST(self):
@@ -445,7 +497,19 @@ def make_handler(ctl: Controller):
                 if set(body) != {"kwh"}:
                     raise ControlError(400, "body must be {kwh}")
                 return ctl.set_battery_capacity(body["kwh"])
-            self._run({"/settings": apply, "/battery-capacity": capacity}.get(self.path))
+            def inverter():
+                body = self._body()
+                if set(body) - {"host", "port", "unit"} or "host" not in body:
+                    raise ControlError(400, "body must be {host, port, unit}")
+                return ctl.set_inverter_address(body["host"], body.get("port", 502), body.get("unit", 1))
+
+            def scan_for_logger():
+                body = self._body()
+                if set(body) != {"network"}:
+                    raise ControlError(400, "body must be {network}")
+                return ctl.scan_network(body["network"])
+            self._run({"/settings": apply, "/battery-capacity": capacity, "/inverter": inverter,
+                       "/inverter/scan": scan_for_logger}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet
             pass

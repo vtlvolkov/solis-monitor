@@ -31,7 +31,8 @@ services:
       influxdb:
         condition: service_healthy
     environment:
-      INVERTER_HOST: ${INVERTER_HOST}
+      INVERTER_HOST: ${INVERTER_HOST:-}                 # the first address; the Settings page can save another (in poller-data)
+      INVERTER_FILE: /data/inverter.json
       INVERTER_PORT: ${INVERTER_PORT:-502}
       MODBUS_UNIT: ${MODBUS_UNIT:-1}
       POLL_INTERVAL: ${POLL_INTERVAL:-10}

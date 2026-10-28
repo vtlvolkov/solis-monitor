@@ -76,9 +76,12 @@ sudo bash install.sh --yes --user admin --password 'choose-a-password' --inverte
 ## First steps
 
 1. **Open the dashboard** at `http://<machine-ip>:8088`. Within half a minute the pill in the top right turns green and says **Online**.
-2. **Look around.** Nothing is asked for until you open the **Settings** page, where the browser prompts for the admin name and password you chose.
-3. **Add your electricity prices** (optional): Settings → *Electricity tariff*. The cost card on the Overview appears once a day price is set.
-4. **Turn on Telegram alerts** (optional): see [Alerts and AI agents](docs/alerts-and-agents.md).
+2. **Check the inverter connection** (only if the pill stays Offline): Settings → General → **Inverter connection** shows the logger's address and whether it is reachable, and **Find inverter** searches your network for it.
+
+   ![General settings](docs/img/general.png)
+3. **Look around.** Nothing is asked for until you open the **Settings** page, where the browser prompts for the admin name and password you chose.
+4. **Add your electricity prices** (optional): Settings → *Electricity tariff*. The cost card on the Overview appears once a day price is set.
+5. **Turn on Telegram alerts** (optional): see [Alerts and AI agents](docs/alerts-and-agents.md).
 
 ## A tour
 
@@ -155,14 +158,14 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 ## Troubleshooting
 
 **The pill says Offline, or there are no numbers.** The poller cannot reach the inverter's data logger. Check `solis-monitor logs poller`:
-- `cannot connect` or `No route to host`: the address is wrong, or the logger is off the network. Run `solis-monitor edit`, fix `INVERTER_HOST`, save and answer yes to apply.
+- `cannot connect` or `No route to host`: the address is wrong, or the logger is off the network. Open **Settings → General → Inverter connection**, fix the address (or press **Find inverter**) and **Save**: no restart is needed.
 - It connects but keeps timing out: **the logger accepts one connection at a time.** Stop anything else that reads it (Home Assistant, another monitor, a second copy of this stack), wait a minute and look again.
 
 **`No route to host` / `Destination Host Unreachable`, though your router lists the logger as connected.** The WiFi stick can hang while staying associated, so the router still shows it but it no longer answers anyone (`ip neigh show <logger ip>` says `INCOMPLETE`, and no device on the network can ping it). Unplug the stick from the inverter for about 10 seconds, plug it back in and wait a minute or two; the poller reconnects by itself and the missing time shows as a gap in the charts. If it keeps happening, improve the WiFi signal at the stick (a closer router or a repeater).
 
 **"GitHub's limit for your network is used up" when checking for updates.** GitHub lets each public IP address make 60 anonymous requests an hour, shared by every device at your home that talks to it. The message says when the limit lifts; the dashboard does not ask again until then, and `solis-monitor update --version vX.Y.Z` works the same way. The automatic check is one request every ~6 hours, so this only happens after a lot of manual checking.
 
-**The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, find its IP in your router, put it in `INVERTER_HOST` with `solis-monitor edit`. (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
+**The installer found nothing.** It still installs, and the dashboard waits for an address. Check the logger is powered and online in the Solis app, enter its IP in **Settings → General → Inverter connection** (or press **Find inverter** there to search your network). (Before installing, you can pass it instead: `--inverter 192.168.1.50`, or `--scan-network 10.0.5` if the logger is on another subnet.)
 
 **Port 8088 is taken.** Run the installer with `--port 8090` (or change `WEB_PORT` with `solis-monitor edit` later).
 

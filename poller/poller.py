@@ -20,6 +20,7 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from pymodbus.client import ModbusTcpClient
 
+import address
 import control
 import device
 import faults
@@ -159,9 +160,27 @@ class Inverter:
 
     def __init__(self, host=INVERTER_HOST, port=INVERTER_PORT, unit=MODBUS_UNIT):
         self.host, self.port, self.unit = host, port, unit
-        self.client = ModbusTcpClient(host, port=port, timeout=3)
+        self.client = ModbusTcpClient(host or "invalid", port=port, timeout=3)
         self.lock = threading.Lock()
         self._last = 0.0
+
+    def reconfigure(self, host, port, unit) -> bool:
+        """Point the connection at another logger (an address saved from the Settings page); True if it changed."""
+        with self.lock:
+            if (host, port, unit) == (self.host, self.port, self.unit):
+                return False
+            self.client.close()
+            self.host, self.port, self.unit = host, port, unit
+            self.client = ModbusTcpClient(host or "invalid", port=port, timeout=3)
+            self._last = 0.0
+            return True
+
+    @contextmanager
+    def paused(self):
+        """No Modbus traffic and no open connection while a scan looks for the logger (it takes one client at a time)."""
+        with self.lock:
+            self.client.close()
+            yield
 
     @contextmanager
     def session(self):
@@ -170,6 +189,8 @@ class Inverter:
             wait = FRAME_GAP_S - (time.monotonic() - self._last)
             if wait > 0:
                 time.sleep(wait)
+            if not self.host:
+                raise ConnectionError("no inverter address is set")
             if not self.client.connected and not self.client.connect():
                 raise ConnectionError(f"cannot connect to {self.host}:{self.port}")
             try:
@@ -225,16 +246,13 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    while not INVERTER_HOST and not stop.is_set():          # installed with --no-scan, address not set yet
-        log.error("INVERTER_HOST is not set: set it with `solis-monitor edit` (or in .env, then run "
-                  "`docker compose up -d poller`)")
-        stop.wait(60)
-    if stop.is_set():
-        return
-
     influx = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
     writer = influx.write_api(write_options=SYNCHRONOUS)
-    inv = Inverter()
+    # The logger's address: saved from the Settings page, else INVERTER_HOST. It can be set (or changed) while we run.
+    addresses = address.AddressStore(os.getenv("INVERTER_FILE", "/data/inverter.json"), INVERTER_HOST, INVERTER_PORT, MODBUS_UNIT)
+    here = addresses.value()
+    inv = Inverter(here["host"], here["port"], here["unit"])
+    status = address.PollStatus()
 
     def audit(action, **fields):
         log.warning("CONTROL %s %s", action, fields)
@@ -247,6 +265,7 @@ def main():
             log.warning("audit write failed: %s", exc)
 
     ctl = control.Controller(inv, control.Config(), audit=audit)
+    ctl.addresses, ctl.poll_status, ctl.poll_interval = addresses, status, POLL_INTERVAL
     ctl.devices = device.DeviceReader(inv, ttl=90, capacity=device.CapacityStore(
         os.getenv("CAPACITY_FILE", "/data/battery-capacity.json"), os.getenv("BATTERY_CAPACITY_KWH")))
     server = control.serve(ctl)
@@ -265,8 +284,9 @@ def main():
     threading.Thread(target=keep_caches_warm, daemon=True, name="cache-warm").start()
 
     log.info("Polling %s:%s unit %s every %ss -> %s/%s",
-             INVERTER_HOST, INVERTER_PORT, MODBUS_UNIT, POLL_INTERVAL, INFLUX_URL, INFLUX_BUCKET)
+             inv.host or "(no address yet)", inv.port, inv.unit, POLL_INTERVAL, INFLUX_URL, INFLUX_BUCKET)
     failures = 0
+    told_unset = False
     tracker = faults.EventTracker()
 
     def battery_for_runtime():                    # (capacity kWh, SOC floor on backup) from cached device info
@@ -278,9 +298,18 @@ def main():
 
     while not stop.is_set():
         started = time.monotonic()
+        if not inv.host:                                  # nothing to poll yet: not an outage, so no alert
+            if not told_unset:
+                log.error("No inverter address yet: enter it on the dashboard's Settings page (General), "
+                          "or set INVERTER_HOST. Waiting.")
+                told_unset = True
+            stop.wait(5)
+            continue
+        told_unset = False
         try:
             vals = inv.snapshot()
         except Exception as exc:  # keep polling through network blips / reboots
+            status.failed(exc)
             failures += 1
             if failures == 1 or failures % 30 == 0:
                 log.warning("Poll failed (%d in a row): %s", failures, exc)
@@ -290,9 +319,10 @@ def main():
         if failures:
             log.info("Recovered after %d failed polls", failures)
         failures = 0
+        status.ok()
         alerts.poll_ok()
 
-        point = Point("solis").tag("host", INVERTER_HOST)
+        point = Point("solis").tag("host", inv.host)
         for k, v in vals.items():
             point = point.field(k, v)
         records = [point]

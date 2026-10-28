@@ -12,13 +12,13 @@ class ControlClient:
     def __init__(self, base_url: str, token: str, timeout: float = 20):
         self.base, self.token, self.timeout = base_url.rstrip("/"), token, timeout
 
-    def _call(self, method: str, path: str = "/settings", body: dict | None = None) -> tuple[int, dict]:
+    def _call(self, method: str, path: str = "/settings", body: dict | None = None, timeout: float | None = None) -> tuple[int, dict]:
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(f"{self.base}{path}", data=data, method=method,
                                      headers={"Authorization": f"Bearer {self.token}",
                                               "Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             try:
@@ -45,3 +45,12 @@ class ControlClient:
 
     def set_battery_capacity(self, kwh: float | None) -> tuple[int, dict]:
         return self._call("POST", "/battery-capacity", {"kwh": kwh})
+
+    def inverter_address(self) -> tuple[int, dict]:
+        return self._call("GET", "/inverter")
+
+    def set_inverter_address(self, host, port, unit) -> tuple[int, dict]:
+        return self._call("POST", "/inverter", {"host": host, "port": port, "unit": unit})
+
+    def scan_for_inverter(self, network: str) -> tuple[int, dict]:
+        return self._call("POST", "/inverter/scan", {"network": network}, timeout=40)

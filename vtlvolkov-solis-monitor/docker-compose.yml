@@ -39,7 +39,9 @@ services:
       influxdb:
         condition: service_healthy
     environment:
+      # The first address; the dashboard (Settings, General) can save another one, kept in the data folder.
       INVERTER_HOST: ${APP_VTLVOLKOV_SOLIS_MONITOR_INVERTER_HOST:-}
+      INVERTER_FILE: /data/inverter.json
       INVERTER_PORT: ${APP_VTLVOLKOV_SOLIS_MONITOR_INVERTER_PORT:-502}
       MODBUS_UNIT: ${APP_VTLVOLKOV_SOLIS_MONITOR_MODBUS_UNIT:-1}
       POLL_INTERVAL: 10

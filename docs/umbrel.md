@@ -7,12 +7,8 @@ This repository is also an [Umbrel community app store](https://github.com/getum
 1. In umbrelOS open the **App Store**, then the **⋯** menu → **Community App Stores**, and add
    `https://github.com/vtlvolkov/solis-monitor`
 2. Open the new **Volkov App Store**, choose **Solis Monitor** and install it.
-3. Tell it where the inverter's data logger is. Over SSH (`ssh umbrel@umbrel.local`):
-   ```bash
-   nano ~/umbrel/app-data/vtlvolkov-solis-monitor/data/config/settings.env
-   ```
-   Set `INVERTER_HOST` to the logger's IP address (your router's device list shows it), save, and **restart** the app (right-click its icon → Restart). The file also holds the other options: time zone, site name, Telegram alerts, electricity prices, battery capacity.
-4. Open the app. Within half a minute the pill in the top right says **Online**.
+3. Open the app and tell it where the inverter's data logger is: **Settings** (the login is on the app's page in umbrelOS) → **General** → **Inverter connection**. Type the logger's IP address (your router's device list shows it), or press **Find inverter** to search your network, pick the result with **Use**, and **Save**. The poller follows within seconds; no restart. (The settings file `~/umbrel/app-data/vtlvolkov-solis-monitor/data/config/settings.env` also has `INVERTER_HOST`, as the first address; an address saved in the dashboard wins over it. The file holds the other options too: time zone, site name, Telegram alerts, electricity prices, battery capacity. Restart the app after editing it.)
+4. Within half a minute the pill in the top right says **Online**.
 
 The dashboard login for the Settings page is shown on the app's page in umbrelOS (user `admin`). The rest of the dashboard is open on your home network on `http://umbrel.local:8188`, so the [Android TV app](tv-app.md) can show it (host `umbrel.local`, port `8188`). umbrelOS's own sign-in is switched off for this app for the same reason.
 

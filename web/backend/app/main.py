@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import binascii
+import ipaddress
 import json
 import logging
 import os
@@ -275,6 +276,64 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         status, result = await poller(control.set_battery_capacity, kwh)
         if status == 200:
             result["web"] = capacity_web()
+        return JSONResponse(result, status_code=status)
+
+    # ------------------------------------------------------------------ where the inverter's data logger is (kept by the poller)
+    def network_hint(host: str, request: Request):
+        """A network to suggest for a scan: the configured logger's, else the browser's (X-Forwarded-For, when a proxy
+        sets it). The proxy's own address is never used: inside Docker it says nothing about the home network."""
+        candidates = [host] + [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",")]
+        for c in candidates:
+            try:
+                ip = ipaddress.IPv4Address(c)
+            except ValueError:
+                continue
+            if ip.is_private and not (ip.is_loopback or ip.is_link_local):
+                return ".".join(str(ip).split(".")[:3])
+        return None
+
+    @app.get("/api/settings/inverter")
+    async def api_inverter(request: Request):
+        status, body = await poller(control.inverter_address)
+        if status == 200:
+            body["web"] = capacity_web()
+            body["scan_hint"] = network_hint(body.get("host", ""), request)
+        return JSONResponse(body, status_code=status)
+
+    INVERTER_KEYS = {"host", "port", "unit"}
+
+    @app.post("/api/settings/inverter")
+    async def api_inverter_change(request: Request):
+        """The logger's address (null host = back to INVERTER_HOST). Nothing is written to the inverter, so this works
+        with CONTROL_ENABLED=false; the poller follows the new address within seconds, no restart."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        if not isinstance(body, dict) or "host" not in body or set(body) - INVERTER_KEYS:
+            return JSONResponse({"detail": "body must be {host, port, unit}"}, status_code=400)
+        log.warning("inverter address change requested: %s", body.get("host"))
+        status, result = await poller(control.set_inverter_address, body["host"], body.get("port", 502), body.get("unit", 1))
+        if status == 200:
+            result["web"] = capacity_web()
+            result["scan_hint"] = network_hint(result.get("host", ""), request)
+        return JSONResponse(result, status_code=status)
+
+    @app.post("/api/settings/inverter/scan")
+    async def api_inverter_scan(request: Request):
+        """Look for the data logger on a home network (a /24). Briefly connects to devices with Modbus port 502 open."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        if not isinstance(body, dict) or set(body) != {"network"} or not isinstance(body["network"], str):
+            return JSONResponse({"detail": "body must be {network}"}, status_code=400)
+        log.warning("network scan requested: %s", body["network"])
+        status, result = await poller(control.scan_for_inverter, body["network"])
         return JSONResponse(result, status_code=status)
 
     @app.get("/api/events")

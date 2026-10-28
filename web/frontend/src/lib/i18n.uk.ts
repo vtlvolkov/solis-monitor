@@ -381,6 +381,34 @@ export const UK: Record<string, string> = {
   "Downloading the poller image": "Завантаження образу опитувача", "Downloading the web image": "Завантаження образу веб-панелі",
   "Waiting for the new version to start": "Очікування запуску нової версії",
   "Progress": "Хід оновлення",
+
+  // --- inverter connection (Settings -> General)
+  "Inverter connection": "Підключення до інвертора", "Port": "Порт", "Unit": "Адреса Modbus", "Save": "Зберегти",
+  "Network": "Мережа", "Use": "Вибрати", "Searching…": "Пошук…", "Find inverter": "Знайти інвертор",
+  "Find the logger on your network": "Знайти логер у вашій мережі",
+  "No address yet. The dashboard waits until you enter one.": "Адреси ще немає. Панель чекає, поки ви її введете.",
+  "Connected · last reading {n} s ago": "Підключено · останнє значення {n} с тому",
+  "Not reachable: {error}": "Недоступний: {error}",
+  "The address of the inverter's data logger (the WiFi or Ethernet stick). It accepts only one connection at a time, so stop anything else that reads it.":
+    "Адреса логера даних інвертора (WiFi- або Ethernet-модуля). Він приймає лише одне підключення, тож зупиніть усе інше, що його читає.",
+  "Use {host} again": "Знову використовувати {host}",
+  "Saved. The poller connects to {host} within a few seconds.": "Збережено. Опитувач підключиться до {host} за кілька секунд.",
+  "Searching briefly connects to every device on that network that has Modbus port 502 open, and pauses readings for about ten seconds.":
+    "Пошук ненадовго підключається до кожного пристрою в цій мережі з відкритим портом Modbus 502 і призупиняє зчитування приблизно на десять секунд.",
+  "Nothing answered on {network}. Check that the logger is powered and on this network, and that nothing else is connected to it.":
+    "У мережі {network} ніхто не відповів. Перевірте, чи логер увімкнений, чи він у цій мережі і чи до нього більше ніхто не підключений.",
+  "Enter a home network to scan, like 192.168.0": "Введіть домашню мережу для пошуку, наприклад 192.168.0",
+  "Enter the logger's IP address or host name.": "Введіть IP-адресу або ім'я хоста логера.",
+  "That is not a valid IPv4 address.": "Це не схоже на правильну IPv4-адресу.",
+  "That address cannot be the logger (use its address on your home network).": "Ця адреса не може бути логером (вкажіть його адресу у вашій домашній мережі).",
+  "Use just the IP address or host name, without http://, a port or spaces.": "Вкажіть лише IP-адресу або ім'я хоста, без http://, порту чи пробілів.",
+  "The port must be between 1 and 65535.": "Порт має бути від 1 до 65535.",
+  "The Modbus unit must be between 1 and 247.": "Адреса Modbus має бути від 1 до 247.",
+  "Enter the network to scan, like 192.168.0.": "Введіть мережу для пошуку, наприклад 192.168.0.",
+  "That is not a valid network.": "Це не схоже на правильну мережу.",
+  "Only home networks can be scanned (192.168.x.x, 10.x.x.x or 172.16-31.x.x).": "Шукати можна лише в домашніх мережах (192.168.x.x, 10.x.x.x або 172.16-31.x.x).",
+  "A scan is already running.": "Пошук уже виконується.",
+  "The poller is still starting.": "Опитувач ще запускається.",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */

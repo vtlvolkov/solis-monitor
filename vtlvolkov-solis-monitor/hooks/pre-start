@@ -12,7 +12,8 @@ if [ ! -f "${settings}" ]; then
 # Solis Monitor settings. Edit this file, then restart the app (umbrelOS: right-click the app icon -> Restart).
 # Lines are KEY=value. Anything left empty uses the default.
 
-# The IP address of the inverter's data logger (the WiFi or Ethernet stick). Find it in your router's device list.
+# The IP address of the inverter's data logger (the WiFi or Ethernet stick), as the first address. You can also enter it, or
+# press Find inverter, on the dashboard (Settings, General, Inverter connection); an address saved there wins over this one.
 # The logger accepts only ONE connection at a time: stop anything else that reads it (Home Assistant, another monitor).
 INVERTER_HOST=
 INVERTER_PORT=502
