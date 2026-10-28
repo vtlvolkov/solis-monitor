@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.1.12"
+version: "0.1.13"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -35,6 +35,6 @@ gallery:
 path: ""
 defaultUsername: admin
 deterministicPassword: true
-releaseNotes: ""
+releaseNotes: "Dashboard shows the version without update buttons when umbrelOS manages the app."
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
