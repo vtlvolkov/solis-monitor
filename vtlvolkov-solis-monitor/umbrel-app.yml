@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.2.0"
+version: "0.2.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -35,6 +35,11 @@ gallery:
 path: ""
 defaultUsername: admin
 deterministicPassword: true
-releaseNotes: "install in one command, update from the dashboard, and run it as an Umbrel app"
+releaseNotes: |-
+  home-screen icon and battery temperature
+
+  - Adding the dashboard to an iPhone or Android home screen now shows the Solis icon instead of a letter. Remove the old shortcut and add it again.
+  - Battery temperature from the battery's BMS on the Overview battery card (after SOH) and in Devices → Battery. It is kept in the history too.
+  - The temperature comes from a register not yet checked on every inverter: if it always shows 0.0 °C, your firmware does not report it.
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
