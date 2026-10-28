@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point the Umbrel app at a release: `deploy/umbrel/update-app.py v0.1.12 [--notes "..."] [--refresh-influx]`.
+"""Point the Umbrel app at a release: `deploy/umbrel/update-app.py v0.1.12 [--notes "...", can be several lines] [--refresh-influx]`.
 
 Umbrel wants every image pinned by the digest of its multi-arch index, so this looks the digests up in the registries
 (ghcr.io for our two images, Docker Hub for InfluxDB with --refresh-influx), checks that amd64 and arm64 are both there,
@@ -80,8 +80,10 @@ def main():
     if n != 1:
         sys.exit("could not find `version:` in umbrel-app.yml")
     if a.notes is not None:
-        notes = a.notes.replace('"', "'")
-        manifest, n = re.subn(r'(?m)^releaseNotes: .*$', f'releaseNotes: "{notes}"', manifest)
+        lines = [ln.rstrip().replace("\t", "    ") for ln in a.notes.strip().splitlines()]
+        notes = "\n".join(f"  {ln}" if ln else "" for ln in lines)
+        # replaces the old value, one line or a block: everything up to the next top-level key
+        manifest, n = re.subn(r'(?ms)^releaseNotes:.*?(?=^\S)', f"releaseNotes: |-\n{notes}\n", manifest)
         if n != 1:
             sys.exit("could not find `releaseNotes:` in umbrel-app.yml")
     (APP / "umbrel-app.yml").write_text(manifest)
