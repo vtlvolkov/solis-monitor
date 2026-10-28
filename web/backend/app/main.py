@@ -31,6 +31,7 @@ SETTING_TYPES = {"grid_charging": bool, "time_of_use_mode": bool, "reserve_mode"
                  "overdischarge_soc": int, "backup_soc": int, "max_charge_soc": int, "force_charge_soc": int,
                   "tou_slot": dict, "clock_sync": True}
 TOU_KEYS = {"kind", "slot", "enabled", "start", "end", "current_a", "soc"}
+PUBLIC_ICONS = {"/favicon.svg", "/apple-touch-icon.png", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"}
 
 
 def valid_setting(setting, value) -> bool:
@@ -128,7 +129,8 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         @app.middleware("http")
         async def basic_auth(request: Request, call_next):
             path = request.url.path
-            if path in ("/healthz", "/mcp", "/mcp/"):
+            # Icons stay public: iOS fetches the home-screen icon without the Basic auth credentials.
+            if path in ("/healthz", "/mcp", "/mcp/") or path in PUBLIC_ICONS:
                 return await call_next(request)
             if s.auth_settings_only and path != "/api/settings" and not path.startswith("/api/settings/"):
                 return await call_next(request)

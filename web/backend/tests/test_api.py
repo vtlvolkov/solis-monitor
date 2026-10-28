@@ -253,6 +253,8 @@ def test_basic_auth_enforced():
     assert c.get("/api/live", headers={"Authorization": "Basic !!!"}).status_code == 401
     assert c.get("/api/live", auth=("me", "secret")).status_code == 200
     assert c.get("/healthz").status_code == 200        # Docker healthcheck stays open
+    assert c.get("/apple-touch-icon.png").status_code == 404   # no static dir here, but past the auth check
+    assert c.get("/index.html").status_code == 401
 
 
 def test_site_name():
