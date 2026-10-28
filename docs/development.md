@@ -49,3 +49,7 @@ On the host, `solis-monitor dashboard-updates on` installs a systemd path unit t
 - **APK signing:** Android only installs an update over an app signed with the same key. Store the key once as a repository secret: `base64 -w0 android/.keystore/debug.keystore | gh secret set ANDROID_KEYSTORE_B64` (use the keystore your TV already has the app from, if any). Without the secret the release still builds, with a fresh key and a warning in the job log. The tag becomes the app version (`v1.2.3` is version code 10203).
 - Keep every new compose variable optional (`${VAR:-default}`): an update replaces `docker-compose.yml` but never touches the user's `.env`.
 
+## The Umbrel app
+
+`vtlvolkov-solis-monitor/` is the Umbrel packaging of the same images (guide: [umbrel.md](umbrel.md)). Keep it in step with the main stack: `deploy/tests/check-umbrel-app.py` fails when `docker-compose.yml` sets an environment variable or mount for the poller or web service that the Umbrel compose lacks. After tagging a release run `deploy/umbrel/update-app.py vX.Y.Z` (it pins the new image digests and bumps the version) and push; umbrelOS then offers the update.
+

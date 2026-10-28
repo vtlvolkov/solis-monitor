@@ -55,9 +55,9 @@ def test_versions():
 
 def test_version_endpoint_is_open(tmp_path):
     e = Env(tmp_path)
-    assert e.client.get("/api/version", auth=AUTH).json() == {"version": "v0.1.3", "installed": True, "update": {"available": False, "tag": None}}
+    assert e.client.get("/api/version", auth=AUTH).json() == {"version": "v0.1.3", "installed": True, "managed_by": None, "update": {"available": False, "tag": None}}
     src = Env(tmp_path, version="")
-    assert src.client.get("/api/version", auth=AUTH).json() == {"version": None, "installed": False, "update": {"available": False, "tag": None}}
+    assert src.client.get("/api/version", auth=AUTH).json() == {"version": None, "installed": False, "managed_by": None, "update": {"available": False, "tag": None}}
     e.post("/check")                                                   # a manual check also feeds the badge
     assert e.client.get("/api/version", auth=AUTH).json()["update"] == {"available": True, "tag": "v0.1.4"}
 
@@ -356,3 +356,25 @@ def test_the_background_check_waits_for_the_limit_to_lift():
     assert delay_after_limit(reset, NOW, 6) == 21 * 60                  # just after the reset
     assert delay_after_limit(NOW - timedelta(minutes=5), NOW, 6) == 60  # already over: a minute, never a tight loop
     assert delay_after_limit(NOW + timedelta(hours=10), NOW, 6) == 6 * 3600   # never later than the normal interval
+
+
+# ---------------------------------------------------------------- platforms that update the app themselves (Umbrel)
+def managed_app(tmp_path, calls):
+    s = Settings(static_dir="/nonexistent", basic_auth="me:pw", solis_version="v0.1.10", solis_repo="o/r", update_dir=str(tmp_path),
+                 updates_managed_by="umbrelOS", update_check_hours=6, update_check_first_delay_s=0.0)
+    return create_app(repo=object(), control=object(), settings=s, now=lambda: NOW, releases=lambda: calls.append(1) or release())
+
+
+def test_a_managed_app_shows_its_version_but_never_offers_or_runs_an_update(tmp_path):
+    calls = []
+    with TestClient(managed_app(tmp_path, calls)) as c:
+        time.sleep(0.3)
+        assert calls == []                                                   # no background check either
+        v = c.get("/api/version", auth=AUTH).json()
+        assert v["version"] == "v0.1.10" and v["managed_by"] == "umbrelOS" and v["update"]["available"] is False
+        u = c.get("/api/settings/update", auth=AUTH).json()
+        assert u["can_update"] is False and u["reason"] == "Updates are handled by umbrelOS." and u["managed_by"] == "umbrelOS"
+        r = c.post("/api/settings/update/check", headers=JSON, json={}, auth=AUTH)
+        assert r.status_code == 400 and "umbrelOS" in r.json()["detail"]
+        r = c.post("/api/settings/update", headers=JSON, json={}, auth=AUTH)
+        assert r.status_code == 409 and calls == [] and not (tmp_path / "update-request").exists()

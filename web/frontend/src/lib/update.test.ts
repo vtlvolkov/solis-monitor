@@ -5,7 +5,7 @@ import { describeStatus, progressOf, shouldReload, updateBadge, type UpdatePaylo
 const st = (patch: Partial<UpdateStatus>): UpdateStatus =>
   ({ state: 'ok', from: 'v0.1.3', to: 'v0.1.4', message: null, percent: null, started: null, finished: null, ...patch });
 const payload = (patch: Partial<UpdatePayload>): UpdatePayload =>
-  ({ version: 'v0.1.4', can_update: true, reason: null, busy: false, latest: null, status: st({}), ...patch });
+  ({ version: 'v0.1.4', can_update: true, reason: null, managed_by: null, busy: false, latest: null, status: st({}), ...patch });
 
 describe('update status text', () => {
   it('says what is happening or what happened', () => {
@@ -70,6 +70,7 @@ describe('Ukrainian texts for messages that carry a value', () => {
     expect(uk("GitHub's limit for your network is used up. Try again after 17:34.")).toBe('Ліміт GitHub для вашої мережі вичерпано. Спробуйте знову після 17:34.');
     expect(uk('Downloading the files of v0.1.8')).toBe('Завантаження файлів версії v0.1.8');
     expect(uk('Restarting with v0.1.8')).toBe('Перезапуск з v0.1.8');
+    expect(uk('Updates are handled by umbrelOS.')).toBe('Оновлення виконує umbrelOS.');
     expect(uk('Could not download the images for v0.1.8. Still on v0.1.7.')).toBe('Не вдалося завантажити образи для v0.1.8. Залишається v0.1.7.');
   });
 });

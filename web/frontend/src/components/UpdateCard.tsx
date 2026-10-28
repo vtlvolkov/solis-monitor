@@ -101,7 +101,7 @@ export function UpdateCard() {
         {latest && <div><dt>{t('Latest release')}</dt><dd data-testid="update-latest">{latest.tag}</dd></div>}
       </dl>
 
-      {u.version && (
+      {u.version && !u.managed_by && (
         <div class="setting-edit update-actions">
           <button type="button" class="btn" onClick={check} disabled={busy !== null || inProgress} data-testid="update-check">
             {busy === 'check' ? t('Checking…') : t('Check for updates')}

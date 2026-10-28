@@ -1,0 +1,40 @@
+manifestVersion: 1.1
+id: vtlvolkov-solis-monitor
+storage:
+  dataRoot: data
+category: automation
+name: Solis Monitor
+version: "0.1.12"
+tagline: Live dashboard, history and alerts for Solis hybrid inverters
+icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
+description: >-
+  A self-hosted dashboard for Solis hybrid inverters (tested with the S6-EH1P). It reads the inverter's data logger over your
+  home network and keeps the history locally: live power flow between solar, grid, battery and house, charts from one hour to
+  30 days, grid outages with how far the battery fell, the backup runtime estimate, electricity cost with day and night rates,
+  and optional Telegram alerts.
+
+
+  Before it can show data, tell it where the inverter's data logger is: open the app's settings file
+  (umbrel/app-data/vtlvolkov-solis-monitor/data/config/settings.env), set INVERTER_HOST to the logger's IP address and restart the
+  app. The logger accepts only one connection at a time, so stop anything else that reads it (Home Assistant, another monitor).
+
+
+  The dashboard is open on your home network. The Settings page asks for the login shown in this app's page in umbrelOS
+  (user admin). Changing inverter settings from the dashboard is off by default.
+developer: vtlvolkov
+website: https://github.com/vtlvolkov/solis-monitor
+dependencies: []
+repo: https://github.com/vtlvolkov/solis-monitor
+support: https://github.com/vtlvolkov/solis-monitor/issues
+port: 8188
+gallery:
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/overview.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/charts.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/cost.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/tv.png
+path: ""
+defaultUsername: admin
+deterministicPassword: true
+releaseNotes: ""
+submitter: vtlvolkov
+submission: https://github.com/vtlvolkov/solis-monitor

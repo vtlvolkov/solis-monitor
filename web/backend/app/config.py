@@ -26,6 +26,8 @@ class Settings:
     # Release installs (install.sh) know their version and repository; builds from source do not.
     solis_version: str = field(default_factory=lambda: os.getenv("SOLIS_VERSION", "").strip())
     solis_repo: str = field(default_factory=lambda: os.getenv("SOLIS_REPO", "").strip())
+    # Set by a platform that updates the app itself (the Umbrel app): the dashboard then shows the version but offers no update.
+    updates_managed_by: str = field(default_factory=lambda: os.getenv("UPDATES_MANAGED_BY", "").strip())
     update_dir: str = field(default_factory=lambda: os.getenv("UPDATE_DIR", "/control"))     # shared with the host, see updates.py
     github_api: str = field(default_factory=lambda: os.getenv("GITHUB_API", "https://api.github.com"))
     # Look for a newer release in the background every N hours (0 = never; only for release installs).

@@ -126,6 +126,7 @@ The same pages, rearranged for a narrow screen.
 | **Changing battery settings** from the dashboard: work mode, charge limits, time-of-use schedule. Off by default | [Changing inverter settings](docs/settings.md) |
 | **Android TV app** and wall display | [TV display](docs/tv-app.md) |
 | What every page and number means, environment variables, API | [Dashboard guide](docs/dashboard.md) |
+| **Umbrel**: add this repository as a community app store and install Solis Monitor from the App Store | [Solis Monitor on Umbrel](docs/umbrel.md) |
 | Building from source, a second site | [Advanced](docs/advanced.md) |
 
 ## Updating

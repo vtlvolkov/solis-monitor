@@ -14,6 +14,7 @@ export interface UpdatePayload {
   version: string | null;
   can_update: boolean;
   reason: string | null;
+  managed_by: string | null;      // a platform (umbrelOS) that updates the app itself: no buttons then
   busy: boolean;
   latest: { tag: string; url: string | null; published: string | null; checked_at: string; available: boolean } | null;
   status: UpdateStatus | null;

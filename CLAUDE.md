@@ -55,6 +55,10 @@ Every site, including the maintainer's (an Umbrel host and a second site on a Ra
 - `.github/workflows/release.yml` builds amd64+arm64 images for a `v*` tag and creates the release with `install.sh` attached (its `DEFAULT_VERSION=` line is stamped with the tag). A suffixed tag (`v1.2.0-rc.1`) becomes a pre-release without the `latest` image tag, for testing on one site with `solis-monitor update --version`. Keep every new compose variable optional (`${VAR:-default}`): updates replace the compose file but not `.env`.
 - `deploy/tests/test-install.sh` tests both scripts with a stand-in `docker`, a fake Modbus logger and `file://` releases; it runs in CI together with shellcheck.
 
+## Umbrel community app store
+
+This repository is also an Umbrel community store: `umbrel-app-store.yml` (id `vtlvolkov`) and `vtlvolkov-solis-monitor/` (manifest, compose, `exports.sh`, `hooks/pre-start`, `icon.svg`); user guide in `docs/umbrel.md`. The compose file there mirrors the main `docker-compose.yml` with Umbrel's rules: images pinned by digest, bind mounts under `${APP_DATA_DIR}/data`, no `container_name`/`build`/`ports`, `app_proxy` env, `restart: on-failure`. The owner's settings live in `data/config/settings.env`, read by `exports.sh`; secrets come from `derive_entropy`. `UPDATES_MANAGED_BY=umbrelOS` makes the dashboard show the version without any update machinery. **When you change the main compose** (a variable or mount for poller/web), change the Umbrel compose too: `deploy/tests/check-umbrel-app.py` fails otherwise. **After a release**, run `deploy/umbrel/update-app.py vX.Y.Z` and push, so umbrelOS offers the update.
+
 ## Changing things
 
 - **New register**: add it to `REGISTERS` in `poller/poller.py` (registers are 0-based input-register addresses; `u32`/`s32` span two registers, high word first) **and** to `FIELDS` in `web/backend/app/validation.py`, or the API won't accept or return it.

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Runs before every start. Creates the settings file the owner edits (see exports.sh) the first time, and nothing else.
+set -euo pipefail
+APP_DIR="${APP_DATA_DIR:-$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/..")}"
+DATA_DIR="${APP_DATA_ROOT:-${APP_DIR}/data}"
+
+mkdir -p "${DATA_DIR}/config"
+settings="${DATA_DIR}/config/settings.env"
+if [ ! -f "${settings}" ]; then
+  tz="$(cat /etc/timezone 2>/dev/null || true)"
+  cat > "${settings}" <<SETTINGS
+# Solis Monitor settings. Edit this file, then restart the app (umbrelOS: right-click the app icon -> Restart).
+# Lines are KEY=value. Anything left empty uses the default.
+
+# The IP address of the inverter's data logger (the WiFi or Ethernet stick). Find it in your router's device list.
+# The logger accepts only ONE connection at a time: stop anything else that reads it (Home Assistant, another monitor).
+INVERTER_HOST=
+INVERTER_PORT=502
+MODBUS_UNIT=1
+
+# Shown as the dashboard title and in front of Telegram alerts. Empty = no name.
+SITE_NAME=
+# Your time zone, for day boundaries (for example Europe/Kyiv).
+TZ=${tz:-UTC}
+
+# Telegram alerts for outages, low battery during an outage, alarms and a lost inverter connection.
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+ALERT_SOC_LEVELS=50,30,20
+ALERT_OFFLINE_MIN=5
+
+# Electricity prices per kWh (the cost card shows once TARIFF_DAY is set; later changes are made on the Settings page).
+TARIFF_CURRENCY=UAH
+TARIFF_DAY=
+TARIFF_NIGHT=
+TARIFF_NIGHT_START=23:00
+TARIFF_NIGHT_END=07:00
+
+# Usable battery capacity in kWh for the backup-runtime estimate (empty = the inverter's rated Ah x 51.2 V).
+BATTERY_CAPACITY_KWH=
+
+# Changing battery settings from the dashboard. OFF by default: it writes to a real inverter.
+# Read the README ("Changing inverter settings") before turning it on. Both limits must stay at or below your battery's rating.
+CONTROL_ENABLED=false
+CURRENT_SCALE=0.1
+MAX_CHARGE_CURRENT_A=0
+MAX_DISCHARGE_CURRENT_A=0
+
+# Read-only access for AI agents at http://<umbrel>:8188/mcp. Empty = off. Make one with: openssl rand -hex 32
+MCP_TOKEN=
+
+# ONLY when moving an existing InfluxDB database here (see the README): the password and token it was created with.
+# Leave empty for a new install; the app then makes its own.
+INFLUX_PASSWORD=
+INFLUX_TOKEN=
+SETTINGS
+  # the app's user (1000) and the owner of the umbrel files can edit it
+  chown 1000:1000 "${settings}" 2>/dev/null || true
+fi

@@ -42,3 +42,13 @@ jobs:
       - uses: actions/checkout@v5
       - run: shellcheck -S warning install.sh deploy/solis-monitor deploy/tests/test-install.sh
       - run: bash deploy/tests/test-install.sh
+
+  umbrel:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: pip install pyyaml
+      - run: python3 deploy/tests/check-umbrel-app.py
+      - run: shellcheck -S warning --shell=bash vtlvolkov-solis-monitor/exports.sh vtlvolkov-solis-monitor/hooks/pre-start deploy/tests/test-umbrel-app.sh
+      - run: bash deploy/tests/test-umbrel-app.sh
+

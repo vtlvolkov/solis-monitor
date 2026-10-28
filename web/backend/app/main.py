@@ -82,7 +82,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
     @asynccontextmanager
     async def lifespan(_app):
         # Look for a new release now and then (release installs only), so the badge needs no click.
-        checker = asyncio.create_task(periodic_check()) if s.solis_version and s.update_check_hours > 0 else None
+        checker = asyncio.create_task(periodic_check()) if s.solis_version and s.update_check_hours > 0 and not s.updates_managed_by else None
         try:
             manager = mcp_state.get("manager")
             if manager is None:
@@ -424,14 +424,16 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         """Public: the version, and whether the last (background or manual) check found a newer release."""
         latest = checked.get("release")
         newer = bool(latest) and is_newer(latest["tag"], s.solis_version)
-        return {"version": s.solis_version or None, "installed": bool(s.solis_version),
+        return {"version": s.solis_version or None, "installed": bool(s.solis_version), "managed_by": s.updates_managed_by or None,
                 "update": {"available": newer, "tag": latest["tag"] if newer else None}}
 
     def update_state(t):
         latest = checked.get("release")
         available = bool(latest) and is_newer(latest["tag"], s.solis_version)
         reason = None
-        if not s.basic_auth:
+        if s.updates_managed_by:
+            reason = f"Updates are handled by {s.updates_managed_by}."
+        elif not s.basic_auth:
             reason = "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."
         elif not s.solis_version or parse_version(s.solis_version) is None:
             reason = "This copy was built from source, so it cannot update itself. Update it with git."
@@ -447,6 +449,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
                 status = {**status, "state": "failed", "message": "The updater stopped without reporting. On the server, see: solis-monitor logs"}
         busy = bridge.pending() or bool(status and status["state"] == "running")
         return {"version": s.solis_version or None, "can_update": reason is None, "reason": reason, "busy": busy,
+                "managed_by": s.updates_managed_by or None,
                 "latest": {**latest, "checked_at": checked["at"].isoformat(), "available": available} if latest else None,
                 "status": status}
 
@@ -493,6 +496,8 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
     async def api_update_check(request: Request):
         if (refused := refuse_write(request)) is not None:
             return refused
+        if s.updates_managed_by:
+            return JSONResponse({"detail": f"Updates are handled by {s.updates_managed_by}."}, status_code=400)
         if not s.solis_version:
             return JSONResponse({"detail": "This copy was built from source, so it has no releases to compare with."}, status_code=400)
         t = now()

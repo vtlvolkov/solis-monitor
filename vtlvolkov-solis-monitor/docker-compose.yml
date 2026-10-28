@@ -1,0 +1,97 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      # The format is: <app-id>_<docker-service-name>_1
+      APP_HOST: vtlvolkov-solis-monitor_web_1
+      APP_PORT: 8088
+      # The dashboard has its own login (for the Settings page only) and is meant to be open on the home network,
+      # so the Android TV wall display and other screens can show it without signing in to umbrelOS.
+      PROXY_AUTH_ADD: "false"
+
+  influxdb:
+    image: influxdb:2.7@sha256:b8d940ca9376f85118260f5b6bd236b8a00b1749c3350c5578d4cde8e27f31f2
+    restart: on-failure
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${APP_VTLVOLKOV_SOLIS_MONITOR_INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: home
+      DOCKER_INFLUXDB_INIT_BUCKET: solis
+      DOCKER_INFLUXDB_INIT_RETENTION: ${APP_VTLVOLKOV_SOLIS_MONITOR_INFLUX_RETENTION:-0}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_INFLUX_TOKEN}
+      TZ: ${APP_VTLVOLKOV_SOLIS_MONITOR_TZ:-UTC}
+    volumes:
+      - ${APP_DATA_DIR}/data/influxdb:/var/lib/influxdb2
+      - ${APP_DATA_DIR}/data/influxdb-config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  poller:
+    image: ghcr.io/vtlvolkov/solis-monitor-poller:v0.1.12@sha256:07fbb34d51e8f924e649908f9a2a699b2a553025034579fba7d61bd1b554cea2
+    user: "1000:1000"
+    restart: on-failure
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    environment:
+      INVERTER_HOST: ${APP_VTLVOLKOV_SOLIS_MONITOR_INVERTER_HOST:-}
+      INVERTER_PORT: ${APP_VTLVOLKOV_SOLIS_MONITOR_INVERTER_PORT:-502}
+      MODBUS_UNIT: ${APP_VTLVOLKOV_SOLIS_MONITOR_MODBUS_UNIT:-1}
+      POLL_INTERVAL: 10
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_INFLUX_TOKEN}
+      INFLUX_ORG: home
+      INFLUX_BUCKET: solis
+      # Changing battery settings from the dashboard: off unless settings.env says otherwise
+      CONTROL_ENABLED: ${APP_VTLVOLKOV_SOLIS_MONITOR_CONTROL_ENABLED:-false}
+      CURRENT_SCALE: ${APP_VTLVOLKOV_SOLIS_MONITOR_CURRENT_SCALE:-0.1}
+      MAX_CHARGE_CURRENT_A: ${APP_VTLVOLKOV_SOLIS_MONITOR_MAX_CHARGE_CURRENT_A:-0}
+      MAX_DISCHARGE_CURRENT_A: ${APP_VTLVOLKOV_SOLIS_MONITOR_MAX_DISCHARGE_CURRENT_A:-0}
+      MIN_WRITE_INTERVAL_S: 60
+      BATTERY_CAPACITY_KWH: ${APP_VTLVOLKOV_SOLIS_MONITOR_BATTERY_CAPACITY_KWH:-}
+      CAPACITY_FILE: /data/battery-capacity.json
+      TELEGRAM_BOT_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${APP_VTLVOLKOV_SOLIS_MONITOR_TELEGRAM_CHAT_ID:-}
+      ALERT_SOC_LEVELS: ${APP_VTLVOLKOV_SOLIS_MONITOR_ALERT_SOC_LEVELS:-50,30,20}
+      ALERT_OFFLINE_MIN: ${APP_VTLVOLKOV_SOLIS_MONITOR_ALERT_OFFLINE_MIN:-5}
+      SITE_NAME: ${APP_VTLVOLKOV_SOLIS_MONITOR_SITE_NAME:-}
+      TZ: ${APP_VTLVOLKOV_SOLIS_MONITOR_TZ:-UTC}
+    volumes:
+      - ${APP_DATA_DIR}/data/poller:/data
+
+  web:
+    image: ghcr.io/vtlvolkov/solis-monitor-web:v0.1.12@sha256:a7101378af3c149f4769894c33e0875444f119ccde25a508d7979c9c12d10ed2
+    user: "1000:1000"
+    restart: on-failure
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    environment:
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_INFLUX_TOKEN}
+      INFLUX_ORG: home
+      INFLUX_BUCKET: solis
+      # The login shown in umbrelOS (user admin) protects the Settings page only; the rest is open on the home network.
+      WEB_BASIC_AUTH: admin:${APP_PASSWORD}
+      WEB_AUTH_SETTINGS_ONLY: "true"
+      SITE_NAME: ${APP_VTLVOLKOV_SOLIS_MONITOR_SITE_NAME:-}
+      POLLER_URL: http://poller:8780
+      MCP_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_MCP_TOKEN:-}
+      TARIFF_CURRENCY: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_CURRENCY:-UAH}
+      TARIFF_DAY: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_DAY:-}
+      TARIFF_NIGHT: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_NIGHT:-}
+      TARIFF_NIGHT_START: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_NIGHT_START:-23:00}
+      TARIFF_NIGHT_END: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_NIGHT_END:-07:00}
+      TARIFF_FILE: /data/tariff.json
+      # umbrelOS updates the app (App Store): the dashboard only shows the version and never offers its own update.
+      SOLIS_VERSION: v${APP_VERSION}
+      UPDATES_MANAGED_BY: umbrelOS
+      UPDATE_CHECK_HOURS: "0"
+      TZ: ${APP_VTLVOLKOV_SOLIS_MONITOR_TZ:-UTC}
+    volumes:
+      - ${APP_DATA_DIR}/data/web:/data
