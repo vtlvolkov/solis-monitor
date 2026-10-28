@@ -50,7 +50,6 @@ def test_decode_live_dump():
                                 "has_fault", "connected")} == {
         "bms_voltage": 53.13, "bms_current": 1.0, "bms_charge_limit_a": 20.0, "bms_discharge_limit_a": 100.0,
         "has_fault": False, "connected": True}
-    assert bat["bms_temperature"] == 0.0           # 33043 was not in the live dump (read as 0)
     assert bat["rated_capacity_ah"] == 126 and bat["capacity_kwh"] == 6.45      # 126 Ah x 51.2 V
     assert bat["overdischarge_soc"] == 20 and bat["backup_soc"] == 80 and bat["force_charge_soc"] == 10
     assert bat["model"] == "Dyness LV"
@@ -127,16 +126,9 @@ def test_reader_applies_a_capacity_change_without_reading_again(tmp_path):
     assert r.cached()["battery"]["capacity_kwh"] == 6.45
 
 
-def test_bms_temperature():
-    assert device.decode({**REGS, 33043: 187})["battery"]["bms_temperature"] == 18.7
-    assert device.decode({**REGS, 33043: 0x10000 - 52})["battery"]["bms_temperature"] == -5.2
-    assert device.decode({**REGS, 33043: 0x10000 - 2001})["battery"]["bms_temperature"] is None   # implausible
-    assert device.decode({**REGS, 33043: 1500})["battery"]["bms_temperature"] is None
-
-
 def test_disconnected_bms_and_meter_and_bad_clock():
-    d = device.decode({**REGS, 33141: 0, 33251: 0, 33023: 13, 33043: 187}, HOLD)
-    assert d["battery"]["connected"] is False and d["battery"]["bms_temperature"] is None
+    d = device.decode({**REGS, 33141: 0, 33251: 0, 33023: 13}, HOLD)
+    assert d["battery"]["connected"] is False
     assert d["meter"]["connected"] is False
     assert d["inverter"]["clock"] is None
 

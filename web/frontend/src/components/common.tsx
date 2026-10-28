@@ -95,7 +95,6 @@ export function BatteryCard({ fields, extra }: { fields: Fields; extra?: Compone
         <div><dt>{t('Voltage')}</dt><dd>{withUnit(fields.battery_voltage, 'V', 1)}</dd></div>
         <div><dt>{t('Current')}</dt><dd>{withUnit(fields.battery_current, 'A', 1)}</dd></div>
         <div><dt>{t('SOH')}</dt><dd>{fields.battery_soh == null ? '--' : `${Math.round(fields.battery_soh)}%`}</dd></div>
-        <div><dt>{t('Temperature')}</dt><dd>{withUnit(fields.battery_temperature, '°C', 1)}</dd></div>
       </dl>
       {extra}
     </Card>

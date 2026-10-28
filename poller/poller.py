@@ -53,7 +53,6 @@ REGISTERS = {
     "pv_energy_month":        (33031, "u32", 1),
     "pv_energy_year":         (33037, "u32", 1),
     "pv_energy_total":        (33029, "u32", 1),
-    "battery_temperature":    (33043, "s16", 0.1),   # from the BMS; inside the PV energy block, no extra read
     "dc_bus_voltage":         (33071, "u16", 0.1),
     "grid_voltage":           (33073, "u16", 0.1),
     "grid_frequency":         (33094, "u16", 0.01),
@@ -147,10 +146,6 @@ def read_snapshot(read):
     for name, (reg, typ, scale) in REGISTERS.items():
         v = decode(raw[reg], raw.get(reg + 1, 0), typ) * scale
         vals[name] = round(float(v), 3)
-
-    # 33043 is from a newer Solis map than the rest: leave it out when it isn't a battery temperature
-    if not -40 <= vals["battery_temperature"] <= 90:
-        del vals["battery_temperature"]
 
     # Derived, sign-normalised fields for the dashboard
     sign = 1 if int(vals["battery_direction"]) == 0 else -1

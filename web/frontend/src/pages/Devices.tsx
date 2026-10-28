@@ -117,7 +117,6 @@ function detailSections(id: DeviceId, info: DeviceInfo | null, f: Fields, live: 
           ['Communication', i.battery.connected ? t('Connected') : <span class="warn-text">{t('No BMS data')}</span>],
           ['BMS voltage', withUnit(i.battery.bms_voltage, 'V', 2)],
           ['BMS current', withUnit(i.battery.bms_current, 'A', 1)],
-          ['Temperature', withUnit(i.battery.bms_temperature, '°C', 1)],
           ['Charge current limit', withUnit(i.battery.bms_charge_limit_a, 'A', 1)],
           ['Discharge current limit', withUnit(i.battery.bms_discharge_limit_a, 'A', 1)],
           ['Failure codes', <span class={i.battery.has_fault ? 'warn-text' : ''}>{codes(i.battery.bms_failure_codes)}</span>],

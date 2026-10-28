@@ -95,7 +95,7 @@ Pick 1 h to 30 d. Every chart shows the last, mean and maximum value, and the da
 
 ![Devices](docs/img/devices.png)
 
-Inverter, battery (with temperature, BMS limits and fault codes), data logger and grid meter, read live from the inverter.
+Inverter, battery (with BMS limits and fault codes), data logger and grid meter, read live from the inverter.
 
 ### Events
 

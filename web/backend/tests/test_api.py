@@ -78,7 +78,7 @@ def test_history_accepts_valid_input_and_passes_canonical_values():
 
 
 def test_every_field_is_known():
-    assert len(validation.FIELDS) == len(validation.FIELD_SET) == 54
+    assert len(validation.FIELDS) == len(validation.FIELD_SET) == 53
     for f in validation.ENERGY_FIELDS:
         assert f in validation.FIELD_SET
 
