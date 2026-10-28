@@ -14,6 +14,7 @@ FIELDS = (
     "status_code", "fault_code_01", "fault_code_02", "fault_code_03", "fault_code_04", "fault_code_05",
     "operating_status", "bms_fault_01", "bms_fault_02",
     "battery_voltage", "battery_current", "battery_direction", "battery_soc", "battery_soh",
+    "battery_temperature",
     "battery_power", "battery_power_signed",
     "backup_voltage", "backup_current",
     "house_load_power", "backup_load_power", "total_load_power",

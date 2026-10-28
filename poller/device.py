@@ -3,6 +3,7 @@ Device details read from inverter input registers (FC04), for the dashboard's De
 
 Register meanings were checked against a live S6-EH1P on 2026-10-18: the serial number
 matches SolisCloud, BMS voltage matches 33133, meter V/W/Hz match the grid readings.
+The BMS battery temperature (33043, S16 0.1 C, from the newer Solis map) is not yet checked live.
 Values with no confirmed meaning are left out rather than guessed. Battery capacity comes
 from the Settings page (CapacityStore), else BATTERY_CAPACITY_KWH, else rated Ah (43019) x 51.2 V nominal.
 """
@@ -16,7 +17,7 @@ from datetime import datetime, timezone
 import faults
 
 # (start, count) input-register blocks read on each request (<= 50 registers each)
-BLOCKS = ((33000, 28), (33071, 35), (33116, 6), (33137, 24), (33250, 37), (33297, 4))
+BLOCKS = ((33000, 44), (33071, 35), (33116, 6), (33137, 24), (33250, 37), (33297, 4))
 HOLDING = ((43010, 15),)        # 43010..43024: SOC limits and rated capacity
 NOMINAL_CELL_V = 51.2           # LV LiFePO4 nominal pack voltage, for Ah -> kWh
 MAX_CAPACITY_KWH = 1000
@@ -66,6 +67,7 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
     meter_v = r[33251] / 10
     meter_cfg = r[33300]
     rated_ah = h.get(43019)
+    bms_temp = round(_s16(r[33043]) / 10, 1)
     if capacity_kwh is None:
         capacity_kwh, source = rated_kwh(rated_ah), "inverter"
     return {
@@ -98,6 +100,8 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
             "bms_current": round(_s16(r[33142]) / 10, 1),
             "bms_charge_limit_a": round(r[33143] / 10, 1),
             "bms_discharge_limit_a": round(r[33144] / 10, 1),
+            # None without BMS data or outside what a battery can report (an unsupported register reads oddly)
+            "bms_temperature": bms_temp if r[33141] > 0 and -40 <= bms_temp <= 90 else None,
             "bms_failure_codes": [f"0x{r[33145]:04X}", f"0x{r[33146]:04X}"],
             "has_fault": bool(r[33145] or r[33146]),
             "connected": r[33141] > 0,
