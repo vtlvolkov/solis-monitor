@@ -28,10 +28,10 @@ repo: https://github.com/vtlvolkov/solis-monitor
 support: https://github.com/vtlvolkov/solis-monitor/issues
 port: 8188
 gallery:
-  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/overview.png
-  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/charts.png
-  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/cost.png
-  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/tv.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/store/overview.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/store/charts.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/store/cost.png
+  - https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/docs/img/store/tv.png
 path: ""
 defaultUsername: admin
 deterministicPassword: true
