@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.1.16"
+version: "0.2.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -35,6 +35,6 @@ gallery:
 path: ""
 defaultUsername: admin
 deterministicPassword: true
-releaseNotes: "fixes the poller crashing on start in v0.1.15 (missing module in the image)"
+releaseNotes: "install in one command, update from the dashboard, and run it as an Umbrel app"
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
