@@ -51,5 +51,5 @@ On the host, `solis-monitor dashboard-updates on` installs a systemd path unit t
 
 ## The Umbrel app
 
-`vtlvolkov-solis-monitor/` is the Umbrel packaging of the same images (guide: [umbrel.md](umbrel.md)). Keep it in step with the main stack: `deploy/tests/check-umbrel-app.py` fails when `docker-compose.yml` sets an environment variable or mount for the poller or web service that the Umbrel compose lacks. After tagging a release run `deploy/umbrel/update-app.py vX.Y.Z` (it pins the new image digests and bumps the version) and push; umbrelOS then offers the update.
+`vtlvolkov-solis-monitor/` is the Umbrel packaging of the same images (guide: [umbrel.md](umbrel.md)). Keep it in step with the main stack: `deploy/tests/check-umbrel-app.py` fails when `docker-compose.yml` sets an environment variable or mount for the poller or web service that the Umbrel compose lacks. After a release the `umbrel-store` job of the release workflow runs `deploy/umbrel/update-app.py vX.Y.Z` (it pins the new image digests and bumps the version) and pushes the result to `main`; umbrelOS then offers the update. If that job fails, run the script by hand and push.
 

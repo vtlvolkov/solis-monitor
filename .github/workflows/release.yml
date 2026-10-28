@@ -11,6 +11,11 @@ on:
   push:
     tags: ["v[0-9]*"]
   workflow_dispatch:          # "Run workflow" in the Actions tab: builds the images and the APK but publishes nothing (a dry run)
+    inputs:
+      store_tag:
+        description: "Also try pinning this existing release (like v0.1.14) in the Umbrel store; nothing is pushed"
+        required: false
+        default: ""
 
 permissions:
   contents: write       # create the release
@@ -93,3 +98,43 @@ jobs:
           pre=""; case "${{ github.ref_name }}" in *-*) pre="--prerelease" ;; esac
           gh release create "${{ github.ref_name }}" install.sh docker-compose.yml solis-tv.apk \
             --title "${{ github.ref_name }}" --generate-notes --verify-tag $pre
+
+  # umbrelOS offers an app update once the store's manifest names the new version with the new images' digests.
+  # Runs after a normal release (not a test release with a suffix, not a dry run) and after the images exist.
+  umbrel-store:
+    needs: [images, release]
+    if: ${{ !cancelled() && needs.images.result == 'success' && (needs.release.result == 'success' || needs.release.result == 'skipped') && ((github.ref_type == 'tag' && !contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && inputs.store_tag != '')) }}
+    runs-on: ubuntu-24.04
+    concurrency: umbrel-store            # two quick releases pin one after the other
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.store_tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main                      # the store lives on main, not on the tag
+          fetch-depth: 0
+      - run: pip install pyyaml
+      - name: Pin the release in the store
+        run: |
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          notes="$(git tag -l --format='%(contents:subject)' "$TAG" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+: *//')"
+          [ -n "$notes" ] || notes="Version ${TAG#v}."
+          python3 deploy/umbrel/update-app.py "$TAG" --notes "$notes"
+          python3 deploy/tests/check-umbrel-app.py
+          bash deploy/tests/test-umbrel-app.sh
+          git --no-pager diff --stat
+      - name: Commit and push
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "The store already points at ${TAG}."; exit 0; fi
+          git commit -m "Umbrel app: pin the ${TAG} images"
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main            # main moved while we worked: try again on top of it
+          done
+          echo "::error::could not push the store update; run deploy/umbrel/update-app.py ${TAG} by hand"
+          exit 1
+
