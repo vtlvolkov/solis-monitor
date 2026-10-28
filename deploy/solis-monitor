@@ -82,7 +82,12 @@ latest_release() {
 cmd_status() {
   echo "Version:   $(env_value SOLIS_VERSION)  (repo $REPO)"
   echo "Dashboard: http://$(hostname -I | awk '{print $1}'):$(env_value WEB_PORT | sed 's/^$/8088/')"
-  echo "Inverter:  $(env_value INVERTER_HOST || true)"
+  # An address saved on the dashboard (Settings -> General) wins over INVERTER_HOST in .env.
+  local saved env_host
+  saved="$(compose exec -T poller cat /data/inverter.json 2>/dev/null | sed -n 's/.*"host": *"\([^"]*\)".*/\1/p' | sed -n 1p || true)"
+  env_host="$(env_value INVERTER_HOST || true)"
+  if [[ -n "$saved" ]]; then echo "Inverter:  $saved  (saved on the dashboard; .env has ${env_host:-nothing})"
+  else echo "Inverter:  ${env_host:-not set yet (enter it on the dashboard: Settings -> General)}"; fi
   if [[ -f "$CTL/bridge.json" ]]; then echo "Dashboard:  can update itself (Settings -> System -> Software)"; else echo "Dashboard:  cannot update itself (solis-monitor dashboard-updates on)"; fi
   if [[ "$(systemctl is-enabled solis-monitor-update.timer 2>/dev/null || true)" == enabled ]]; then
     echo "Updates:   automatic, nightly (solis-monitor auto-update off to stop)"

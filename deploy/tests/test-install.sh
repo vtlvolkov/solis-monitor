@@ -145,6 +145,18 @@ chmod 600 "$T/inst/.env"; : > "$T/sudo.log"
 upd version > /dev/null 2>&1
 check "with a readable .env it does not" '[[ ! -s "$T/sudo.log" ]]'
 
+echo "solis-monitor status: which address"
+out=$(upd status 2>&1); check "without a saved address it shows the one from .env" '[[ "$out" == *"Inverter:  127.0.0.1"* && "$out" != *"saved on the dashboard"* ]]'
+cp "$T/bin/docker" "$T/bin/docker.real"
+cat > "$T/bin/docker" <<SHIM2
+#!/bin/sh
+if [ "\$1 \$2" = "compose exec" ]; then echo '{"host": "192.168.7.7", "port": 502, "unit": 1}'; exit 0; fi
+exec "$T/bin/docker.real" "\$@"
+SHIM2
+chmod +x "$T/bin/docker"
+out=$(upd status 2>&1); check "with a saved address it shows that one, and says where .env differs" '[[ "$out" == *"Inverter:  192.168.7.7  (saved on the dashboard; .env has 127.0.0.1)"* ]]'
+mv "$T/bin/docker.real" "$T/bin/docker"
+
 echo "solis-monitor logs"
 : > "$T/docker.log"; upd logs poller > /dev/null 2>&1
 check "logs shows recent lines and exits (no follow)" 'grep -q "^compose logs --tail 100 poller$" "$T/docker.log"'
