@@ -56,6 +56,9 @@ for app in apps:
           f"{name} deterministicPassword is true but the compose file never uses ${{APP_PASSWORD}}")
     check(m.get("dependencies") == [], f"{name} dependencies must be a list of other Umbrel app ids")
 
+    check("${EXPORTS_APP_DATA_DIR}/data" not in exports and "${EXPORTS_APP_DATA_DIR}/config" in exports,
+          f"{name} exports.sh: EXPORTS_APP_DATA_DIR already ends in /data, so the settings file is ${{EXPORTS_APP_DATA_DIR}}/config/settings.env")
+
     # ---- compose
     services = c.get("services", {})
     check("app_proxy" in services, f"{name} compose needs an app_proxy service")

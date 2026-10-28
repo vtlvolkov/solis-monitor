@@ -6,9 +6,10 @@ _solis_derived_password="$(derive_entropy "${app_entropy_identifier}-influx-pass
 _solis_derived_token="$(derive_entropy "${app_entropy_identifier}-influx-token")"
 
 # The few things the owner may change live in one plain file, written by hooks/pre-start on the first start:
-#   <umbrel>/app-data/vtlvolkov-solis-monitor/data/config/settings.env     (KEY=value lines)
+#   <umbrel>/app-data/vtlvolkov-solis-monitor/data/config/settings.env     (KEY=value lines; written by hooks/pre-start)
 # Restart the app after editing it. Unset or missing keys fall back to the defaults in docker-compose.yml.
-_solis_settings="${EXPORTS_APP_DATA_DIR}/data/config/settings.env"
+# EXPORTS_APP_DATA_DIR is already the app's data root (<umbrel>/app-data/<id>/data), the same folder hooks call APP_DATA_ROOT.
+_solis_settings="${EXPORTS_APP_DATA_DIR}/config/settings.env"
 _solis_get() {
   [ -f "${_solis_settings}" ] || return 0
   sed -n "s/^${1}=[[:space:]]*//p" "${_solis_settings}" | sed -n '1{s/[[:space:]]*#.*$//;s/[[:space:]]*$//;p;}'

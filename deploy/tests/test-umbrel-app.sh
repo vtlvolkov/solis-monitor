@@ -10,12 +10,13 @@ ok() { echo "  ok   $1"; }
 bad() { echo "  FAIL $1"; fails=$((fails + 1)); }
 check() { if eval "$2"; then ok "$1"; else bad "$1  [$2]"; fi; }
 
-# the exported value of one variable, after sourcing exports.sh against the settings in $T/data
+# the exported value of one variable, after sourcing exports.sh; EXPORTS_APP_DATA_DIR is the app's data root, as umbrelOS sets it
+# (<umbrel>/app-data/<id>/data, so the settings file is $T/data/config/settings.env)
 exported() {
   bash -c 'set -euo pipefail
            derive_entropy() { printf "entropy(%s)" "$1"; }
            app_entropy_identifier=app-vtlvolkov-solis-monitor
-           EXPORTS_APP_DATA_DIR="$1"
+           EXPORTS_APP_DATA_DIR="$1/data"
            . "$2/exports.sh"
            printf "%s" "${!3-UNSET}"' _ "$T" "$APP" "APP_VTLVOLKOV_SOLIS_MONITOR_$1"
 }
