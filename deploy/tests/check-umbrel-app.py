@@ -22,12 +22,13 @@ def check(ok, message):
 
 
 def load(path):
-    return next(d for d in yaml.safe_load_all(Path(path).read_text()) if d)      # the store file, like Umbrel's template, ends with a second ---
+    return yaml.safe_load(Path(path).read_text())      # strictly ONE document: umbrelOS rejects the whole store if umbrel-app-store.yml has a stray ---
 
 
 store = load(ROOT / "umbrel-app-store.yml")
 check(re.fullmatch(r"[a-z]+(-[a-z]+)*", str(store.get("id", ""))), "store id must be lowercase letters and dashes")
 check(store.get("name"), "the store needs a name")
+check(set(store) == {"id", "name"}, "umbrel-app-store.yml holds just id and name")
 
 apps = [p for p in ROOT.iterdir() if p.is_dir() and (p / "umbrel-app.yml").exists()]
 check(len(apps) >= 1, "no app directory with an umbrel-app.yml found")

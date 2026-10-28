@@ -1,4 +1,2 @@
----
 id: "vtlvolkov" # Prefix of every app id in this store (a to z and dashes). Do not change it after publishing.
 name: "Volkov" # Shown in umbrelOS as "Volkov App Store".
----
