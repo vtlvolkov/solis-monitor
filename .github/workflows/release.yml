@@ -96,8 +96,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           pre=""; case "${{ github.ref_name }}" in *-*) pre="--prerelease" ;; esac
+          # The tag message after its first line (the Umbrel update text) is the written summary; the commit list follows it.
+          git fetch --force origin "refs/tags/${{ github.ref_name }}:refs/tags/${{ github.ref_name }}" || true
+          git tag -l --format='%(contents:body)' "${{ github.ref_name }}" > summary.md || : > summary.md
+          notes=""; grep -q "[^[:space:]]" summary.md && notes="--notes-file summary.md"
           gh release create "${{ github.ref_name }}" install.sh docker-compose.yml solis-tv.apk \
-            --title "${{ github.ref_name }}" --generate-notes --verify-tag $pre
+            --title "${{ github.ref_name }}" $notes --generate-notes --verify-tag $pre
 
   # umbrelOS offers an app update once the store's manifest names the new version with the new images' digests.
   # Runs after a normal release (not a test release with a suffix, not a dry run) and after the images exist.
