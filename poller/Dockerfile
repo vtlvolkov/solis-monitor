@@ -12,7 +12,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY poller.py control.py device.py faults.py notify.py ./
+COPY *.py ./
 COPY --from=test /tested /tmp/tested
 ENV PYTHONUNBUFFERED=1
 CMD ["python", "poller.py"]
