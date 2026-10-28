@@ -83,6 +83,7 @@ services:
       TARIFF_NIGHT_START: ${TARIFF_NIGHT_START:-23:00}
       TARIFF_NIGHT_END: ${TARIFF_NIGHT_END:-07:00}
       TARIFF_FILE: /data/tariff.json
+      AUTH_FILE: /data/auth.json          # a dashboard password changed on the Settings page (kept as a hash)
       # "Check for updates" on the Settings page (release installs only; see web/backend/app/updates.py)
       SOLIS_VERSION: ${SOLIS_VERSION:-}
       SOLIS_REPO: ${SOLIS_REPO:-}

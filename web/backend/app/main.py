@@ -1,7 +1,5 @@
 """Read-only web dashboard API. Talks to InfluxDB only, never to the inverter."""
 import asyncio
-import base64
-import binascii
 import ipaddress
 import json
 import logging
@@ -18,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import shaping
 from .tariff import Tariff, TariffError, TariffStore, next_boundary, validate, version_dict
+from .auth import LoginError, LoginStore, TooManyAttempts
 from .config import Settings
 from .control import ControlClient, PollerUnavailable
 import random
@@ -122,9 +121,10 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
                 return Response("unauthorized", status_code=401)
         return await call_next(request)
 
-    if s.basic_auth:
-        expected = s.basic_auth.encode()
+    # The login: WEB_BASIC_AUTH, or a password changed on the Settings page (kept as a hash, see auth.py).
+    login = LoginStore(s.basic_auth, s.auth_file)
 
+    if s.basic_auth:
         @app.middleware("http")
         async def basic_auth(request: Request, call_next):
             path = request.url.path
@@ -133,13 +133,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
             if s.auth_settings_only and path != "/api/settings" and not path.startswith("/api/settings/"):
                 return await call_next(request)
             header = request.headers.get("authorization", "")
-            ok = False
-            if header.lower().startswith("basic "):
-                try:
-                    ok = secrets.compare_digest(base64.b64decode(header[6:], validate=True), expected)
-                except (binascii.Error, ValueError):
-                    ok = False
-            if not ok:
+            if not await asyncio.to_thread(login.verify_header, header):      # a hash check takes ~15 ms, remembered afterwards
                 return Response("unauthorized", status_code=401,
                                 headers={"WWW-Authenticate": 'Basic realm="solis", charset="UTF-8"'})
             return await call_next(request)
@@ -245,6 +239,34 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         log.warning("settings change requested: %s=%s", setting, value)
         status, result = await poller(control.apply, setting, value)
         return JSONResponse(result, status_code=status)
+
+    # ------------------------------------------------------------------ the dashboard password
+    @app.get("/api/settings/login")
+    async def api_login():
+        return {**login.info(), "platform": s.updates_managed_by or None, "web": capacity_web()}
+
+    @app.post("/api/settings/login")
+    async def api_login_change(request: Request):
+        """Change the dashboard password: {current, new}; new = null goes back to the WEB_BASIC_AUTH one.
+        Needs the current password again, and an existing login (an open dashboard cannot be locked by a stranger)."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        if not isinstance(body, dict) or set(body) != {"current", "new"}:
+            return JSONResponse({"detail": "body must be {current, new}"}, status_code=400)
+        try:
+            result = await asyncio.to_thread(login.change, body["current"], body["new"])
+        except TooManyAttempts as exc:
+            return JSONResponse({"detail": str(exc), "retry_after_s": exc.retry_s}, status_code=429, headers={"Retry-After": str(exc.retry_s)})
+        except LoginError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)          # 400, not 401: a 401 would make the browser ask again
+        except OSError as exc:
+            log.error("could not save the password: %s", exc)
+            return JSONResponse({"detail": "Could not save the new password on the server."}, status_code=500)
+        return {**result, "platform": s.updates_managed_by or None, "web": capacity_web()}
 
     # ------------------------------------------------------------------ battery capacity (the app's own value, kept by the poller)
     def capacity_web():

@@ -169,7 +169,7 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 
 **Port 8088 is taken.** Run the installer with `--port 8090` (or change `WEB_PORT` with `solis-monitor edit` later).
 
-**I forgot the password.** `sudo grep WEB_BASIC_AUTH /opt/solis-monitor/.env` shows it. To change it, run `solis-monitor edit`, change that line (`user:password`) and apply.
+**Change the password, or I forgot it.** Change it in the dashboard: **Settings → System → Dashboard login** (you type the current one, then the new one twice; it is kept as a hash, and your browser then asks for the new password). The original is the `WEB_BASIC_AUTH=user:password` line in `/opt/solis-monitor/.env` (`sudo grep WEB_BASIC_AUTH /opt/solis-monitor/.env`). If you forget the one you set, run `solis-monitor reset-login`: it removes the saved password and the original works again.
 
 **Remove everything.**
 

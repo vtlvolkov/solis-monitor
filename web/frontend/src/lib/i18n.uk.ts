@@ -409,6 +409,29 @@ export const UK: Record<string, string> = {
   "Only home networks can be scanned (192.168.x.x, 10.x.x.x or 172.16-31.x.x).": "Шукати можна лише в домашніх мережах (192.168.x.x, 10.x.x.x або 172.16-31.x.x).",
   "A scan is already running.": "Пошук уже виконується.",
   "The poller is still starting.": "Опитувач ще запускається.",
+
+  // --- dashboard login (Settings -> System)
+  "Dashboard login": "Вхід до панелі", "Current password": "Поточний пароль", "New password": "Новий пароль",
+  "New password again": "Новий пароль ще раз", "Change password": "Змінити пароль",
+  "Use the original password again": "Знову використовувати початковий пароль",
+  "Enter your current password.": "Введіть поточний пароль.",
+  "The two new passwords are different.": "Два нових паролі не збігаються.",
+  "The new password needs {min} to {max} characters.": "Новий пароль має містити від {min} до {max} символів.",
+  "User {user}. The password is the original one from the setup.": "Користувач {user}. Пароль початковий, з налаштування.",
+  "User {user}. Password changed on this page, {when}.": "Користувач {user}. Пароль змінено на цій сторінці, {when}.",
+  "Password changed. Your browser will now ask for the new one.": "Пароль змінено. Браузер зараз запитає новий.",
+  "Back to the original password. Your browser will now ask for it.": "Повернено початковий пароль. Браузер зараз запитає його.",
+  "{min} to {max} characters. Anyone with this password can change settings, so keep it to yourself. Forgot it? On the server run: solis-monitor reset-login":
+    "Від {min} до {max} символів. Хто знає цей пароль, може змінювати налаштування, тож не розголошуйте його. Забули? На сервері виконайте: solis-monitor reset-login",
+  "{platform} keeps showing the original password. It stops working once you change it here.": "{platform} і далі показує початковий пароль. Він перестане діяти, щойно ви змінете його тут.",
+  "The current password is not right.": "Поточний пароль неправильний.",
+  "The new password must be text.": "Новий пароль має бути текстом.",
+  "The new password cannot contain control characters.": "Новий пароль не може містити керівних символів.",
+  "The new password cannot start or end with a space.": "Новий пароль не може починатися чи закінчуватися пробілом.",
+  "The new password is the same as the current one.": "Новий пароль збігається з поточним.",
+  "There is no login to change.": "Немає входу, який можна змінити.",
+  "This dashboard cannot save a new password.": "Ця панель не може зберегти новий пароль.",
+  "Could not save the new password on the server.": "Не вдалося зберегти новий пароль на сервері.",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */
@@ -420,6 +443,7 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^Inverter not reachable: (.*)$/, "Інвертор недоступний: $1"],
   [/^GitHub's limit for your network is used up\. Try again after (\d{2}:\d{2})\.$/, "Ліміт GitHub для вашої мережі вичерпано. Спробуйте знову після $1."],
   [/^Updates are handled by (.+)\.$/, "Оновлення виконує $1."],
+  [/^Too many wrong passwords\. Try again in (\d+) min\.$/, "Забагато неправильних паролів. Спробуйте за $1 хв."],
   [/^Downloading the files of (\S+)$/, "Завантаження файлів версії $1"],
   [/^Restarting with (\S+)$/, "Перезапуск з $1"],
   [/^Could not download the images for (\S+)\. Still on (\S+)\.$/, "Не вдалося завантажити образи для $1. Залишається $2."],

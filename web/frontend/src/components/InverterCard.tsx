@@ -47,7 +47,7 @@ export function InverterCard() {
   }
 
   const editable = p.web.can_change && !busy && scan !== 'running';
-  const edit = (patch: Partial<Form>) => { setForm({ ...form, ...patch }); setError(null); setSaved(null); };
+  const edit = (patch: Partial<Form>) => { setForm((f) => ({ ...f, ...patch })); setError(null); setSaved(null); };      // functional: several fields can change in one tick
   const line = connectionLine(p);
   const unchanged = form.host.trim().toLowerCase() === p.host && form.port === String(p.port) && form.unit === String(p.unit);
 
@@ -135,7 +135,7 @@ export function InverterCard() {
               <li key={host}>
                 <strong>{host}</strong>
                 <button type="button" class="btn btn-small" disabled={!editable} data-testid={`inverter-use-${host}`}
-                        onClick={() => { setForm({ ...form, host }); setError(null); setSaved(null); }}>{t('Use')}</button>
+                        onClick={() => { setForm((f) => ({ ...f, host })); setError(null); setSaved(null); }}>{t('Use')}</button>
               </li>
             ))}
           </ul>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
 import { CapacityCard } from '../components/CapacityCard';
 import { InverterCard } from '../components/InverterCard';
+import { LoginCard } from '../components/LoginCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { goTo } from '../lib/nav';
@@ -488,6 +489,7 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
       {tab === 'system' && (
         <div class="settings-row">
           <UpdateCard />
+          <LoginCard />
         </div>
       )}
     </div>

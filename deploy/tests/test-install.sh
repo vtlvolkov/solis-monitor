@@ -157,6 +157,10 @@ chmod +x "$T/bin/docker"
 out=$(upd status 2>&1); check "with a saved address it shows that one, and says where .env differs" '[[ "$out" == *"Inverter:  192.168.7.7  (saved on the dashboard; .env has 127.0.0.1)"* ]]'
 mv "$T/bin/docker.real" "$T/bin/docker"
 
+echo "solis-monitor reset-login"
+: > "$T/docker.log"; out=$(upd reset-login 2>&1)
+check "reset-login removes the saved password inside the web container" 'grep -q "^compose exec -T web rm -f /data/auth.json$" "$T/docker.log" && [[ "$out" == *"original login applies again"* ]]'
+
 echo "solis-monitor logs"
 : > "$T/docker.log"; upd logs poller > /dev/null 2>&1
 check "logs shows recent lines and exits (no follow)" 'grep -q "^compose logs --tail 100 poller$" "$T/docker.log"'

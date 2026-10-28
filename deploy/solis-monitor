@@ -7,6 +7,7 @@
 #   solis-monitor auto-update on|off     check for a new release every night (off by default)
 #   solis-monitor logs [-f] [service]    recent log lines (poller, web or influxdb); -f keeps following
 #   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
+#   solis-monitor reset-login            forgot the dashboard password you set? go back to the one in .env
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
@@ -290,6 +291,13 @@ UNIT
   esac
 }
 
+# A forgotten dashboard password: remove the one saved on the Settings page; the original (WEB_BASIC_AUTH in .env) applies again.
+cmd_reset_login() {
+  compose exec -T web rm -f /data/auth.json
+  echo "The password saved on the Settings page is removed (a running dashboard notices at once)."
+  echo "The original login applies again: $(env_value WEB_BASIC_AUTH | cut -d: -f1) and the password after the colon in WEB_BASIC_AUTH (solis-monitor edit)."
+}
+
 cmd_auto_update() {
   case "${1:-}" in
     on)
@@ -338,8 +346,9 @@ case "${1:-}" in
   logs) shift; follow=""; if [[ "${1:-}" == -f ]]; then follow=-f; shift; fi; compose logs ${follow:+"$follow"} --tail 100 "$@" ;;
   apply) shift; cmd_apply "${1:-}" ;;
   dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
+  reset-login) cmd_reset_login ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,11p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

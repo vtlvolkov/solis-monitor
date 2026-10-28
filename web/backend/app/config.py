@@ -18,6 +18,7 @@ class Settings:
     influx_bucket: str = field(default_factory=lambda: os.getenv("INFLUX_BUCKET", "solis"))
     tz: str = field(default_factory=lambda: os.getenv("TZ", "Europe/Kyiv") or "Europe/Kyiv")
     basic_auth: str = field(default_factory=lambda: os.getenv("WEB_BASIC_AUTH", ""))
+    auth_file: str = field(default_factory=lambda: os.getenv("AUTH_FILE", "/data/auth.json"))     # a password changed on the Settings page ("" = cannot be changed)
     # With WEB_BASIC_AUTH set: true = only the Settings API asks for the password, the rest stays open.
     auth_settings_only: bool = field(default_factory=lambda: os.getenv("WEB_AUTH_SETTINGS_ONLY", "").strip().lower()
                                      in ("1", "true", "yes", "on"))

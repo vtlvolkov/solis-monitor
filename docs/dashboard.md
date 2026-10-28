@@ -25,7 +25,7 @@ Live values arrive over Server-Sent Events every ~10 s. If SSE fails, the page f
 | Env var | Default | |
 |---|---|---|
 | `WEB_PORT` | `8088` | Host port |
-| `WEB_BASIC_AUTH` | empty | `user:pass` turns on HTTP Basic auth (`/healthz` stays open for the Docker healthcheck) |
+| `WEB_BASIC_AUTH` | empty | `user:pass` turns on HTTP Basic auth (`/healthz` stays open for the Docker healthcheck). The password can later be changed on Settings → System → Dashboard login; the new one is kept as a hash in `/data/auth.json` and wins until you go back to the original (or run `solis-monitor reset-login`) |
 | `SITE_NAME` | empty | Name of this installation: dashboard title, browser tab and a prefix on Telegram alerts |
 | `WEB_AUTH_SETTINGS_ONLY` | empty | `true` = only `/api/settings*` needs the password, so the dashboard is open and the browser asks for the username and password when you open the Settings tab. Needs `WEB_BASIC_AUTH`. |
 | `TARIFF_*` | empty | Starting electricity prices; change them later on the Settings page (see "Electricity cost" below) |

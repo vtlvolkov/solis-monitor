@@ -90,6 +90,7 @@ services:
       TARIFF_NIGHT_START: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_NIGHT_START:-23:00}
       TARIFF_NIGHT_END: ${APP_VTLVOLKOV_SOLIS_MONITOR_TARIFF_NIGHT_END:-07:00}
       TARIFF_FILE: /data/tariff.json
+      AUTH_FILE: /data/auth.json          # a dashboard password changed on the Settings page (kept as a hash)
       # umbrelOS updates the app (App Store): the dashboard only shows the version and never offers its own update.
       SOLIS_VERSION: v${APP_VERSION}
       UPDATES_MANAGED_BY: umbrelOS
