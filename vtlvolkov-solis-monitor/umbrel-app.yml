@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.1.14"
+version: "0.1.15"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -35,6 +35,6 @@ gallery:
 path: ""
 defaultUsername: admin
 deterministicPassword: true
-releaseNotes: "Fixes reading the settings file; the first release that works from a fresh install."
+releaseNotes: "set the inverter address and change the dashboard password from Settings; the Umbrel store updates itself after a release"
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
