@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.2.2"
+version: "0.2.3"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,13 +36,9 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  Settings → Debug tab to read inverter registers by hand
+  battery temperature, and Debug "Copy as text" on plain http
 
-  A new Debug tab (Settings → Debug) asks the inverter for registers and shows exactly what it answers.
-
-  - Read input (function 04) or holding (function 03) registers, 1–50 at a time, from a decimal or 0x address.
-  - See the request and the answer as hex, the round trip time, and each register as hex, unsigned, signed, text and 32-bit values. A Modbus refusal such as "Illegal data address" is shown as the answer.
-  - Copy the result as text for a bug report.
-  - Read-only: nothing here can change a setting. Needs the dashboard password, not CONTROL_ENABLED.
+  - The battery card and the Devices tab show the battery temperature again. It comes from register 33044 (×0.01 °C). That register is not in Solis' table; the documented 33043 reads 0 with this battery. 33044 was found with the Debug tab and behaves like a temperature (it warms under charge and cools slowly afterwards), but it has not been compared with the battery's own display.
+  - Debug tab: "Copy as text" now works when the dashboard is opened over plain http, where browsers block the clipboard. If the browser refuses too, the text is shown to select and copy by hand.
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
