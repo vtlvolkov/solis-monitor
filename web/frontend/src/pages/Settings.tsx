@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { Card, Header, Skeleton } from '../components/common';
 import { CapacityCard } from '../components/CapacityCard';
+import { DebugCard } from '../components/DebugCard';
 import { InverterCard } from '../components/InverterCard';
 import { LoginCard } from '../components/LoginCard';
 import { TariffCard } from '../components/TariffCard';
@@ -289,7 +290,7 @@ function ClockCard({ s, wait, onPropose }: { s: SettingsPayload; wait: number; o
 }
 
 const TAB_LABELS: Record<SettingsTab, string> = {
-  general: tx('General'), battery: tx('Battery'), schedule: tx('Schedule'), system: tx('System'),
+  general: tx('General'), battery: tx('Battery'), schedule: tx('Schedule'), system: tx('System'), debug: tx('Debug'),
 };
 
 export function Settings({ live, now }: { live: LiveState; now: number }) {
@@ -492,6 +493,7 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
           <LoginCard />
         </div>
       )}
+      {tab === 'debug' && <DebugCard />}
     </div>
   );
 }

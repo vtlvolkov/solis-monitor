@@ -432,6 +432,25 @@ export const UK: Record<string, string> = {
   "There is no login to change.": "Немає входу, який можна змінити.",
   "This dashboard cannot save a new password.": "Ця панель не може зберегти новий пароль.",
   "Could not save the new password on the server.": "Не вдалося зберегти новий пароль на сервері.",
+  "Debug": "Налагодження", "Read registers": "Читання регістрів",
+  "Ask the inverter for registers and see exactly what it answers. This only reads: nothing here can change a setting. The poller keeps the only connection to the inverter, so a read waits for its turn between the regular readings.":
+    "Запитайте в інвертора регістри й побачте, що саме він відповідає. Тут лише читання: нічого не можна змінити. Єдине з'єднання з інвертором тримає опитувач, тож запит чекає своєї черги між звичайними опитуваннями.",
+  "Function": "Функція", "Count": "Кількість", "Read": "Прочитати", "Read again": "Прочитати ще раз", "unit {n}": "адреса {n}",
+  "Copy as text": "Копіювати як текст", "Copied": "Скопійовано", "Could not copy": "Не вдалося скопіювати",
+  "Request": "Запит", "Answer": "Відповідь", "Register": "Регістр", "Hex": "Hex", "Text": "Текст",
+  "With the next register, high word first": "Разом із наступним регістром, старше слово першим",
+  "This session": "У цьому сеансі", "refused": "відхилено",
+  "The inverter refused: {name} (exception {code}).": "Інвертор відхилив запит: {name} (виняток {code}).",
+  "Input registers (function 04)": "Вхідні регістри (функція 04)", "Holding registers (function 03)": "Регістри збереження (функція 03)",
+  "The function must be 3 (holding registers) or 4 (input registers).": "Функція має бути 3 (регістри збереження) або 4 (вхідні регістри).",
+  "The address must be a whole number from 0 to 65535.": "Адреса має бути цілим числом від 0 до 65535.",
+  "The count must be a whole number from 1 to 50.": "Кількість має бути цілим числом від 1 до 50.",
+  "The range goes past register 65535.": "Діапазон виходить за регістр 65535.",
+  "Changes need WEB_BASIC_AUTH to be set.": "Для цього потрібно задати WEB_BASIC_AUTH.",
+  "Illegal function": "Недопустима функція", "Illegal data address": "Недопустима адреса даних", "Illegal data value": "Недопустиме значення даних",
+  "Server device failure": "Збій пристрою", "Acknowledge": "Підтвердження", "Server device busy": "Пристрій зайнятий",
+  "Memory parity error": "Помилка парності пам'яті", "Gateway path unavailable": "Шлюз недоступний",
+  "Gateway target device failed to respond": "Пристрій за шлюзом не відповів",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */

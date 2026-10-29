@@ -52,5 +52,8 @@ class ControlClient:
     def set_inverter_address(self, host, port, unit) -> tuple[int, dict]:
         return self._call("POST", "/inverter", {"host": host, "port": port, "unit": unit})
 
+    def debug_read(self, function: int, address: int, count: int) -> tuple[int, dict]:
+        return self._call("POST", "/debug/read", {"function": function, "address": address, "count": count}, timeout=15)
+
     def scan_for_inverter(self, network: str) -> tuple[int, dict]:
         return self._call("POST", "/inverter/scan", {"network": network}, timeout=40)

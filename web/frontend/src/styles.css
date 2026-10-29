@@ -560,3 +560,28 @@ html.tv-mode, html.tv-mode body { overflow: hidden; height: 100%; font-size: 20p
 @media (max-width: 420px) { .zone-table tbody th small { display: block; margin: 0 0 0 18px; } }
 .price-list { list-style: none; margin: 4px 0 6px; padding: 0; display: grid; gap: 4px; }
 .price-list time { color: var(--c-muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
+
+/* Debug tab */
+.dbg-form { display: grid; gap: 10px; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) 110px auto; align-items: end; margin: 14px 0 6px; }
+.dbg-form label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--c-muted); min-width: 0; }
+.dbg-form input, .dbg-form select { min-height: 44px; padding: 0 12px; font: inherit; font-size: 1rem; color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 10px; min-width: 0; width: 100%; box-sizing: border-box; }
+.dbg-form input:focus-visible, .dbg-form select:focus-visible { outline: 2px solid var(--c-inverter); outline-offset: 1px; }
+.dbg-form input:disabled, .dbg-form select:disabled { opacity: 0.5; }
+.dbg-result { margin-top: 14px; display: grid; gap: 10px; }
+.dbg-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-variant-numeric: tabular-nums; }
+.dbg-summary .btn { margin-left: auto; }
+.dbg-frames { display: grid; gap: 6px; }
+.dbg-frames > div { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.dbg-frames code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9rem; padding: 6px 10px; border-radius: 10px; background: var(--c-surface2); overflow-wrap: anywhere; }
+.dbg-table-wrap { overflow-x: auto; }
+.dbg-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; }
+.dbg-table th { text-align: right; padding: 6px 10px; color: var(--c-muted); font-weight: 600; border-bottom: 1px solid var(--c-border); white-space: nowrap; }
+.dbg-table td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--c-border); white-space: nowrap; }
+.dbg-table th:first-child, .dbg-table td:first-child { text-align: left; }
+.dbg-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dbg-history li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 4px 10px; border-radius: 10px; background: var(--c-surface2); }
+.dbg-history li.on { outline: 1px solid var(--c-inverter); }
+.dbg-pick { flex: 1; text-align: left; background: none; border: 0; padding: 6px 0; font: inherit; color: var(--c-text); cursor: pointer; font-variant-numeric: tabular-nums; }
+.dbg-bad { color: var(--c-danger); }
+.debug-card .tou-h { margin: 18px 0 8px; }
+@media (max-width: 640px) { .dbg-form { grid-template-columns: 1fr 1fr; } .dbg-fn { grid-column: 1 / -1; } .dbg-actions { grid-column: 1 / -1; } .dbg-frames > div { grid-template-columns: 1fr; gap: 2px; } }

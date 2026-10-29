@@ -29,6 +29,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
+import rawread
 import scan
 
 log = logging.getLogger("solis-control")
@@ -265,6 +266,27 @@ class Controller:
             self.scan_lock.release()
         log.warning("scan of %s.0/24 found %s", prefix, found or "nothing")
         return {"network": f"{prefix}.0/24", "found": found}
+
+    # ------------------------------------------------------------------ Debug tab: raw reads only
+    def debug_read(self, function, address, count) -> dict:
+        """One manual register read for the Debug tab (nothing is written, so CONTROL_ENABLED does not apply).
+        Goes through the same paced session as the poll loop, so it cannot make a second connection."""
+        try:
+            function, address, count = rawread.check(function, address, count)
+        except ValueError as exc:
+            raise ControlError(400, str(exc) + ".")
+        started = time.monotonic()
+        registers, code = self.inv.raw_read(function, address, count)
+        out = {"function": function, "function_name": rawread.FUNCTIONS[function], "address": address, "count": count,
+               "unit": self.inv.unit, "ms": round((time.monotonic() - started) * 1000),
+               "request": rawread.request_pdu(function, address, count)}
+        log.info("debug read fc%s %s..%s -> %s", function, address, address + count - 1,
+                 f"exception {code}" if code is not None else f"{count} registers")
+        if code is None:
+            return {**out, "ok": True, "registers": registers, "response": rawread.response_pdu(function, registers)}
+        return {**out, "ok": False, "exception_code": code,
+                "exception": rawread.EXCEPTIONS.get(code, f"Exception {code}"),
+                "response": rawread.exception_pdu(function, code)}
 
     # ------------------------------------------------------------------ validation helpers
     @staticmethod
@@ -508,8 +530,13 @@ def make_handler(ctl: Controller):
                 if set(body) != {"network"}:
                     raise ControlError(400, "body must be {network}")
                 return ctl.scan_network(body["network"])
+            def debug_read():
+                body = self._body()
+                if set(body) != {"function", "address", "count"}:
+                    raise ControlError(400, "body must be {function, address, count}")
+                return ctl.debug_read(body["function"], body["address"], body["count"])
             self._run({"/settings": apply, "/battery-capacity": capacity, "/inverter": inverter,
-                       "/inverter/scan": scan_for_logger}.get(self.path))
+                       "/inverter/scan": scan_for_logger, "/debug/read": debug_read}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet
             pass

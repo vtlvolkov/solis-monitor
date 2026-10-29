@@ -10,6 +10,7 @@ describe('settings tab from the URL', () => {
     expect(tabFrom('?view=settings&tab=battery')).toBe('battery');
     expect(tabFrom('?view=settings&tab=schedule')).toBe('schedule');
     expect(tabFrom('?view=settings&tab=system')).toBe('system');
+    expect(tabFrom('?view=settings&tab=debug')).toBe('debug');
   });
   it('ignores a tab that does not exist', () => {
     expect(tabFrom('?view=settings&tab=nope')).toBe('general');

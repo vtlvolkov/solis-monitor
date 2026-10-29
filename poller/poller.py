@@ -218,6 +218,19 @@ class Inverter:
                 raise IOError(f"read input {reg} failed: {rr}")
             return rr.registers
 
+    def raw_read(self, function, address, count):
+        """(registers, None), or (None, exception code) when the inverter answers with a Modbus exception. That is an
+        answer worth showing, not a broken connection; a timeout or a dropped link raises like any other read."""
+        with self.session() as c:
+            call = c.read_holding_registers if function == 3 else c.read_input_registers
+            rr = call(address, count=count, **{UNIT_KW: self.unit})
+            if not rr.isError():
+                return list(rr.registers), None
+            code = getattr(rr, "exception_code", None)
+            if not isinstance(code, int):
+                raise IOError(f"read {address}..{address + count - 1} failed: {rr}")
+            return None, code
+
     def write_holding(self, reg, value):
         with self.session() as c:
             rr = c.write_register(reg, value, **{UNIT_KW: self.unit})

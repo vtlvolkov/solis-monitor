@@ -360,6 +360,22 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         status, result = await poller(control.scan_for_inverter, body["network"])
         return JSONResponse(result, status_code=status)
 
+    # ------------------------------------------------------------------ Debug tab: manual register reads (never writes)
+    @app.post("/api/settings/debug/read")
+    async def api_debug_read(request: Request):
+        """One raw Modbus read (function 3 or 4) through the poller, which owns the only connection. Needs the same
+        password and same-origin checks as a change, because it makes the inverter answer a request of the caller's choosing."""
+        if (refused := refuse_write(request)) is not None:
+            return refused
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"detail": "body must be JSON"}, status_code=400)
+        if not isinstance(body, dict) or set(body) != {"function", "address", "count"}:
+            return JSONResponse({"detail": "body must be {function, address, count}"}, status_code=400)
+        status, result = await poller(control.debug_read, body["function"], body["address"], body["count"])
+        return JSONResponse(result, status_code=status)
+
     @app.get("/api/events")
     async def api_events(days: int = Query(30)):
         if not 1 <= days <= 366:
