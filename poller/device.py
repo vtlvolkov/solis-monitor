@@ -3,9 +3,9 @@ Device details read from inverter input registers (FC04), for the dashboard's De
 
 Register meanings were checked against a live S6-EH1P on 2026-10-18: the serial number
 matches SolisCloud, BMS voltage matches 33133, meter V/W/Hz match the grid readings.
-The battery temperature is 33044 (S16, 0.01 C). The documented 33043 always reads 0 on this unit; 33044 was found
-with the Debug tab: 2679, then 2694 a few hours later, and 26 C is what the battery feels like. Not compared with the
-battery's own display.
+The battery temperature is 33044 (S16, 0.01 C). The documented battery temperature, 33043 (S16, 0.1 C, from the
+BMS), reads 0 on this unit; 33044 is not documented that way and was found with the Debug tab: 2679, then 2694 a few hours later, and 26 C is
+what the battery feels like. Not compared with the battery's own display.
 Values with no confirmed meaning are left out rather than guessed. Battery capacity comes
 from the Settings page (CapacityStore), else BATTERY_CAPACITY_KWH, else rated Ah (43019) x 51.2 V nominal.
 """
