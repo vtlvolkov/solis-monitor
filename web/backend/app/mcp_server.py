@@ -83,7 +83,7 @@ def build_mcp(api: DataApi) -> FastMCP:
                      "voltage_v": f.get("grid_voltage"), "frequency_hz": f.get("grid_frequency")},
             "battery": {"soc_pct": f.get("battery_soc"), "power_w": bp, "voltage_v": f.get("battery_voltage"),
                         "state": None if bp is None else "charging" if bp >= 20 else "discharging" if bp <= -20 else "idle",
-                        "soh_pct": f.get("battery_soh")},
+                        "soh_pct": f.get("battery_soh"), "temperature_c": f.get("battery_temperature")},
             "load_w": {"total": f.get("total_load_power"), "backup": f.get("backup_load_power"),
                        "grid_side": f.get("house_load_power")},
             "backup_output": {"voltage_v": f.get("backup_voltage"), "current_a": f.get("backup_current")},

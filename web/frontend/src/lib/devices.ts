@@ -14,6 +14,7 @@ export interface DeviceInfo {
   backup: { voltage: number; current: number; eps_dod_pct: number; offgrid_dod_pct: number; switch_time_ms: number };
   battery: {
     bms_voltage: number; bms_current: number; bms_charge_limit_a: number; bms_discharge_limit_a: number;
+    bms_temperature?: number | null;   // missing from a poller older than v0.2.1
     bms_failure_codes: string[]; has_fault: boolean; connected: boolean;
     model: string; rated_capacity_ah: number | null; capacity_kwh: number | null; capacity_source: CapacitySource;
     max_charge_soc: number | null; overdischarge_soc: number | null; force_charge_soc: number | null; backup_soc: number | null;
