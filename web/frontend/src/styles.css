@@ -585,3 +585,5 @@ html.tv-mode, html.tv-mode body { overflow: hidden; height: 100%; font-size: 20p
 .dbg-bad { color: var(--c-danger); }
 .debug-card .tou-h { margin: 18px 0 8px; }
 @media (max-width: 640px) { .dbg-form { grid-template-columns: 1fr 1fr; } .dbg-fn { grid-column: 1 / -1; } .dbg-actions { grid-column: 1 / -1; } .dbg-frames > div { grid-template-columns: 1fr; gap: 2px; } }
+.dbg-manual { display: grid; gap: 6px; font-size: 0.85rem; color: var(--c-muted); }
+.dbg-manual textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 0.85rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 10px; resize: vertical; }

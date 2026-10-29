@@ -436,7 +436,8 @@ export const UK: Record<string, string> = {
   "Ask the inverter for registers and see exactly what it answers. This only reads: nothing here can change a setting. The poller keeps the only connection to the inverter, so a read waits for its turn between the regular readings.":
     "Запитайте в інвертора регістри й побачте, що саме він відповідає. Тут лише читання: нічого не можна змінити. Єдине з'єднання з інвертором тримає опитувач, тож запит чекає своєї черги між звичайними опитуваннями.",
   "Function": "Функція", "Count": "Кількість", "Read": "Прочитати", "Read again": "Прочитати ще раз", "unit {n}": "адреса {n}",
-  "Copy as text": "Копіювати як текст", "Copied": "Скопійовано", "Could not copy": "Не вдалося скопіювати",
+  "Copy as text": "Копіювати як текст", "Copied": "Скопійовано",
+  "Your browser does not allow copying here. Select the text below and copy it yourself.": "Браузер не дозволяє копіювати тут. Виділіть текст нижче й скопіюйте його самі.",
   "Request": "Запит", "Answer": "Відповідь", "Register": "Регістр", "Hex": "Hex", "Text": "Текст",
   "With the next register, high word first": "Разом із наступним регістром, старше слово першим",
   "This session": "У цьому сеансі", "refused": "відхилено",

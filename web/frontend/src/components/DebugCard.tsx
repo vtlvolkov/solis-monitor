@@ -8,6 +8,17 @@ const KEEP = 10;                                  // exchanges kept on screen; t
 
 type Exchange = DebugReply & { at: string };
 
+/** Copies through a temporary text box and the browser's own copy command; false when that is refused too. */
+function copyBySelection(text: string): boolean {
+  const box = document.createElement('textarea');
+  box.value = text;
+  box.setAttribute('readonly', '');
+  box.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(box);
+  box.select();
+  try { return document.execCommand('copy'); } catch { return false; } finally { box.remove(); }
+}
+
 /**
  * Reads registers by hand and shows the request and the answer, for finding out what the inverter reports.
  * Read-only: there is no way to write from here. The poller owns the one Modbus connection, so a read waits
@@ -22,6 +33,7 @@ export function DebugCard() {
   const [history, setHistory] = useState<Exchange[]>([]);
   const [shown, setShown] = useState(0);              // which exchange of the history is on screen
   const [copied, setCopied] = useState(false);
+  const [manual, setManual] = useState<string | null>(null);       // the text to copy by hand when the browser refuses
 
   const read = async (fnCode: number, addr: string, cnt: string) => {
     const r = parseRead(fnCode, addr, cnt);
@@ -41,9 +53,15 @@ export function DebugCard() {
   const onSubmit = (e: Event) => { e.preventDefault(); read(fn, address, count); };
   const current = history[shown];
 
+  // navigator.clipboard only exists on https:// and localhost, and the dashboard is usually plain http:// on a home
+  // network, so fall back to the old selection copy, and finally to a box the text can be copied from by hand.
   const copy = async () => {
     if (!current) return;
-    try { await navigator.clipboard.writeText(asText(current)); setCopied(true); } catch { setError(t('Could not copy')); }
+    const text = asText(current);
+    try {
+      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); setCopied(true); setManual(null); return; }
+    } catch { /* try the next way */ }
+    if (copyBySelection(text)) { setCopied(true); setManual(null); } else { setManual(text); }
   };
 
   const edit = (set: (v: string) => void) => (e: Event) => { set((e.target as HTMLInputElement).value); setError(null); };
@@ -83,6 +101,11 @@ export function DebugCard() {
             <div><span class="muted">{t('Request')}</span><code data-testid="debug-request">{current.request}</code></div>
             <div><span class="muted">{t('Answer')}</span><code data-testid="debug-response">{current.response}</code></div>
           </div>
+          {manual !== null && (
+            <label class="dbg-manual"><span>{t('Your browser does not allow copying here. Select the text below and copy it yourself.')}</span>
+              <textarea readOnly rows={8} value={manual} data-testid="debug-manual"
+                        onFocus={(e) => (e.target as HTMLTextAreaElement).select()} /></label>
+          )}
           {!current.ok && (
             <div class="update-result tone-bad" role="alert" data-testid="debug-exception">
               {t('The inverter refused: {name} (exception {code}).', { name: t(current.exception ?? ''), code: current.exception_code ?? 0 })}
