@@ -60,6 +60,7 @@ export const UK: Record<string, string> = {
   "night": "ніч", "{kwh} kWh imported": "{kwh} кВт·год імпортовано",
   "Night rate {start}–{end}: {kwh} kWh this month, saving {saved}.":
     "Нічний тариф {start}–{end}: {kwh} кВт·год цього місяця, економія {saved}.",
+  "full in ≈ {h}": "повна через ≈ {h}",
   "Backup runtime": "Резервний час роботи", "(1 h average)": "(середнє за 1 год)",
   "at {load}{avg}, down to {floor}% · {cap} kWh battery": "при {load}{avg}, до {floor}% · батарея {cap} кВт·год",
   "Grid outage since {time} ({ago})": "Відключення мережі з {time} ({ago})", "Running on battery": "Працює від батареї",

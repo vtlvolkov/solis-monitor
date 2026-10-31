@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatHours, gridLost, mean, runtimeHours } from './runtime';
+import { chargeRate, formatHours, fullChargeHours, gridLost, mean, runtimeHours } from './runtime';
 
 describe('runtimeHours', () => {
   it('uses only the energy above the floor', () => {
@@ -13,6 +13,35 @@ describe('runtimeHours', () => {
     expect(runtimeHours(90, 20, null, 650)).toBeNull();
     expect(runtimeHours(90, 20, 0, 650)).toBeNull();
     expect(runtimeHours(90, 20, 6.45, 5)).toBeNull();
+  });
+});
+
+describe('fullChargeHours', () => {
+  it('uses the energy up to the target', () => {
+    // 10.24 kWh, 62% -> 100% = 3.89 kWh at 1.8 kW
+    expect(fullChargeHours(62, 100, 10.24, 1800)).toBeCloseTo(2.16, 2);
+    expect(fullChargeHours(62, 80, 10.24, 1800)).toBeCloseTo(1.02, 2);
+  });
+  it('null when missing, at the target, or barely charging', () => {
+    expect(fullChargeHours(null, 100, 10.24, 1800)).toBeNull();
+    expect(fullChargeHours(62, null, 10.24, 1800)).toBeNull();
+    expect(fullChargeHours(62, 100, null, 1800)).toBeNull();
+    expect(fullChargeHours(62, 100, 0, 1800)).toBeNull();
+    expect(fullChargeHours(62, 100, 10.24, null)).toBeNull();
+    expect(fullChargeHours(62, 100, 10.24, 49)).toBeNull();
+    expect(fullChargeHours(100, 100, 10.24, 1800)).toBeNull();
+    expect(fullChargeHours(90, 80, 10.24, 1800)).toBeNull();
+  });
+});
+
+describe('chargeRate', () => {
+  it('averages the last 15 minutes while charging', () => {
+    expect(chargeRate([0, 100, 200, 1000, 1100], [5000, 1000, null, -300, 2000], 1100)).toBe(2000);
+    expect(chargeRate([200, 300, 1000], [1000, 10, 2000], 1100)).toBe(1500);
+  });
+  it('null when it was not charging', () => {
+    expect(chargeRate([1000], [-300], 1100)).toBeNull();
+    expect(chargeRate([], [], 1100)).toBeNull();
   });
 });
 

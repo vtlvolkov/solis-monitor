@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { BatteryCard, Card, ErrorBanner, LangSwitch, Skeleton, StatusPill, TodayRow } from '../components/common';
 import { GaugeBars } from '../components/GaugeBars';
 import { PowerFlow } from '../components/PowerFlow';
-import { Runtime } from '../components/Runtime';
+import { Runtime, useFullCharge } from '../components/Runtime';
 import { TimeChart } from '../charts/TimeChart';
 import { POWER, REFRESH_MS, readRange, useFetch } from './Charts';
 import { RANGES, type HistoryPayload, type Range } from '../lib/api';
@@ -57,6 +57,7 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);   // the current limits, for the battery gauges
   const hist = useFetch<HistoryPayload>(`/api/history?fields=${FIELDS}&range=${range}&every=auto&agg=mean`, REFRESH_MS[range]);
   const h = hist.data;
+  const fullIn = useFullCharge(fields, info);
   const outage = hasPoint && (gridLost(fields) || !!events?.outage_now);
   const hoursLeft = runtimeHours(fields?.battery_soc, info?.backup.eps_dod_pct ?? info?.battery.overdischarge_soc,
                                  info?.battery.capacity_kwh, fields?.total_load_power);
@@ -70,7 +71,7 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
   const diagram = <div class="tv-flow">{fields ? <PowerFlow fields={fields} /> : <Skeleton h={560} />}</div>;
   const bars = <GaugeBars fields={fields} settings={sched.data} error={sched.error} />;
   const battery = fields
-    ? <BatteryCard fields={fields} extra={<Runtime live={live} info={info} avgLoad={avgLoad} />} />
+    ? <BatteryCard fields={fields} fullIn={fullIn} extra={<Runtime live={live} info={info} avgLoad={avgLoad} />} />
     : <Card title="Battery"><Skeleton h={100} /></Card>;
   const today = <div class="tv-today">{fields ? <TodayRow fields={fields} /> : <Card title="Today"><Skeleton h={60} /></Card>}</div>;
   const power_ = chart('Power flows', POWER, 400, { zeroLine: true, fill: true });     // fills the rest of the column, so it ends level with the left one

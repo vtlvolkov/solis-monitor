@@ -17,6 +17,19 @@ export function runtimeHours(socPct: number | null | undefined, floorPct: number
   return usableKwh / (loadW / 1000);
 }
 
+/** Average charging power over the last 15 minutes, leaving out the time it was not charging (just started, a pause). */
+export function chargeRate(t: number[], watts: (number | null)[], nowS: number): number | null {
+  return mean(watts.filter((w, i) => t[i] >= nowS - 900 && ok(w) && w >= 20));
+}
+
+/** Hours until `targetPct` at `chargeW`. null when inputs are missing, the rate is too small to mean anything, or it is already there. */
+export function fullChargeHours(socPct: number | null | undefined, targetPct: number | null | undefined,
+                                capacityKwh: number | null | undefined, chargeW: number | null | undefined): number | null {
+  if (!ok(socPct) || !ok(targetPct) || !ok(capacityKwh) || !ok(chargeW) || capacityKwh <= 0) return null;
+  if (chargeW < 50 || socPct >= targetPct) return null;
+  return (capacityKwh * (targetPct - socPct)) / 100 / (chargeW / 1000);
+}
+
 export function formatHours(h: number | null): string {
   if (h == null) return '--';
   if (h <= 0) return t('{n} min', { n: 0 });

@@ -3,6 +3,7 @@ import { ago, clockTime, kwh, socSegments, withUnit } from '../lib/format';
 import { currentAge, isOnline, type LiveState } from '../lib/live';
 import type { Fields } from '../lib/api';
 import { getLang, setLang, t, tx } from '../lib/i18n';
+import { formatHours } from '../lib/runtime';
 import { useSite } from '../lib/site';
 import { UpdateBadge } from './UpdateBadge';
 
@@ -74,14 +75,14 @@ export function socColor(soc: number | null | undefined): string {
   return 'var(--c-battery)';
 }
 
-export function BatteryCard({ fields, extra }: { fields: Fields; extra?: ComponentChildren }) {
+export function BatteryCard({ fields, fullIn, extra }: { fields: Fields; fullIn?: number | null; extra?: ComponentChildren }) {
   const soc = fields.battery_soc;
   const filled = socSegments(soc);
   const color = socColor(soc);
   const p = fields.battery_power_signed;
   const state = p == null ? '' : p >= 20 ? t('Charging') : p <= -20 ? t('Discharging') : t('Idle');
   return (
-    <Card title="Battery" class="battery-card" aside={<span class="muted">{state}</span>}>
+    <Card title="Battery" class="battery-card" aside={<span class="muted battery-state" data-testid="battery-state">{state}{fullIn != null && p != null && p >= 20 && <> · <span class="battery-full">{t('full in ≈ {h}', { h: formatHours(fullIn) })}</span></>}</span>}>
       <div class="soc-row">
         <div class="soc-bars" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={soc ?? undefined}
              aria-label={t('State of charge')} data-filled={filled}>

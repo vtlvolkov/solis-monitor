@@ -104,6 +104,8 @@ button { font: inherit; color: inherit; }
 @keyframes flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -40; } }
 .line-arrow { transition: fill 0.6s ease; }
 
+.battery-state { text-align: right; }
+.battery-full { white-space: nowrap; }
 .soc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .soc-bars { display: flex; gap: 7px; }
 .soc-bars span { width: 12px; height: 28px; border-radius: 6px; background: #3a3c41; transition: background 0.6s ease; }

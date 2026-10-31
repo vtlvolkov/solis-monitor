@@ -2,7 +2,7 @@ import { BatteryCard, Card, ErrorBanner, Header, Skeleton, TodayRow } from '../c
 import { CostCard, GridCard, ScheduleCard, StatusChips, type CostPayload } from '../components/OverviewCards';
 import type { SettingsPayload } from '../lib/settings';
 import { GaugeBars } from '../components/GaugeBars';
-import { Runtime } from '../components/Runtime';
+import { Runtime, useFullCharge } from '../components/Runtime';
 import { PowerFlow } from '../components/PowerFlow';
 import type { HistoryPayload } from '../lib/api';
 import type { DeviceInfo } from '../lib/devices';
@@ -23,6 +23,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
   const vmax = usePoll<HistoryPayload>('/api/history?fields=grid_voltage&range=24h&every=1h&agg=max', 300_000).data;
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);
   const cost = usePoll<CostPayload>('/api/cost', 300_000).data;
+  const fullIn = useFullCharge(fields, info);
   const outage = hasPoint && (gridLost(fields) || !!events?.outage_now);
   const since = events?.outage_now?.start;
   const h = runtimeHours(fields?.battery_soc, info?.backup.eps_dod_pct ?? info?.battery.overdischarge_soc,
@@ -51,7 +52,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
               : <Skeleton h={420} />}
           </div>
           <div class="battery-wrap">
-            {fields ? <BatteryCard fields={fields} extra={<Runtime live={live} info={info} avgLoad={avgLoad} />} />
+            {fields ? <BatteryCard fields={fields} fullIn={fullIn} extra={<Runtime live={live} info={info} avgLoad={avgLoad} />} />
                     : <Card title="Battery"><Skeleton h={56} /></Card>}
           </div>
           <GaugeBars fields={fields} settings={sched.data} error={sched.error} />
