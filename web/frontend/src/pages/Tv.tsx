@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { BatteryCard, Card, ErrorBanner, LangSwitch, Skeleton, StatusPill, TodayRow } from '../components/common';
 import { GaugeBars } from '../components/GaugeBars';
 import { PowerFlow } from '../components/PowerFlow';
-import { Runtime, useFullCharge } from '../components/Runtime';
+import { Runtime, useAvgLoad, useFullCharge } from '../components/Runtime';
 import { TimeChart } from '../charts/TimeChart';
 import { POWER, REFRESH_MS, readRange, useFetch } from './Charts';
 import { RANGES, type HistoryPayload, type Range } from '../lib/api';
@@ -12,7 +12,7 @@ import { stageFit, stepRange } from '../lib/tv';
 import { clockTime, power } from '../lib/format';
 import type { LiveState } from '../lib/live';
 import { usePoll, type EventsPayload } from '../lib/poll';
-import { formatHours, gridLost, mean, runtimeHours } from '../lib/runtime';
+import { formatHours, gridLost, runtimeHours } from '../lib/runtime';
 import type { DeviceInfo } from '../lib/devices';
 import type { SettingsPayload } from '../lib/settings';
 
@@ -51,9 +51,8 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
   const fields = live.data?.fields ?? null;
   const hasPoint = !!live.data?.time;
   const info = usePoll<DeviceInfo>('/api/devices', 60_000).data;
-  const load1h = usePoll<HistoryPayload>('/api/history?fields=total_load_power&range=1h&every=auto&agg=mean', 300_000);   // for the runtime estimate
   const events = usePoll<EventsPayload>('/api/events?days=7', 60_000).data;
-  const avgLoad = (() => { const s = load1h.data?.series.total_load_power; return s ? mean(s) : null; })();
+  const avgLoad = useAvgLoad();
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);   // the current limits, for the battery gauges
   const hist = useFetch<HistoryPayload>(`/api/history?fields=${FIELDS}&range=${range}&every=auto&agg=mean`, REFRESH_MS[range]);
   const h = hist.data;

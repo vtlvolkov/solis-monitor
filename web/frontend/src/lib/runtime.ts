@@ -17,6 +17,14 @@ export function runtimeHours(socPct: number | null | undefined, floorPct: number
   return usableKwh / (loadW / 1000);
 }
 
+/** History request behind the 15-minute averages: 1-minute points, the shortest range the API offers. */
+export const recentUrl = (field: string) => `/api/history?fields=${field}&range=1h&every=1m&agg=mean`;
+
+/** Average load over the last 15 minutes. */
+export function recentLoad(t: number[], watts: (number | null)[], nowS: number): number | null {
+  return mean(watts.filter((_, i) => t[i] >= nowS - 900));
+}
+
 /** Average charging power over the last 15 minutes, leaving out the time it was not charging (just started, a pause). */
 export function chargeRate(t: number[], watts: (number | null)[], nowS: number): number | null {
   return mean(watts.filter((w, i) => t[i] >= nowS - 900 && ok(w) && w >= 20));

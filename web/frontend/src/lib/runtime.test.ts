@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chargeRate, formatHours, fullChargeHours, gridLost, mean, runtimeHours } from './runtime';
+import { chargeRate, formatHours, fullChargeHours, gridLost, mean, recentLoad, runtimeHours } from './runtime';
 
 describe('runtimeHours', () => {
   it('uses only the energy above the floor', () => {
@@ -31,6 +31,16 @@ describe('fullChargeHours', () => {
     expect(fullChargeHours(62, 100, 10.24, 49)).toBeNull();
     expect(fullChargeHours(100, 100, 10.24, 1800)).toBeNull();
     expect(fullChargeHours(90, 80, 10.24, 1800)).toBeNull();
+  });
+});
+
+describe('recentLoad', () => {
+  it('averages only the last 15 minutes', () => {
+    expect(recentLoad([0, 199, 200, 1000, 1100], [5000, 5000, 300, null, 500], 1100)).toBe(400);
+  });
+  it('null without recent data, so the live load is used', () => {
+    expect(recentLoad([0], [5000], 1100)).toBeNull();
+    expect(recentLoad([1000], [null], 1100)).toBeNull();
   });
 });
 

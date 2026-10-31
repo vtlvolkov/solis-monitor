@@ -2,7 +2,7 @@ import { BatteryCard, Card, ErrorBanner, Header, Skeleton, TodayRow } from '../c
 import { CostCard, GridCard, ScheduleCard, StatusChips, type CostPayload } from '../components/OverviewCards';
 import type { SettingsPayload } from '../lib/settings';
 import { GaugeBars } from '../components/GaugeBars';
-import { Runtime, useFullCharge } from '../components/Runtime';
+import { Runtime, useAvgLoad, useFullCharge } from '../components/Runtime';
 import { PowerFlow } from '../components/PowerFlow';
 import type { HistoryPayload } from '../lib/api';
 import type { DeviceInfo } from '../lib/devices';
@@ -10,15 +10,14 @@ import { ago, clockTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import type { LiveState } from '../lib/live';
 import { usePoll, type EventsPayload } from '../lib/poll';
-import { formatHours, gridLost, mean, runtimeHours } from '../lib/runtime';
+import { formatHours, gridLost, runtimeHours } from '../lib/runtime';
 
 export function Overview({ live, now }: { live: LiveState; now: number }) {
   const fields = live.data?.fields ?? null;
   const hasPoint = !!live.data?.time;
   const info = usePoll<DeviceInfo>('/api/devices', 60_000).data;
   const events = usePoll<EventsPayload>('/api/events?days=7', 60_000).data;
-  const hist = usePoll<HistoryPayload>('/api/history?fields=total_load_power&range=1h&every=auto&agg=mean', 300_000).data;
-  const avgLoad = hist ? mean(hist.series.total_load_power ?? []) : null;
+  const avgLoad = useAvgLoad();
   const vmin = usePoll<HistoryPayload>('/api/history?fields=grid_voltage&range=24h&every=1h&agg=min', 300_000).data;
   const vmax = usePoll<HistoryPayload>('/api/history?fields=grid_voltage&range=24h&every=1h&agg=max', 300_000).data;
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);
