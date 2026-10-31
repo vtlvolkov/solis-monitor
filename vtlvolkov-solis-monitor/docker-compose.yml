@@ -32,7 +32,7 @@ services:
       retries: 12
 
   poller:
-    image: ghcr.io/vtlvolkov/solis-monitor-poller:v0.2.3@sha256:13b3483cda97054a5412953e6abeb4574dcbd79764ef72a97002c69ed3e15f46
+    image: ghcr.io/vtlvolkov/solis-monitor-poller:v0.2.4@sha256:77246be9ffb7f6d3c0915a9096daeb7995a319c2016a095d9c10399ce33b6476
     user: "1000:1000"
     restart: on-failure
     depends_on:
@@ -67,7 +67,7 @@ services:
       - ${APP_DATA_DIR}/data/poller:/data
 
   web:
-    image: ghcr.io/vtlvolkov/solis-monitor-web:v0.2.3@sha256:8bdfa3b8f2bc66086c7f3d27837404f5a16a1fdefe83cdbb772018ff71645d0c
+    image: ghcr.io/vtlvolkov/solis-monitor-web:v0.2.4@sha256:449248d111a654a0b25f3902bb47432f304ea599b8f34c276ca7b100a168990e
     user: "1000:1000"
     restart: on-failure
     depends_on:

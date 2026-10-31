@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.2.3"
+version: "0.2.4"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,9 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  battery temperature, and Debug "Copy as text" on plain http
+  batteries in parallel, time to full charge, and a quicker backup runtime
 
-  - The battery card and the Devices tab show the battery temperature again. It comes from register 33044 (×0.01 °C). That register is not in Solis' table; the documented 33043 reads 0 with this battery. 33044 was found with the Debug tab and behaves like a temperature (it warms under charge and cools slowly afterwards), but it has not been compared with the battery's own display.
-  - Debug tab: "Copy as text" now works when the dashboard is opened over plain http, where browsers block the clipboard. If the browser refuses too, the text is shown to select and copy by hand.
+  - Devices → Battery shows an estimate of the batteries in parallel, for Dyness batteries. The inverter has no register for the count, so it comes from the BMS discharge limit ÷ 100 A. It can read low or disappear while the BMS lowers its limit, and it never changes the saved capacity.
+  - While charging, the battery card shows the time to a full charge next to "Charging", from the capacity, the Max charge SOC and the average charging power over the last 15 minutes. It moves with clouds and can read short near full.
+  - Backup runtime now follows the load faster: it uses the last 15 minutes of load, refreshed every minute, instead of the last hour refreshed every 5 minutes.
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
