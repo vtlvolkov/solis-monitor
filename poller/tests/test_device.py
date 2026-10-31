@@ -134,6 +134,15 @@ def test_bms_temperature():
     assert device.decode({**REGS, 33044: 9001})["battery"]["bms_temperature"] is None
 
 
+def test_estimated_packs():
+    assert device.decode(REGS)["battery"]["estimated_packs"] == 1          # the live dump, one DL5.0C
+    assert device.decode({**REGS, 33144: 2000})["battery"]["estimated_packs"] == 2   # live, two DL5.0C
+    assert device.decode({**REGS, 33144: 1500})["battery"]["estimated_packs"] is None   # lowered by the BMS
+    assert device.decode({**REGS, 33144: 0})["battery"]["estimated_packs"] is None
+    assert device.decode({**REGS, 33160: 1})["battery"]["estimated_packs"] is None      # not a Dyness
+    assert device.decode({**REGS, 33141: 0})["battery"]["estimated_packs"] is None      # no BMS data
+
+
 def test_disconnected_bms_and_meter_and_bad_clock():
     d = device.decode({**REGS, 33141: 0, 33251: 0, 33023: 13, 33044: 2679}, HOLD)
     assert d["battery"]["connected"] is False and d["battery"]["bms_temperature"] is None

@@ -164,7 +164,7 @@ def build_mcp(api: DataApi) -> FastMCP:
     @mcp.tool(annotations=READ_ONLY)
     async def get_devices() -> dict:
         """Details of the inverter (serial, firmware, state, alarms, clock), backup output, battery/BMS
-        (capacity, SOC limits, BMS limits) and grid meter."""
+        (capacity, SOC limits, BMS limits, estimated_packs: batteries in parallel, estimated from the BMS limit) and grid meter."""
         return _poller_body(await api.devices(), "device details")
 
     @mcp.tool(annotations=READ_ONLY)

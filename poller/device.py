@@ -6,6 +6,8 @@ matches SolisCloud, BMS voltage matches 33133, meter V/W/Hz match the grid readi
 The battery temperature is 33044 (S16, 0.01 C). The documented battery temperature, 33043 (S16, 0.1 C, from the
 BMS), reads 0 on this unit; 33044 is not documented that way and was found with the Debug tab: 2679, then 2694 a few hours later, and 26 C is
 what the battery feels like. Not compared with the battery's own display.
+No register holds the battery count (33000-33399, 34000-34299 and 43000-43399 compared between a site with two batteries
+and one with one, 2026-10-31), but the BMS discharge limit adds up per Dyness pack: 2000 and 1000 on those sites.
 Values with no confirmed meaning are left out rather than guessed. Battery capacity comes
 from the Settings page (CapacityStore), else BATTERY_CAPACITY_KWH, else rated Ah (43019) x 51.2 V nominal.
 """
@@ -21,6 +23,8 @@ import faults
 # (start, count) input-register blocks read on each request (<= 50 registers each)
 BLOCKS = ((33000, 45), (33071, 35), (33116, 6), (33137, 24), (33250, 37), (33297, 4))
 HOLDING = ((43010, 15),)        # 43010..43024: SOC limits and rated capacity
+DYNESS_MODEL = 0x0004
+DYNESS_PACK_LIMIT = 1000        # 33144 per Dyness pack (100 A, raw 0.1 A); seen on sites with one and two DL5.0C
 NOMINAL_CELL_V = 51.2           # LV LiFePO4 nominal pack voltage, for Ah -> kWh
 MAX_CAPACITY_KWH = 1000
 
@@ -107,6 +111,7 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
             "bms_failure_codes": [f"0x{r[33145]:04X}", f"0x{r[33146]:04X}"],
             "has_fault": bool(r[33145] or r[33146]),
             "connected": r[33141] > 0,
+            "estimated_packs": estimated_packs(r[33160], r[33144], r[33141] > 0),
             "rated_capacity_ah": rated_ah,
             "capacity_kwh": capacity_kwh,
             "capacity_source": source,
@@ -130,6 +135,14 @@ def decode(r: dict[int, int], h: dict[int, int] | None = None, capacity_kwh: flo
             "type": METER_TYPE.get(meter_cfg & 0xFF, f"Code 0x{meter_cfg & 0xFF:02X}"),
         },
     }
+
+
+def estimated_packs(model: int, discharge_limit: int, connected: bool) -> int | None:
+    """Batteries in parallel, estimated from the BMS discharge limit. None for other models, and for a limit that is not
+    a whole number of packs (the BMS lowered it). A lowered limit that is a whole number still reads as fewer packs."""
+    if model != DYNESS_MODEL or not connected or not discharge_limit or discharge_limit % DYNESS_PACK_LIMIT:
+        return None
+    return discharge_limit // DYNESS_PACK_LIMIT
 
 
 def rated_kwh(rated_ah) -> float | None:

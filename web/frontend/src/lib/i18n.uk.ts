@@ -135,6 +135,7 @@ export const UK: Record<string, string> = {
   "Max charge SOC": "Макс. заряд", "Over-discharge SOC": "Заряд захисту від переразряду",
   "Force-charge SOC": "Заряд примусового заряджання",
   "Backup (reserve) SOC": "Резервний заряд", "Communication": "Зв'язок", "BMS voltage": "Напруга BMS", "BMS current": "Струм BMS",
+  "Batteries in parallel": "Батарей паралельно", "estimated from the BMS discharge limit": "оцінка за лімітом розряджання BMS",
   "Charge current limit": "Ліміт струму заряджання", "Discharge current limit": "Ліміт струму розряджання",
   "Failure codes": "Коди помилок",
   "Grid power": "Потужність мережі", "Imported today": "Імпортовано сьогодні", "Exported today": "Експортовано сьогодні",

@@ -106,6 +106,7 @@ function detailSections(id: DeviceId, info: DeviceInfo | null, f: Fields, live: 
         ]],
         ['Battery', i && [
           ['Model', t(i.battery.model)],
+          ...(i.battery.estimated_packs != null ? [['Batteries in parallel', <>{i.battery.estimated_packs} <span class="muted">({t('estimated from the BMS discharge limit')})</span></>] as Row] : []),
           ['Capacity', i.battery.capacity_kwh != null
             ? <>{i.battery.capacity_kwh} {unit('kWh')} <span class="muted">({describeSource({ source: i.battery.capacity_source, rated_capacity_ah: i.battery.rated_capacity_ah })})</span></> : '--'],
           ['Max charge SOC', withUnit(i.battery.max_charge_soc, '%', 0)],

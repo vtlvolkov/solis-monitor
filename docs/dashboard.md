@@ -5,7 +5,7 @@ What each page shows, how the numbers are calculated and which settings in `.env
 - **Overview**: live power-flow diagram (PV, Grid, Grid Load, Battery, Backup Load), battery SOC bar, today's kWh, a backup-runtime estimate, and a red banner during a grid outage.
 - **Devices**: inverter, battery, logger and meter cards with status, like the Solis app. Tap a card for details:
   - inverter: serial number, firmware, state, fault codes, clock drift, AC/PV/grid values
-  - battery: SOC/SOH, voltage, current, today's kWh, plus BMS voltage/current, battery temperature, BMS charge and discharge limits, BMS failure codes
+  - battery: SOC/SOH, voltage, current, today's kWh, plus BMS voltage/current, battery temperature, BMS charge and discharge limits, BMS failure codes, and for Dyness batteries an estimate of the batteries in parallel (the BMS discharge limit ÷ 100 A; the inverter has no register for the count, so the estimate can read low or disappear while the BMS lowers its limit, and it never changes the saved capacity)
   - meter: voltage, current, active/reactive/apparent power, power factor, frequency, lifetime import/export
   - logger: address, link status, last data
 
