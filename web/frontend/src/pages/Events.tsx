@@ -129,16 +129,22 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
           </Card>
         )}
 
+        {!day && (
+          <Card title={t('Last {n} days', { n: days })}>
+            {!data ? <Skeleton h={120} /> : (
+              <div class="ev-stats ev-stats-4" data-testid="outage-stats">
+                <div><span>{stats!.count}</span>{t('outages')}</div>
+                <div><span>{duration(stats!.total)}</span>{t('total')}</div>
+                <div><span>{duration(stats!.longest)}</span>{t('longest')}</div>
+                <div><span>{data.alarms.length}</span>{tp(data.alarms.length, 'alarm|alarms')}</div>
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card title="Power outages">
           {!data ? <Skeleton h={120} /> : (
             <>
-              {!day && (
-                <div class="ev-stats" data-testid="outage-stats">
-                  <div><span>{stats!.count}</span>{t('outages')}</div>
-                  <div><span>{duration(stats!.total)}</span>{t('total')}</div>
-                  <div><span>{duration(stats!.longest)}</span>{t('longest')}</div>
-                </div>
-              )}
               {data.outages.length === 0
                 ? <div class="setting-hint">{day ? t('No outages on this day.') : t('No outages recorded in the last {days} days.', { days })}</div>
                 : <ul class="ev-list">{data.outages.map((o) => <OutageRow key={`${o.start}-${o.end}`} o={o} day={bounds} />)}</ul>}
@@ -146,7 +152,7 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
           )}
         </Card>
 
-        <Card title="Alarm history" class={day ? '' : 'span-2'}>
+        <Card title="Alarm history">
           {!data ? <Skeleton h={120} /> : data.alarms.length === 0
             ? <div class="setting-hint">{day ? t('No alarms on this day.') : t('No alarms recorded in the last {days} days.', { days })}</div>
             : <ul class="ev-list">{data.alarms.map((a) => <AlarmRow key={`${a.key}-${a.start}-${a.end}`} a={a} day={bounds} />)}</ul>}

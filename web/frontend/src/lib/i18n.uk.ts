@@ -3,6 +3,7 @@
 // A missing key falls back to English, see i18n.test.ts for the checks.
 export const UK: Record<string, string> = {
   // --- one exact day (Charts, Events)
+  "Last {n} days": "Останні {n} днів",
   "Day": "День",
   "Pick a day": "Вибрати день",
   "Previous day": "Попередній день",

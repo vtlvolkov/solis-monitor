@@ -184,7 +184,8 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
   }, [series, height, fill, zeroLine, leftUnit, rightUnit, font, lang, fixedX]);
 
   useEffect(() => { plot.current?.setData(aligned); }, [aligned]);
-  useEffect(() => { plot.current?.redraw(); }, [bands]);
+  // redraw(false): repaint only. A plain redraw() re-applies the x-scale, which on a new plot is still empty and wipes the data's range.
+  useEffect(() => { if (bands?.length) plot.current?.redraw(false); }, [bands]);
 
   const empty = data.t.length === 0;
   return (
