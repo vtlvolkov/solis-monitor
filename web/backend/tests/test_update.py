@@ -9,7 +9,7 @@ from app import updates
 from app.config import Settings
 from app.main import create_app
 from app.updates import (Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, fetch_latest_release,
-                         is_newer, next_delay, parse_version)
+                         is_installed_release, is_newer, next_delay, parse_version)
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 AUTH = ("me", "pw")
@@ -51,6 +51,13 @@ def test_versions():
     assert is_newer("v0.1.10", "v0.1.9") and is_newer("v1.0.0", "v0.9.9")
     assert not is_newer("v0.1.3", "v0.1.3") and not is_newer("v0.1.2", "v0.1.3")
     assert not is_newer("garbage", "v0.1.3") and not is_newer("v0.1.4", "")
+
+
+def test_a_test_release_can_move_on_to_a_final_release():
+    assert is_newer("v0.3.0", "v0.2.5-rc.2") and is_newer("v0.2.5", "v0.2.5-rc.2")   # its own final version counts
+    assert not is_newer("v0.2.4", "v0.2.5-rc.2")
+    assert is_installed_release("v0.2.5-rc.2") and is_installed_release("v0.3.0")
+    assert not is_installed_release("") and not is_installed_release("dev") and not is_installed_release("v0.2.5-")
 
 
 def test_version_endpoint_is_open(tmp_path):

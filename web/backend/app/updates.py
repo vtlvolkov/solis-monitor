@@ -13,6 +13,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 TAG = re.compile(r"v(\d{1,4})\.(\d{1,4})\.(\d{1,4})")
+TEST_TAG = re.compile(r"(v\d{1,4}\.\d{1,4}\.\d{1,4})-[0-9A-Za-z.-]{1,40}")      # a test release installed with --version, like v1.2.0-rc.1
 REPO = re.compile(r"[A-Za-z0-9_.-]{1,60}/[A-Za-z0-9_.-]{1,100}")
 STATES = {"running", "ok", "rolled_back", "failed"}
 REQUEST, STATUS, BRIDGE = "update-request", "update-status.json", "bridge.json"
@@ -56,9 +57,19 @@ def parse_version(tag) -> tuple[int, int, int] | None:
     return tuple(int(g) for g in m.groups()) if m else None
 
 
+def is_installed_release(tag) -> bool:
+    """A version an install can run and update from: a release or a test release (not a source build)."""
+    return parse_version(tag) is not None or (isinstance(tag, str) and TEST_TAG.fullmatch(tag) is not None)
+
+
 def is_newer(latest, current) -> bool:
-    a, b = parse_version(latest), parse_version(current)
-    return a is not None and b is not None and a > b
+    """Is the release `latest` newer than what is installed? A test release comes before its final version."""
+    a = parse_version(latest)
+    test = TEST_TAG.fullmatch(current) if isinstance(current, str) else None
+    b = parse_version(test.group(1) if test else current)
+    if a is None or b is None:
+        return False
+    return a >= b if test else a > b
 
 
 def _request(repo: str, api_base: str, timeout: float, etag: str | None) -> tuple[dict | None, str | None]:

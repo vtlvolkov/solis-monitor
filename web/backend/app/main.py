@@ -20,7 +20,7 @@ from .auth import LoginError, LoginStore, TooManyAttempts
 from .config import Settings
 from .control import ControlClient, PollerUnavailable
 import random
-from .updates import Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, is_newer, next_delay, parse_version
+from .updates import Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, is_installed_release, is_newer, next_delay
 from .validation import (ENERGY_FIELDS, WINDOWS, parse_agg, parse_days, parse_every,
                          parse_fields, parse_range)
 
@@ -588,7 +588,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
             reason = f"Updates are handled by {s.updates_managed_by}."
         elif not s.basic_auth:
             reason = "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env and restart the web service."
-        elif not s.solis_version or parse_version(s.solis_version) is None:
+        elif not s.solis_version or not is_installed_release(s.solis_version):
             reason = "This copy was built from source, so it cannot update itself. Update it with git."
         elif not bridge.ready():
             reason = "Updating from the dashboard is not set up. On the server run: solis-monitor dashboard-updates on"

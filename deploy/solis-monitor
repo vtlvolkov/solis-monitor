@@ -128,7 +128,8 @@ cmd_update() {
   [[ -n "$target" ]] || die "no release found"
   REPORT_TO="$target"
   if [[ "$target" == "$current" ]]; then echo "Already on $current."; report ok "Already on $current"; return 0; fi
-  if [[ -z "$explicit" && "$(printf '%s\n%s\n' "$current" "$target" | sort -V | sed -n 2p)" == "$current" ]]; then
+  # sort -V puts v1.2.0 before v1.2.0-rc.1, but a test release comes before its final version.
+  if [[ -z "$explicit" && "$target" != "${current%%-*}" && "$(printf '%s\n%s\n' "$current" "$target" | sort -V | sed -n 2p)" == "$current" ]]; then
     echo "Latest release $target is not newer than $current."; report ok "Already on the newest release ($current)"; return 0      # never downgrade by itself
   fi
 
