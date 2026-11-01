@@ -631,3 +631,7 @@ i.ok { background: var(--c-ok); }
   .controls-group .seg button { flex: 1; padding: 8px 4px; }
   .day-picker > .day-current { flex: 1; }
 }
+/* Events: the two top cards end on the same line; the totals fill theirs rather than leave a gap below. */
+.events-grid > .ev-top { align-self: stretch; display: flex; flex-direction: column; }
+.ev-stats-fill { flex: 1; margin-bottom: 0; }
+.ev-stats-fill > div { justify-content: center; }

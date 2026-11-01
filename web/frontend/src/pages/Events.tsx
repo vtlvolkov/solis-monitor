@@ -88,7 +88,7 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
       {error && <ErrorBanner message={error} stale={!!raw} />}
 
       <div class="events-grid">
-        <Card title="Now">
+        <Card title="Now" class="ev-top">
           <div class={`now-row ${lost ? 'bad' : 'ok'}`} data-testid="grid-state">
             <span class="now-dot" />
             <div>
@@ -111,7 +111,7 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
         </Card>
 
         {day && (
-          <Card title={dayLabel(day)}>
+          <Card title={dayLabel(day)} class="ev-top">
             {!data || data.start == null || data.stop == null ? <Skeleton h={120} /> : (() => {
               const offGrid = spansInDay(data.outages, data.start, data.stop, now / 1000).reduce((a, [x, y]) => a + y - x, 0);
               return (
@@ -130,9 +130,9 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
         )}
 
         {!day && (
-          <Card title={t('Last {n} days', { n: days })}>
+          <Card title={t('Last {n} days', { n: days })} class="ev-top">
             {!data ? <Skeleton h={120} /> : (
-              <div class="ev-stats ev-stats-4" data-testid="outage-stats">
+              <div class="ev-stats ev-stats-4 ev-stats-fill" data-testid="outage-stats">
                 <div><span>{stats!.count}</span>{t('outages')}</div>
                 <div><span>{duration(stats!.total)}</span>{t('total')}</div>
                 <div><span>{duration(stats!.longest)}</span>{t('longest')}</div>
