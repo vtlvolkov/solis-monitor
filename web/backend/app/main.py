@@ -190,6 +190,60 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz), "15m")
         return {"tz": s.tz, "unit": "kWh", "days": shaping.aggregate_daily(rows, ENERGY_FIELDS, n, t, s.tz)}
 
+    # ------------------------------------------------------------------ one exact day (Charts and Events tabs)
+    def local_day(raw: str, t):
+        """The requested local day and its UTC bounds; a day that is malformed or still to come is a 400."""
+        d = shaping.parse_day(raw)
+        if d is None or d > t.astimezone(ZoneInfo(s.tz)).date():
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD, not in the future")
+        return (d, *shaping.local_range(d, d, s.tz))
+
+    # Separate from /api/history and /api/events: the MCP server calls those route functions directly.
+    @app.get("/api/day/history")
+    async def api_day_history(date: str = Query(...), fields: str = Query(...),
+                              every: str = Query("auto"), agg: str = Query("mean")):
+        t = now()
+        d, start, stop = local_day(date, t)
+        names = parse_fields(fields)
+        win = parse_every(every, round((stop - start).total_seconds()))
+        fn = parse_agg(agg)
+        times, series = await call(repo.history_between, names, start, min(stop, t), win, fn)
+        times, series = shaping.insert_gaps(times, series, WINDOWS[win])
+        return {"date": d.isoformat(), "start": round(start.timestamp()), "stop": round(stop.timestamp()),
+                "is_today": t < stop, "every": win, "agg": fn,
+                "t": [round(x.timestamp()) for x in times],
+                "series": {k: [shaping._num(v) for v in vs] for k, vs in series.items()}}
+
+    @app.get("/api/day/energy")
+    async def api_day_energy(date: str = Query(...)):
+        d, start, stop = local_day(date, now())
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), start, "15m", stop)
+        return {"tz": s.tz, "unit": "kWh", **shaping.aggregate_dates(rows, ENERGY_FIELDS, [d], s.tz)[0]}
+
+    @app.get("/api/day/events")
+    async def api_day_events(date: str = Query(...)):
+        t = now()
+        d, start, stop = local_day(date, t)
+        # Read on to the present: an outage's end may come after this day, and its start up to 30 days before.
+        rows = await call(repo.events, (t - start).days + 31)
+        return {"date": d.isoformat(), "start": round(start.timestamp()), "stop": round(stop.timestamp()),
+                **shaping.events_on_day(shaping.pair_events(rows, t), start, stop, t)}
+
+    @app.get("/api/events/calendar")
+    async def api_events_calendar(month: str | None = Query(None)):
+        """Which days of a month had outages or alarms, and the days the picker can offer."""
+        t = now()
+        today = t.astimezone(ZoneInfo(s.tz)).date()
+        ym = shaping.parse_month(month) if month else (today.year, today.month)
+        if ym is None or ym > (today.year, today.month):
+            raise HTTPException(status_code=400, detail="month must be YYYY-MM, not in the future")
+        dates = shaping.month_dates(ym[0], ym[1], today)
+        start, _ = shaping.local_range(dates[0], dates[-1], s.tz)
+        rows = await call(repo.events, (t - start).days + 31)
+        first = await first_day(t)
+        return {"month": f"{ym[0]}-{ym[1]:02d}", "today": today.isoformat(), "first_day": first.isoformat() if first else None,
+                "days": shaping.event_calendar(shaping.pair_events(rows, t), dates, s.tz, t)}
+
     # ------------------------------------------------------------------ settings (via the poller)
     async def poller(fn, *args):
         try:

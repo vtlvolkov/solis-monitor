@@ -197,6 +197,52 @@ def parse_month(month: str) -> tuple[int, int] | None:
     return (y, m) if 2000 <= y <= 2100 and 1 <= m <= 12 else None
 
 
+def parse_day(day: str) -> date | None:
+    """'2026-10-24' -> that date, or None if it is not a valid YYYY-MM-DD."""
+    parts = day.split("-")
+    if len(parts) != 3 or len(day) != 10 or not all(x.isdigit() for x in parts):
+        return None
+    try:
+        d = date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+    return d if 2000 <= d.year <= 2100 else None
+
+
+def _event_span(e: dict, now: datetime) -> tuple[datetime | None, datetime]:
+    """(start, end) of a paired event: start is None if it began before the query, an ongoing one ends now."""
+    return (datetime.fromisoformat(e["start"]) if e["start"] else None,
+            datetime.fromisoformat(e["end"]) if e["end"] else now)
+
+
+def events_on_day(paired: dict, start: datetime, stop: datetime, now: datetime) -> dict:
+    """pair_events output keeping only the outages and alarms that overlap [start, stop).
+    What is active right now is left alone: the Now card always shows the present."""
+    def overlaps(e):
+        t0, t1 = _event_span(e, now)
+        return t1 >= start and (t0 is None or t0 < stop)
+    return {**paired, "outages": [e for e in paired["outages"] if overlaps(e)],
+            "alarms": [e for e in paired["alarms"] if overlaps(e)]}
+
+
+def event_calendar(paired: dict, dates: list[date], tz: str, now: datetime) -> dict[str, dict]:
+    """{'2026-10-24': {'outages': 1, 'alarms': 2}} for the given local days; an event counts on every day it touches."""
+    zone = ZoneInfo(tz)
+    wanted = set(dates)
+    out: dict[str, dict] = {}
+    for kind in ("outages", "alarms"):
+        for e in paired[kind]:
+            t0, t1 = _event_span(e, now)
+            last = t1.astimezone(zone).date()
+            d = t0.astimezone(zone).date() if t0 else last
+            while d <= last:
+                if d in wanted:
+                    row = out.setdefault(d.isoformat(), {"outages": 0, "alarms": 0})
+                    row[kind] += 1
+                d += timedelta(days=1)
+    return out
+
+
 def month_dates(year: int, month: int, today: date) -> list[date]:
     """Every day of the month, but not past today."""
     d = date(year, month, 1)

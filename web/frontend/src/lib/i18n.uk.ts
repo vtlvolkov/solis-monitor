@@ -2,6 +2,26 @@
 // match the key. Strings that come from the poller (fault and status names) are included too.
 // A missing key falls back to English, see i18n.test.ts for the checks.
 export const UK: Record<string, string> = {
+  // --- one exact day (Charts, Events)
+  "Day": "День",
+  "Pick a day": "Вибрати день",
+  "Previous day": "Попередній день",
+  "Next day": "Наступний день",
+  "Back to live": "Назад до наживо",
+  "Back to last {n} days": "Назад до останніх {n} днів",
+  "PV generated": "Вироблено PV",
+  "peak {value}": "пік {value}",
+  "export {value}": "експорт {value}",
+  "discharged {value}": "розряджено {value}",
+  "end of day {value}": "на кінець дня {value}",
+  "Outages": "Відключення",
+  "Min": "Мін",
+  "Shaded: grid outage": "Затінено: відключення мережі",
+  "without grid": "без мережі",
+  "from battery": "з батареї",
+  "No outages on this day.": "Цього дня відключень не було.",
+  "No alarms on this day.": "Цього дня тривог не було.",
+  "Hover a day for values, click to open it · {tz} days": "Наведіть на день, щоб побачити значення, натисніть, щоб відкрити · дні за {tz}",
   // --- navigation, titles, cards
   "Overview": "Огляд", "Devices": "Пристрої", "Charts": "Графіки", "Events": "Події", "Settings": "Налаштування",
   "Pages": "Сторінки", "Home": "Дім", "TV view": "ТВ-режим", "Exit TV view": "Вийти з ТВ-режиму",
@@ -93,7 +113,6 @@ export const UK: Record<string, string> = {
   "Month and year are summed from this dashboard's daily records": "Місяць і рік підсумовано з добових записів цієї панелі",
   ", which start on {day}": ", які починаються з {day}",
   "Daily energy for the last {n} days": "Енергія по днях за останні {n} днів",
-  "Hover a day for values · {tz} days": "Наведіть на день, щоб побачити значення · дні за {tz}",
 
   // --- events
   "Active": "Активна", "now": "зараз", "battery": "батарея", "Outage in progress": "Триває відключення",

@@ -34,4 +34,4 @@ export interface EventItem {
   start: string | null; end: string | null; ongoing: boolean; duration_s: number | null;
   soc_start: number | null; soc_end: number | null; load_start: number | null;
 }
-export interface EventsPayload { days: number; outages: EventItem[]; alarms: EventItem[]; active: EventItem[]; outage_now: EventItem | null }
+export interface EventsPayload { days?: number; date?: string; start?: number; stop?: number; outages: EventItem[]; alarms: EventItem[]; active: EventItem[]; outage_now: EventItem | null }

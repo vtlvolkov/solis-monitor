@@ -589,3 +589,45 @@ html.tv-mode, html.tv-mode body { overflow: hidden; height: 100%; font-size: 20p
 @media (max-width: 640px) { .dbg-form { grid-template-columns: 1fr 1fr; } .dbg-fn { grid-column: 1 / -1; } .dbg-actions { grid-column: 1 / -1; } .dbg-frames > div { grid-template-columns: 1fr; gap: 2px; } }
 .dbg-manual { display: grid; gap: 6px; font-size: 0.85rem; color: var(--c-muted); }
 .dbg-manual textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 0.85rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 10px; resize: vertical; }
+
+/* ---------------------------------------------------------------- one exact day (Charts, Events) */
+.controls-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.stat-sub { color: var(--c-muted); font-size: 0.76rem; }
+.band-note { color: var(--c-grid); font-size: 0.8rem; }
+.day-picker { position: relative; display: inline-flex; align-items: center; gap: 2px; background: var(--c-surface2); border: 1px solid var(--c-border); border-radius: 12px; padding: 3px; }
+.day-picker.on { border-color: var(--c-inverter); }
+.day-picker > button { border: 0; background: transparent; color: var(--c-muted); min-height: 40px; min-width: 36px; border-radius: 9px; font-weight: 600; cursor: pointer; padding: 0 8px; }
+.day-picker > button:disabled, .day-pop-head button:disabled { opacity: 0.35; cursor: default; }
+.day-picker > .day-current { padding: 0 14px; white-space: nowrap; }
+.day-picker.on > .day-current { background: #3a3c42; color: var(--c-text); }
+.day-picker button:focus-visible { outline: 2px solid var(--c-inverter); outline-offset: 2px; }
+.day-pop { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: min(352px, calc(100vw - 32px)); background: #202226; border: 1px solid var(--c-border); border-radius: 16px; padding: 14px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65); }
+.day-pop-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.day-pop-head strong::first-letter { text-transform: uppercase; }
+.day-pop-head strong { display: inline-block; }
+.day-pop-head button { border: 0; background: none; color: var(--c-muted); min-width: 40px; min-height: 40px; cursor: pointer; font-weight: 600; }
+.day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.day-week { text-align: center; color: var(--c-muted); font-size: 0.72rem; padding-bottom: 3px; text-transform: capitalize; }
+.day-cell { border: 0; height: 44px; border-radius: 9px; background: var(--c-surface2); color: var(--c-text); font-size: 0.86rem; font-weight: 600; cursor: pointer; padding: 4px 0 0; }
+.day-cell:hover:not(:disabled) { background: #3a3c42; }
+.day-cell:disabled { opacity: 0.3; cursor: default; }
+.day-cell.sel { outline: 2px solid var(--c-inverter); background: #3a3c42; }
+.day-marks { display: flex; justify-content: center; gap: 3px; height: 6px; margin-top: 3px; }
+.day-marks i, .day-pop-foot i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.day-pop-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; font-size: 0.76rem; color: var(--c-muted); }
+.day-pop-foot i { margin-right: 5px; width: 7px; height: 7px; }
+.day-pop-foot .link { margin-left: auto; }
+i.outage { background: var(--c-grid); }
+i.alarm { background: var(--c-warn); }
+i.ok { background: var(--c-ok); }
+.day-bar { position: relative; height: 30px; background: var(--c-ok-bg); border-radius: 8px; overflow: hidden; }
+.day-bar i { position: absolute; top: 0; bottom: 0; }
+.day-hours { display: flex; justify-content: space-between; color: var(--c-muted); font-size: 0.74rem; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.day-legend { margin-top: 8px; }
+.ev-stats-4 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 480px) { .ev-stats-4 { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 620px) {
+  .controls-group, .controls-group .seg, .controls-group .day-picker { width: 100%; }
+  .controls-group .seg button { flex: 1; padding: 8px 4px; }
+  .day-picker > .day-current { flex: 1; }
+}

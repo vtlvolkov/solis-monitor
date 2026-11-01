@@ -8,7 +8,9 @@ export interface LivePayload {
 }
 
 export interface HistoryPayload {
-  range: string;
+  range?: string;
+  /** Only on /api/day/history: the local day and its bounds (epoch seconds). */
+  date?: string; start?: number; stop?: number; is_today?: boolean;
   every: string;
   agg: string;
   t: number[];

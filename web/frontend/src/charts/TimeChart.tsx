@@ -71,12 +71,12 @@ export function fitRange(lo: number | null, hi: number | null, unit: Unit, inclu
 }
 
 function stats(vals: (number | null)[]) {
-  let last: number | null = null, sum = 0, n = 0, max = -Infinity;
+  let last: number | null = null, sum = 0, n = 0, max = -Infinity, min = Infinity;
   for (const v of vals) {
     if (v == null) continue;
-    last = v; sum += v; n++; if (v > max) max = v;
+    last = v; sum += v; n++; if (v > max) max = v; if (v < min) min = v;
   }
-  return { last, mean: n ? sum / n : null, max: n ? max : null };
+  return { last, mean: n ? sum / n : null, max: n ? max : null, min: n ? min : null };
 }
 
 const hexA = (hex: string, a: number) => {
@@ -84,7 +84,7 @@ const hexA = (hex: string, a: number) => {
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-export function TimeChart({ data, series, height = 220, zeroLine = false, minY, maxY, font = 12, inline = false, fill = false }: {
+export function TimeChart({ data, series, height = 220, zeroLine = false, minY, maxY, font = 12, inline = false, fill = false, xRange, bands, showMin = false }: {
   data: HistoryPayload; series: SeriesDef[]; height?: number; zeroLine?: boolean; minY?: number; maxY?: number;
   /** Axis label size in px; the axis widths scale with it (for the TV page). */
   font?: number;
@@ -92,7 +92,18 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
   inline?: boolean;
   /** Take the height the parent leaves (the TV page keeps its columns level this way); `height` is then the fallback. */
   fill?: boolean;
+  /** Fixed time axis in epoch seconds (one exact day: always midnight to midnight, however much data there is). */
+  xRange?: [number, number];
+  /** Time spans to shade, in epoch seconds (outages on the day view). */
+  bands?: [number, number][];
+  /** Legend shows Min instead of Last (a finished day has no meaningful "last"). */
+  showMin?: boolean;
 }) {
+  const xr = useRef(xRange);
+  xr.current = xRange;
+  const shaded = useRef(bands);
+  shaded.current = bands;
+  const fixedX = !!xRange;
   const box = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const [cursorIdx, setCursorIdx] = useState<number | null>(null);
@@ -116,7 +127,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
       legend: { show: false },
       cursor: { drag: { x: false, y: false }, points: { size: 7 } },
       scales: {
-        x: { time: true },
+        x: fixedX ? { time: true, range: () => xr.current as [number, number] } : { time: true },
         y: { range: (_u, lo, hi) => fitRange(lo, hi, leftUnit, zeroLine, minY, maxY) },
         ...(rightUnit ? { r: { range: (_u: uPlot, lo: number, hi: number) => fitRange(lo, hi, rightUnit, zeroLine) } } : {}),
       },
@@ -138,6 +149,16 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
       ],
       hooks: {
         setCursor: [(u) => setCursorIdx(u.cursor.idx ?? null)],
+        drawClear: [(u) => {
+          const ctx = u.ctx;
+          ctx.save();
+          ctx.fillStyle = hexA(colors.grid, 0.14);
+          for (const [a, b] of shaded.current ?? []) {
+            const x0 = u.valToPos(a, 'x', true), x1 = u.valToPos(b, 'x', true);
+            ctx.fillRect(x0, u.bbox.top, Math.max(1, x1 - x0), u.bbox.height);
+          }
+          ctx.restore();
+        }],
         draw: zeroLine ? [(u) => {
           const y = u.valToPos(0, 'y', true);
           if (y < u.bbox.top || y > u.bbox.top + u.bbox.height) return;
@@ -160,9 +181,10 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
     return () => { ro.disconnect(); plot.current?.destroy(); plot.current = null; };
     // Rebuild only when the series definition changes; data updates go through setData.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, height, fill, zeroLine, leftUnit, rightUnit, font, lang]);
+  }, [series, height, fill, zeroLine, leftUnit, rightUnit, font, lang, fixedX]);
 
   useEffect(() => { plot.current?.setData(aligned); }, [aligned]);
+  useEffect(() => { plot.current?.redraw(); }, [bands]);
 
   const empty = data.t.length === 0;
   return (
@@ -176,7 +198,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
           ))}
         </div>
       ) : <table class="legend">
-        <thead><tr><th /><th>{cursorIdx != null ? t('Cursor') : ''}</th><th>{t('Last')}</th><th>{t('Mean')}</th><th>{t('Max')}</th></tr></thead>
+        <thead><tr><th /><th>{cursorIdx != null ? t('Cursor') : ''}</th><th>{showMin ? t('Min') : t('Last')}</th><th>{t('Mean')}</th><th>{t('Max')}</th></tr></thead>
         <tbody>
           {series.map((s, i) => {
             const vals = aligned[i + 1] as (number | null)[];
@@ -185,7 +207,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
               <tr key={s.key}>
                 <td><span class="swatch" style={{ background: s.color }} />{t(s.label)}</td>
                 <td>{cursorIdx != null ? fmt(vals[cursorIdx], s.unit) : ''}</td>
-                <td>{fmt(st.last, s.unit)}</td>
+                <td>{fmt(showMin ? st.min : st.last, s.unit)}</td>
                 <td>{fmt(st.mean, s.unit)}</td>
                 <td>{fmt(st.max, s.unit)}</td>
               </tr>

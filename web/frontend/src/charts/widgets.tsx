@@ -21,11 +21,12 @@ export function SocGauge({ soc }: { soc: number | null | undefined }) {
   );
 }
 
-export function Stat({ title, value, color, testId }: { title: string; value: string; color?: string; testId: string }) {
+export function Stat({ title, value, color, testId, sub }: { title: string; value: string; color?: string; testId: string; sub?: string }) {
   return (
     <div class="stat" data-testid={testId}>
       <span class="stat-title">{t(title)}</span>
       <span class="stat-value" style={color ? { color } : undefined}>{value}</span>
+      {sub != null && <span class="stat-sub">{sub}</span>}
     </div>
   );
 }
@@ -129,7 +130,7 @@ const DAILY_SERIES = [
 ] as const;
 
 /** Grouped daily kWh bars, hand-built SVG. Series can be toggled from the legend. */
-export function DailyChart({ data }: { data: DailyPayload }) {
+export function DailyChart({ data, selected, onPick }: { data: DailyPayload; selected?: string | null; onPick?: (day: string) => void }) {
   const [on, setOn] = useState<Record<string, boolean>>({
     load_consumption_today: true, grid_import_today: true, grid_export_today: false,
     battery_charge_today: false, battery_discharge_today: false, pv_energy_today: false,
@@ -177,8 +178,8 @@ export function DailyChart({ data }: { data: DailyPayload }) {
             );
           })}
           {days.map((d, i) => (
-            <g key={d.date} onMouseEnter={() => setHover(i)}>
-              <rect x={L + i * slot} y={T} width={slot} height={ph} fill={hover === i ? 'rgba(255,255,255,0.05)' : 'transparent'} />
+            <g key={d.date} onMouseEnter={() => setHover(i)} onClick={onPick ? () => onPick(d.date) : undefined} style={onPick ? { cursor: 'pointer' } : undefined}>
+              <rect x={L + i * slot} y={T} width={slot} height={ph} fill={d.date === selected ? 'rgba(229,168,35,0.22)' : hover === i ? 'rgba(255,255,255,0.05)' : 'transparent'} />
               {shown.map((s, j) => {
                 const v = d[s.key] ?? 0;
                 const h = (v / nice) * ph;
@@ -196,7 +197,7 @@ export function DailyChart({ data }: { data: DailyPayload }) {
             <strong>{hd.date}</strong>
             {shown.map((s) => <span key={s.key}><span class="swatch" style={{ background: s.color }} />{t(s.label)} {kwh(hd[s.key])}</span>)}
           </>
-        ) : <span class="muted">{t('Hover a day for values · {tz} days', { tz: data.tz })}</span>}
+        ) : <span class="muted">{t('Hover a day for values, click to open it · {tz} days', { tz: data.tz })}</span>}
       </div>
     </div>
   );

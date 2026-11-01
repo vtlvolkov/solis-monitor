@@ -12,6 +12,8 @@ class Repo(Protocol):
     def latest(self) -> tuple[datetime, dict[str, float]] | None: ...
     def history(self, fields: list[str], range_s: int, every: str, agg: str
                 ) -> tuple[list[datetime], dict[str, list[float | None]]]: ...
+    def history_between(self, fields: list[str], start: datetime, stop: datetime, every: str, agg: str
+                        ) -> tuple[list[datetime], dict[str, list[float | None]]]: ...
     def window_max(self, fields: list[str], start: datetime, every: str, stop: datetime | None = None
                    ) -> list[tuple[datetime, str, float]]: ...
     def first_time(self) -> datetime | None: ...
@@ -31,8 +33,18 @@ def latest_flux(bucket: str) -> str:
 
 
 def history_flux(bucket: str, fields: list[str], range_s: int, every: str, agg: str) -> str:
-    assert every in WINDOWS and agg in {"mean", "max", "min", "last"} and isinstance(range_s, int)
-    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) '
+    assert isinstance(range_s, int)
+    return _history_query(bucket, f"start: -{range_s}s", fields, every, agg)
+
+
+def history_between_flux(bucket: str, fields: list[str], start: datetime, stop: datetime, every: str, agg: str) -> str:
+    return _history_query(bucket, f'start: {start.strftime("%Y-%m-%dT%H:%M:%SZ")}, stop: {stop.strftime("%Y-%m-%dT%H:%M:%SZ")}',
+                          fields, every, agg)
+
+
+def _history_query(bucket: str, time_range: str, fields: list[str], every: str, agg: str) -> str:
+    assert every in WINDOWS and agg in {"mean", "max", "min", "last"}
+    return (f'from(bucket: "{bucket}") |> range({time_range}) '
             f'|> filter(fn: (r) => r._measurement == "solis" and ({_field_filter(fields)})) '
             f'|> group(columns: ["_field"]) '
             f'|> aggregateWindow(every: {every}, fn: {agg}, createEmpty: false) '
@@ -88,9 +100,14 @@ class InfluxRepo:
         return (ts, vals) if ts else None
 
     def history(self, fields, range_s, every, agg):
-        rows = sorted(((r.get_time(), r.values)
-                       for table in self.api.query(history_flux(self.bucket, fields, range_s, every, agg))
-                       for r in table.records), key=lambda row: row[0])
+        return self._history_rows(history_flux(self.bucket, fields, range_s, every, agg), fields)
+
+    def history_between(self, fields, start, stop, every, agg):
+        return self._history_rows(history_between_flux(self.bucket, fields, start, stop, every, agg), fields)
+
+    def _history_rows(self, query, fields):
+        rows = sorted(((r.get_time(), r.values) for table in self.api.query(query) for r in table.records),
+                      key=lambda row: row[0])
         times = [t for t, _ in rows]
         series = {f: [None if v.get(f) is None else float(v[f]) for _, v in rows] for f in fields}
         return times, series
