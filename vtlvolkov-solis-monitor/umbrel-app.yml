@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.3.0"
+version: "0.3.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,11 +36,9 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  see one exact day on the Charts and Events tabs
+  Events cards line up, and test releases can update
 
-  - Day picker next to the time ranges: arrows, and a calendar that marks the days with outages and alarms
-  - Charts: a day's energy, peaks, SOC range and outages, with charts from midnight to midnight and outages shaded; click a bar of the daily chart to open its day
-  - Events: a day's totals, a 24-hour timeline, and its outages and alarms
-  - Events: new layout, with a summary card next to Now and Power outages beside Alarm history
+  - Events: the two top cards now end on the same line, with or without a picked day
+  - A site on a test release (like v0.3.0-rc.1) now sees the Update button for a newer release, and can update to its own final version
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
