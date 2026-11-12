@@ -46,7 +46,17 @@ docker exec solis-influxdb influx auth list                    # find the old to
 docker exec solis-influxdb influx auth delete --id <old ID>
 ```
 
-The same value also authenticates the web service to the poller's internal API, so both pick it up from `.env`.
+The dashboard does not use this token when `INFLUX_READ_TOKEN` is set (see below), and the poller's internal API has its own secret (`CONTROL_TOKEN`), so neither needs changing.
+
+### The dashboard's tokens
+
+The dashboard only ever reads the database, so `install.sh` gives it a read-only InfluxDB token (`INFLUX_READ_TOKEN`) and a secret of its own for the poller's internal API (`CONTROL_TOKEN`) instead of the admin token. An install made before these existed keeps working with `INFLUX_TOKEN` for both; `solis-monitor status` says so, and one command adds them:
+
+```bash
+solis-monitor secure-tokens      # makes the read-only token in the running database, writes both to .env, restarts poller and web
+```
+
+Building from source with your own `.env`: run `docker exec solis-influxdb influx bucket list --name solis` for the bucket ID, then `docker exec solis-influxdb influx auth create --org home --read-bucket <ID> --description dashboard`, put the token in `.env` as `INFLUX_READ_TOKEN`, set `CONTROL_TOKEN` to any long random string, and `docker compose up -d`. A reset database (`docker compose down -v`) no longer knows the read-only token: clear `INFLUX_READ_TOKEN` and run `secure-tokens` again.
 
 ### Stop or reset
 

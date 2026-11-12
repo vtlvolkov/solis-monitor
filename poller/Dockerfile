@@ -15,4 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY --from=test /tested /tmp/tested
 ENV PYTHONUNBUFFERED=1
+# Liveness only: the poll loop keeps turning and the control API answers. An unreachable inverter never fails it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD python -c "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('CONTROL_PORT', '8780'), timeout=4).status == 200 else 1)"
 CMD ["python", "poller.py"]

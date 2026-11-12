@@ -107,9 +107,15 @@ class PollStatus:
     def __init__(self, clock=time.time):
         self.clock = clock
         self.last_ok: float | None = None
+        self.last_beat: float | None = None      # the poll loop's last iteration, successful or not
         self.error: str | None = None
         self.failures = 0
         self.lock = threading.Lock()
+
+    def beat(self) -> None:
+        """The poll loop came round once more (whatever the inverter answered). The container healthcheck watches this."""
+        with self.lock:
+            self.last_beat = self.clock()
 
     def ok(self) -> None:
         with self.lock:
@@ -131,3 +137,16 @@ class PollStatus:
             return {"connected": age is not None and age <= max(30.0, 3 * interval_s),
                     "last_ok_age_s": None if age is None else round(age, 1),
                     "error": self.error, "failures": self.failures}
+
+    def health(self, interval_s: float) -> dict:
+        """For the container healthcheck: `alive` is about the poller itself (its loop keeps turning), never about
+        the inverter, so an unplugged logger cannot make Docker, or an update, call the poller unhealthy."""
+        with self.lock:
+            now = self.clock()
+            beat = None if self.last_beat is None else now - self.last_beat
+            ok_age = None if self.last_ok is None else now - self.last_ok
+            return {"alive": beat is not None and beat <= max(60.0, 4 * interval_s),
+                    "loop_age_s": None if beat is None else round(beat, 1),
+                    "connected": ok_age is not None and ok_age <= max(30.0, 3 * interval_s),
+                    "last_ok_age_s": None if ok_age is None else round(ok_age, 1),
+                    "error": self.error}

@@ -36,6 +36,9 @@ class Settings:
     update_check_first_delay_s: float = 120.0
     mcp_token: str = field(default_factory=lambda: os.getenv("MCP_TOKEN", ""))
     poller_url: str = field(default_factory=lambda: os.getenv("POLLER_URL", "http://poller:8780"))
+    # The secret for the poller's internal API. Its own variable (CONTROL_TOKEN), so this container can run with a
+    # read-only InfluxDB token; installs from before it existed share INFLUX_TOKEN with the poller instead.
+    control_token: str = field(default_factory=lambda: os.getenv("CONTROL_TOKEN") or os.getenv("INFLUX_TOKEN", ""))
     # Electricity tariff for the cost card. No day price = not configured.
     tariff_currency: str = field(default_factory=lambda: os.getenv("TARIFF_CURRENCY", "UAH") or "UAH")
     tariff_day: float | None = field(default_factory=lambda: _float(os.getenv("TARIFF_DAY")))

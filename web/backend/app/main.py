@@ -65,7 +65,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
         from .influx import InfluxRepo
         repo = InfluxRepo(s)
     if control is None:
-        control = ControlClient(s.poller_url, s.influx_token)
+        control = ControlClient(s.poller_url, s.control_token)
 
     mcp_state: dict = {}
 

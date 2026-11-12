@@ -316,6 +316,7 @@ def main():
 
     while not stop.is_set():
         started = time.monotonic()
+        status.beat()                                     # for the container healthcheck (GET /health on the control port)
         if not inv.host:                                  # nothing to poll yet: not an outage, so no alert
             if not told_unset:
                 log.error("No inverter address yet: enter it on the dashboard's Settings page (General), "

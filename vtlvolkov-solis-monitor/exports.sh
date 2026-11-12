@@ -4,6 +4,9 @@
 # Secrets are derived from the device's seed, so they are stable across restarts and never stored in this repo.
 _solis_derived_password="$(derive_entropy "${app_entropy_identifier}-influx-password")"
 _solis_derived_token="$(derive_entropy "${app_entropy_identifier}-influx-token")"
+# The secret between the dashboard and the poller's internal API (never the database token). umbrelOS creates the
+# database on the first start with the admin token above, so the dashboard keeps using that one for reading there.
+export APP_VTLVOLKOV_SOLIS_MONITOR_CONTROL_TOKEN="$(derive_entropy "${app_entropy_identifier}-control-token")"
 
 # The few things the owner may change live in one plain file, written by hooks/pre-start on the first start:
 #   <umbrel>/app-data/vtlvolkov-solis-monitor/data/config/settings.env     (KEY=value lines; written by hooks/pre-start)

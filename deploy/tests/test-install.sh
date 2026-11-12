@@ -36,6 +36,10 @@ case "\$1" in
       config) if [[ "\$*" == *" -q"* ]]; then [[ -n "\${SHIM_CONFIG_FAIL:-}" ]] && { echo "error: invalid .env" >&2; exit 1; }; exit 0
               else exec "$REAL_DOCKER" "\$@"; fi ;;
       pull) cat "$T/inst/control/update-status.json" >> "$T/trace.log" 2>/dev/null ;;
+      exec) case "\$*" in                      # the database's CLI, for secure-tokens
+              *"influx bucket list"*) echo '[{"id": "0a1b2c3d4e5f6071", "name": "solis"}]' ;;
+              *"influx auth create"*) echo '{"id": "7", "description": "x", "token": "READ-ONLY-TOKEN-'"\${SHIM_TOKEN_N:-1}"'", "permissions": ["read:orgs/1/buckets/0a1b2c3d4e5f6071"]}' ;;
+            esac ;;
       *) : ;;
     esac ;;
   inspect)
@@ -100,6 +104,8 @@ check "settings-only auth by default" '[[ "$(env_of WEB_AUTH_SETTINGS_ONLY)" == 
 check "inverter writes stay off" '[[ "$(env_of CONTROL_ENABLED)" == false ]]'
 check "inverter, site, port, release set" '[[ "$(env_of INVERTER_HOST)" == 127.0.0.1 && "$(env_of SITE_NAME)" == Test && "$(env_of WEB_PORT)" == 18088 && "$(env_of SOLIS_VERSION)" == v9.9.9 ]]'
 check "fresh random secrets" '[[ "$(env_of INFLUX_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of INFLUX_PASSWORD)" =~ ^[0-9a-f]{32}$ && -z "$(env_of MCP_TOKEN)" ]]'
+check "the dashboard gets its own poller secret, not the database token" '[[ "$(env_of CONTROL_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of CONTROL_TOKEN)" != "$(env_of INFLUX_TOKEN)" ]]'
+check "a read-only database token is made for the dashboard and applied" '[[ "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-1 ]] && grep -q "^compose exec -T influxdb influx auth create --org home --read-bucket 0a1b2c3d4e5f6071 " "$T/docker.log" && grep -q "^compose up -d poller web$" "$T/docker.log"'
 check "images pulled before starting" 'grep -q "^pull ghcr.io/vtlvolkov/solis-monitor-poller:v9.9.9" "$T/docker.log" && grep -q "^pull ghcr.io/vtlvolkov/solis-monitor-web:v9.9.9" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
 if [[ -n "$REAL_DOCKER" ]] && "$REAL_DOCKER" compose version >/dev/null 2>&1; then
   cfg=$(cd "$T/inst" && "$REAL_DOCKER" compose config 2>&1)
@@ -156,6 +162,18 @@ SHIM2
 chmod +x "$T/bin/docker"
 out=$(upd status 2>&1); check "with a saved address it shows that one, and says where .env differs" '[[ "$out" == *"Inverter:  192.168.7.7  (saved on the dashboard; .env has 127.0.0.1)"* ]]'
 mv "$T/bin/docker.real" "$T/bin/docker"
+
+echo "solis-monitor secure-tokens"
+: > "$T/docker.log"; out=$(upd secure-tokens 2>&1); rc=$?
+check "nothing to do when both tokens exist" '[[ $rc -eq 0 && "$out" == *"Already done"* ]] && ! grep -q "^compose up" "$T/docker.log"'
+sed -i '/^CONTROL_TOKEN=/d; /^INFLUX_READ_TOKEN=/d' "$T/inst/.env"            # an install from before these existed
+: > "$T/docker.log"; out=$(SHIM_TOKEN_N=2 upd secure-tokens 2>&1); rc=$?
+check "an older install gets both tokens and a restart of poller and web" '[[ $rc -eq 0 && "$(env_of CONTROL_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-2 ]] && grep -q "^compose up -d poller web$" "$T/docker.log"'
+check ".env stays private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
+out=$(upd status 2>&1); check "status says the dashboard has a read-only token" '[[ "$out" == *"read-only token"* ]]'
+sed -i '/^INFLUX_READ_TOKEN=/d' "$T/inst/.env"
+out=$(upd status 2>&1); check "status points to secure-tokens while the admin token is in use" '[[ "$out" == *"solis-monitor secure-tokens"* ]]'
+upd secure-tokens >/dev/null 2>&1
 
 echo "solis-monitor reset-login"
 : > "$T/docker.log"; out=$(upd reset-login 2>&1)

@@ -321,6 +321,37 @@ def test_http_requires_token(server):
     assert inv.writes == []
 
 
+def test_health_needs_no_token_and_tells_nothing_else(server):
+    url, _ = server
+    status, body = call(url + "/health", token=None)             # the container healthcheck; no PollStatus wired = alive
+    assert status == 200 and body == {"alive": True}
+
+
+def test_health_follows_the_poll_loop_not_the_inverter():
+    import address
+    t = [1000.0]
+    ctl, *_ = make()
+    ctl.poll_status, ctl.poll_interval = address.PollStatus(clock=lambda: t[0]), 10
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_port}/health"
+    try:
+        assert call(url, token=None)[0] == 503                     # the loop never ran
+        ctl.poll_status.beat(); ctl.poll_status.failed(ConnectionError("cannot connect"))
+        status, body = call(url, token=None)
+        assert status == 200 and body["alive"] is True and body["connected"] is False   # unreachable inverter: still healthy
+        t[0] += 61
+        assert call(url, token=None)[0] == 503                     # the loop stopped turning
+    finally:
+        srv.shutdown()
+
+
+def test_control_token_has_its_own_variable_and_falls_back():
+    assert Config({"INFLUX_TOKEN": "admin"}).token == "admin"
+    assert Config({"INFLUX_TOKEN": "admin", "CONTROL_TOKEN": "ctl"}).token == "ctl"
+    assert Config({"INFLUX_TOKEN": "admin", "CONTROL_TOKEN": ""}).token == "admin"
+
+
 def test_http_get_and_post(server):
     url, inv = server
     status, body = call(url + "/settings")

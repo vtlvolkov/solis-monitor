@@ -25,7 +25,7 @@ The page also shows read-only values: the backup-output and off-grid floors, rat
 
 Every write except 43110/43117/43118 uses a multi-register write (FC16), because newer Solis firmware silently ignores some single-register writes. Register addresses were checked against this inverter with read-only probes (this unit uses the six-slot Time-of-Use layout). They were not tested by writing, so make the first change of each kind while watching the inverter display or SolisCloud.
 
-The poller stays the only Modbus client, and it follows the protocol's limits: at most 50 registers per request and at least 300 ms between requests. The web app forwards changes to the poller's internal API (`:8780`, Docker network only, never published), authenticated with `INFLUX_TOKEN`.
+The poller stays the only Modbus client, and it follows the protocol's limits: at most 50 registers per request and at least 300 ms between requests. The web app forwards changes to the poller's internal API (`:8780`, Docker network only, never published), authenticated with `CONTROL_TOKEN` (installs from before it existed use `INFLUX_TOKEN` for this).
 
 **Changes are refused until you finish these steps:**
 

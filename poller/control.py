@@ -3,7 +3,9 @@ Inverter settings control, used by the web dashboard's Settings page.
 
 Served on an internal HTTP port (CONTROL_PORT, Docker network only, never published)
 so the poller stays the only Modbus client. Every request needs the shared secret
-(Authorization: Bearer <INFLUX_TOKEN>), which only the web container has.
+(Authorization: Bearer <CONTROL_TOKEN>, or INFLUX_TOKEN where that is not set), which only
+the web container has. The one exception is GET /health, the container healthcheck: it says
+whether the poll loop is alive and nothing more.
 
 Safety model
 ------------
@@ -82,7 +84,9 @@ class Config:
         self.max_a = {"max_charge_current_a": float(env.get("MAX_CHARGE_CURRENT_A", "0")),
                       "max_discharge_current_a": float(env.get("MAX_DISCHARGE_CURRENT_A", "0"))}
         self.min_interval = float(env.get("MIN_WRITE_INTERVAL_S", "60"))
-        self.token = env.get("INFLUX_TOKEN", "")
+        # The web service's secret for this API. Its own variable, so the web container need not hold the InfluxDB
+        # admin token; installs made before it existed have only INFLUX_TOKEN, which both sides then fall back to.
+        self.token = env.get("CONTROL_TOKEN") or env.get("INFLUX_TOKEN", "")
         self.port = int(env.get("CONTROL_PORT", "8780"))
         self.tz = env.get("TZ") or "Europe/Kyiv"
 
@@ -223,6 +227,12 @@ class Controller:
         return {**after, "applied": summary}
 
     # ------------------------------------------------------------------ where the logger is (the app's own setting)
+    def health(self) -> dict:
+        """Liveness for the container healthcheck: the poll loop still turns (the inverter may well be unreachable)."""
+        if not self.poll_status:
+            return {"alive": True}
+        return self.poll_status.health(self.poll_interval)
+
     def inverter_address(self) -> dict:
         if self.addresses is None:
             raise ControlError(503, "The poller is still starting.")
@@ -504,6 +514,9 @@ def make_handler(ctl: Controller):
             return body
 
         def do_GET(self):
+            if self.path == "/health":                    # the container healthcheck: no secret, nothing beyond liveness
+                h = ctl.health()
+                return self._send(200 if h["alive"] else 503, h)
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
                       "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity,
                       "/inverter": ctl.inverter_address}

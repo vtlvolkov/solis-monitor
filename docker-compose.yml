@@ -40,7 +40,9 @@ services:
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_ORG: ${INFLUX_ORG}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
-      # Settings page: internal control API on :8780 (Docker network only, not published)
+      # Settings page: internal control API on :8780 (Docker network only, not published). CONTROL_TOKEN is the secret
+      # the web service presents to it; installs from before it existed have only INFLUX_TOKEN, used by both sides then.
+      CONTROL_TOKEN: ${CONTROL_TOKEN:-${INFLUX_TOKEN}}
       CONTROL_ENABLED: ${CONTROL_ENABLED:-false}
       CURRENT_SCALE: ${CURRENT_SCALE:-0.1}
       MAX_CHARGE_CURRENT_A: ${MAX_CHARGE_CURRENT_A:-0}
@@ -69,13 +71,15 @@ services:
       - "${WEB_PORT:-8088}:8088"
     environment:
       INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      # The dashboard only reads: a read-only token (`solis-monitor secure-tokens` makes one) when .env has it, else the admin token
+      INFLUX_TOKEN: ${INFLUX_READ_TOKEN:-${INFLUX_TOKEN}}
       INFLUX_ORG: ${INFLUX_ORG}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       WEB_BASIC_AUTH: ${WEB_BASIC_AUTH:-}
       WEB_AUTH_SETTINGS_ONLY: ${WEB_AUTH_SETTINGS_ONLY:-}
       SITE_NAME: ${SITE_NAME:-}
       POLLER_URL: http://poller:8780
+      CONTROL_TOKEN: ${CONTROL_TOKEN:-${INFLUX_TOKEN}}
       MCP_TOKEN: ${MCP_TOKEN:-}
       TARIFF_CURRENCY: ${TARIFF_CURRENCY:-UAH}
       TARIFF_DAY: ${TARIFF_DAY:-}

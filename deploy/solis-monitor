@@ -8,6 +8,7 @@
 #   solis-monitor logs [-f] [service]    recent log lines (poller, web or influxdb); -f keeps following
 #   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
 #   solis-monitor reset-login            forgot the dashboard password you set? go back to the one in .env
+#   solis-monitor secure-tokens          give the dashboard a read-only database token and its own poller secret (installs do this)
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
@@ -30,6 +31,7 @@ set_env() {          # set_env NAME VALUE: replace the NAME= line, or add it
   if grep -qE "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
 }
 die() { echo "solis-monitor: $*" >&2; exit 1; }
+random_hex() { if command -v openssl >/dev/null; then openssl rand -hex "$1"; else head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; fi; }
 as_root() {         # as_root [-u USER] command...
   local who=()
   if [[ "${1:-}" == -u ]]; then who=(-u "$2"); shift 2; fi
@@ -95,9 +97,61 @@ cmd_status() {
   else
     echo "Updates:   manual (solis-monitor update)"
   fi
+  if [[ -n "$(env_value CONTROL_TOKEN)" && -n "$(env_value INFLUX_READ_TOKEN)" ]]; then
+    echo "Tokens:    the dashboard reads the database with a read-only token"
+  else
+    echo "Tokens:    the dashboard still uses the database admin token (solis-monitor secure-tokens)"
+  fi
+  poller_health
   compose ps --format 'table {{.Name}}\t{{.Status}}'
   echo "--- poller, last lines ---"
   compose logs --tail 5 poller 2>&1 || true
+}
+
+poller_health() {    # one line from the poller's own healthcheck endpoint (liveness, plus whether the inverter answers)
+  local h
+  h="$(compose exec -T poller python - 2>/dev/null <<'PY' || true
+import urllib.request, urllib.error
+try:
+    print(urllib.request.urlopen("http://127.0.0.1:8780/health", timeout=4).read().decode())
+except urllib.error.HTTPError as e:
+    print(e.read().decode())
+except Exception:
+    pass
+PY
+)"
+  case "$h" in
+    *'"alive": true'*'"connected": true'*)
+      echo "Poller:    reading the inverter (last reading $(printf '%s' "$h" | sed -n 's/.*"last_ok_age_s": *\([0-9.]*\).*/\1/p') s ago)" ;;
+    *'"alive": true'*)
+      echo "Poller:    running, but no reading from the inverter: $(printf '%s' "$h" | sed -n 's/.*"error": *"\([^"]*\)".*/\1/p; s/.*"error": *null.*/not tried yet/p' | sed -n 1p)" ;;
+    *'"alive": false'*)
+      echo "Poller:    its poll loop is stuck (solis-monitor logs poller)" ;;
+  esac
+}
+
+# Least privilege for the dashboard container: its own secret for the poller's internal API (CONTROL_TOKEN) and a
+# read-only InfluxDB token (INFLUX_READ_TOKEN) instead of the database's admin token, which it never needed.
+# install.sh runs this once the database is up; an install made before these existed runs it once by hand.
+cmd_secure_tokens() {
+  local changed="" org bucket id token
+  if [[ -z "$(env_value CONTROL_TOKEN)" ]]; then
+    set_env CONTROL_TOKEN "$(random_hex 32)"; changed=1
+    echo "CONTROL_TOKEN: the dashboard and the poller now share their own secret, not the database token."
+  fi
+  if [[ -z "$(env_value INFLUX_READ_TOKEN)" ]]; then
+    org="$(env_value INFLUX_ORG)"; bucket="$(env_value INFLUX_BUCKET)"
+    id="$(compose exec -T influxdb influx bucket list --org "$org" --name "$bucket" --json 2>/dev/null | sed -n 's/.*"id": *"\([0-9a-f]*\)".*/\1/p' | sed -n 1p || true)"
+    [[ -n "$id" ]] || die "could not find the database bucket '$bucket' (is the stack running? solis-monitor status)"
+    token="$(compose exec -T influxdb influx auth create --org "$org" --read-bucket "$id" --description "Solis Monitor dashboard (read-only)" --json 2>/dev/null | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | sed -n 1p || true)"
+    [[ -n "$token" ]] || die "the database did not create a read-only token (try: docker compose logs influxdb)"
+    set_env INFLUX_READ_TOKEN "$token"; changed=1
+    echo "INFLUX_READ_TOKEN: the dashboard now reads the database with a read-only token."
+  fi
+  if [[ -z "$changed" ]]; then echo "Already done: the dashboard has its own tokens."; return 0; fi
+  chmod 600 .env
+  compose up -d poller web
+  echo "Applied."
 }
 
 cmd_update() {
@@ -161,6 +215,8 @@ cmd_update() {
   if wait_healthy; then
     install -m 755 "$tmp/solis-monitor" "$SELF.new" && mv "$SELF.new" "$SELF"      # mv: the running copy is not overwritten in place
     echo "Updated to $target."
+    [[ -n "$(env_value CONTROL_TOKEN)" && -n "$(env_value INFLUX_READ_TOKEN)" ]] \
+      || echo "The dashboard still reads the database with the admin token; give it a read-only one with: solis-monitor secure-tokens"
     refresh_bridge; report ok "Updated to $target"
     notify "🚀 Solis Monitor updated to $target"
   else
@@ -178,13 +234,19 @@ restore() {          # put the previous compose file and version back
   set_env SOLIS_VERSION "$1"
 }
 
-wait_healthy() {     # the web container's healthcheck passes and the poller stays up
+healthy() {          # healthy NAME: the container's own healthcheck passes (an image without one: it is running)
+  local h
+  h="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$1" 2>/dev/null)"
+  [[ "$h" == healthy ]] || { [[ "$h" == none && "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == "true" ]]; }
+}
+
+wait_healthy() {     # the web and poller containers' healthchecks pass (the poller's is liveness only: an unreachable
+                     # inverter never fails it, so a release is not rolled back because the logger is off) and the poller stays up
   local _ n=0 tries="${SOLIS_HEALTH_TRIES:-40}"
   for _ in $(seq 1 "$tries"); do
     n=$((n + 1))
     report running "Waiting for the new version to start" $((75 + 23 * n / tries))      # no-op unless the dashboard asked
-    if [[ "$(docker inspect -f '{{.State.Health.Status}}' solis-web 2>/dev/null)" == "healthy" ]] \
-       && [[ "$(docker inspect -f '{{.State.Running}}' solis-poller 2>/dev/null)" == "true" ]]; then
+    if healthy solis-web && healthy solis-poller; then
       sleep "${SOLIS_SETTLE_S:-10}"             # a crashing poller restarts within seconds
       [[ "$(docker inspect -f '{{.State.Running}}' solis-poller 2>/dev/null)" == "true" ]] && return 0
     fi
@@ -348,8 +410,9 @@ case "${1:-}" in
   apply) shift; cmd_apply "${1:-}" ;;
   dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
   reset-login) cmd_reset_login ;;
+  secure-tokens) cmd_secure_tokens ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,13p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

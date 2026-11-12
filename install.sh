@@ -336,6 +336,7 @@ set_var TZ "$TZ_NAME"
 set_var WEB_PORT "$PORT"
 set_var INFLUX_PASSWORD "$(random_hex 16)"
 set_var INFLUX_TOKEN "$(random_hex 32)"
+set_var CONTROL_TOKEN "$(random_hex 32)"      # dashboard -> poller API; the read-only database token is made once the database runs
 set_var WEB_BASIC_AUTH "${USER_NAME}:${PASS}"
 set_var WEB_AUTH_SETTINGS_ONLY "$([[ -n "$PROTECT_ALL" ]] || echo true)"
 set_var CONTROL_ENABLED false
@@ -349,6 +350,8 @@ set_var UPDATE_CHECK_HOURS "$([[ -n "$NO_UPDATE_CHECK" ]] && echo 0 || echo 6)"
 step "Starting"
 cd "$DIR"
 docker compose up -d
+# Least privilege: the dashboard only reads the database, so it gets a read-only token (which only the running database can make).
+"$DIR/solis-monitor" secure-tokens || warn "could not create the read-only database token; the dashboard uses the admin token until you run: solis-monitor secure-tokens"
 if [[ -z "$TEST_MODE" ]]; then
   ln -sf "$DIR/solis-monitor" /usr/local/bin/solis-monitor
   if [[ -n "$AUTO_UPDATES" ]]; then "$DIR/solis-monitor" auto-update on; fi

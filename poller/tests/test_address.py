@@ -94,6 +94,20 @@ def test_poll_status():
     assert st.info(10)["last_ok_age_s"] is None and st.info(10)["error"] is None
 
 
+def test_poll_status_health_is_about_the_loop():
+    t = [1000.0]
+    st = address.PollStatus(clock=lambda: t[0])
+    assert st.health(10)["alive"] is False and st.health(10)["loop_age_s"] is None
+    st.beat(); st.failed(ConnectionError("no route to host")); t[0] += 50
+    h = st.health(10)
+    assert h["alive"] is True and h["loop_age_s"] == 50.0 and h["connected"] is False and "no route" in h["error"]
+    t[0] += 11                                                                      # 61 s without an iteration at 10 s
+    assert st.health(10)["alive"] is False
+    st.beat(); st.ok()
+    assert st.health(10) == {"alive": True, "loop_age_s": 0.0, "connected": True, "last_ok_age_s": 0.0, "error": None}
+    assert st.health(60)["alive"] is True                                           # a long interval widens the window
+
+
 # ---------------------------------------------------------------- scanning
 def test_networks_to_scan():
     for text, prefix in (("192.168.0", "192.168.0"), ("192.168.0.0/24", "192.168.0"), ("10.0.5.77", "10.0.5"), ("172.16.4", "172.16.4")):

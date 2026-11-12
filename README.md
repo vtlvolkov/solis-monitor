@@ -188,7 +188,7 @@ If you installed into another folder (`--dir`), use that folder instead of `/opt
 
 - **The dashboard can only read by default.** Changing inverter settings needs `CONTROL_ENABLED=true`, a password, a hard limit for charge and discharge current and a confirmation on every change. Read [Changing inverter settings](docs/settings.md) first: those writes go to a real inverter, and only the S6-EH1P register map has been checked.
 - **Keep the dashboard on your home network.** The inverter's Modbus port has no authentication, and the dashboard uses plain HTTP. For access from outside, use a VPN such as [Tailscale](https://tailscale.com), never port forwarding.
-- Secrets (database token, passwords) are generated at install time and stay in `/opt/solis-monitor/.env`, readable only by root.
+- Secrets (database token, passwords) are generated at install time and stay in `/opt/solis-monitor/.env`, readable only by root. The dashboard reads the database with a read-only token and never holds the admin token (`solis-monitor secure-tokens` adds that to an older install).
 - The Settings password protects changes. Add `--protect-dashboard` to the installer (or set `WEB_AUTH_SETTINGS_ONLY=` to empty in `.env`) to ask for it on every page.
 
 ## Contributing
