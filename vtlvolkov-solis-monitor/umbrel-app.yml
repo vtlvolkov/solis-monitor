@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.4.1"
+version: "0.5.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,9 +36,9 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  CSV export fix, and a tidier Backup tab on umbrelOS
+  restore a backup from the dashboard
 
-  - Export CSV from the Charts page failed (the browser saved an error as true.json): the default column groups were more than the API accepted. Any number of columns can be exported now, and the files get their proper names
-  - Settings → Backup on umbrelOS now only says that backups are handled by umbrelOS, instead of showing hints meant for installer-based installs
+  - Settings → Backup: Restore… next to an archive puts it back from the dashboard. By default the current state is backed up first, so a wrong restore can be undone; you type "restore" to confirm. The dashboard restarts and comes back with the backup's settings (including its password, if it was different)
+  - The Backup tab's footer points at Restore… as well as the server command
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
