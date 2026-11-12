@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.4.0"
+version: "0.4.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,9 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  backups and CSV export
+  CSV export fix, and a tidier Backup tab on umbrelOS
 
-  - Settings → Backup: make a backup of the whole site (history, saved settings, configuration) from the dashboard, download it, choose the folder on the server it goes to (a USB drive or network share, for example) and how many to keep, and remove old ones. Existing installs: run `solis-monitor update`, then `solis-monitor dashboard-updates on` once more, to enable the tab's helper
-  - On the server: `solis-monitor backup` and `solis-monitor restore FILE` (also onto a fresh install)
-  - Export to CSV: Charts → Export CSV (period, step from 10 s to one row per day, column groups, standard or Excel format with semicolons and a decimal comma); one-click Export CSV on the Events and Cost pages
+  - Export CSV from the Charts page failed (the browser saved an error as true.json): the default column groups were more than the API accepted. Any number of columns can be exported now, and the files get their proper names
+  - Settings → Backup on umbrelOS now only says that backups are handled by umbrelOS, instead of showing hints meant for installer-based installs
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
