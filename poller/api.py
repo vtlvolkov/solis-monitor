@@ -13,7 +13,7 @@ import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from control import Controller, ControlError
+from control import ControlError, Controller
 
 log = logging.getLogger("solis-control")
 
@@ -56,7 +56,7 @@ def make_handler(ctl: Controller):
             try:
                 body = json.loads(self.rfile.read(length))
             except ValueError:
-                raise ControlError(400, "body must be JSON")
+                raise ControlError(400, "body must be JSON") from None
             if not isinstance(body, dict):
                 raise ControlError(400, "body must be a JSON object")
             return body

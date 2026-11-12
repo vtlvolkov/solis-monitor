@@ -16,7 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .context import Context, InfluxUnavailable
 from .control import ControlClient
-from .routes import backups, data, export, grid, settings as settings_routes, updates
+from .routes import backups, data, export, grid, updates
+from .routes import settings as settings_routes
 
 log = logging.getLogger("solis-web")
 

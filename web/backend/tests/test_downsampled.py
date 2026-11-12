@@ -1,7 +1,6 @@
 """The web side of downsampling: which bucket a query reads, and the fallback to raw."""
 from datetime import datetime, timedelta, timezone
 
-from app import influx
 from app.config import Settings
 from app.influx import InfluxRepo, history_between_flux, history_flux, use_downsampled, window_max_flux
 

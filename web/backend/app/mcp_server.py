@@ -3,9 +3,9 @@ Read-only MCP server for agents (e.g. Hermes Agent), served at /mcp with its own
 (MCP_TOKEN). It reuses the dashboard's data functions and has no tools that change anything:
 settings are changed only by a person on the dashboard's Settings page.
 """
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -119,7 +119,7 @@ def build_mcp(api: DataApi) -> FastMCP:
         rng = _range_for(max(1.0, min(float(hours), 720.0)))
         # InfluxDB aggregates into windows coarse enough for MAX_POINTS, so no peak is dropped by sampling
         h = await api.history([field], rng, auto_window(RANGES[rng], MAX_POINTS), agg)
-        pts = [(t, v) for t, v in zip(h["t"], h["series"][field]) if v is not None]
+        pts = [(t, v) for t, v in zip(h["t"], h["series"][field], strict=True) if v is not None]
         vals = [v for _, v in pts]
         return {
             "field": field, "range": rng, "window": h["every"], "agg": agg,

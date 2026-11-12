@@ -90,7 +90,7 @@ class TariffStore:
             versions = [(_parse_from(v["from"]), Tariff.from_dict(v)) for v in raw]
             starts = [s for s, _ in versions]
             if (not versions or starts[0] is not None or any(s is None for s in starts[1:])
-                    or any(x >= y for x, y in zip(starts[1:], starts[2:]))):
+                    or any(x >= y for x, y in zip(starts[1:], starts[2:], strict=False))):
                 raise ValueError("versions are not in time order, or the first one does not start at the beginning")
             return versions
         except (OSError, ValueError, KeyError, TypeError) as exc:

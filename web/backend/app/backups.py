@@ -6,7 +6,7 @@ and read the status file the host writes. `solis-monitor backup --from-dashboard
 list and download it. An archive holds every password and token: the download sits behind the Settings login,
 and the page says what it contains. Nothing read from either folder is trusted.
 """
-from __future__ import annotations      # the method named list() must not shadow the list[...] annotations
+from __future__ import annotations  # the method named list() must not shadow the list[...] annotations
 
 import os
 import re

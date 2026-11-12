@@ -7,7 +7,6 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import api as control_api
-import control
 import rawread
 from control import Config, ControlError, Controller
 

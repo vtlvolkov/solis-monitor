@@ -216,14 +216,14 @@ class Inverter:
         with self.session() as c:
             rr = c.read_holding_registers(reg, count=count, **{UNIT_KW: self.unit})
             if rr.isError():
-                raise IOError(f"read holding {reg} failed: {rr}")
+                raise OSError(f"read holding {reg} failed: {rr}")
             return rr.registers
 
     def read_input(self, reg, count=1):
         with self.session() as c:
             rr = c.read_input_registers(reg, count=count, **{UNIT_KW: self.unit})
             if rr.isError():
-                raise IOError(f"read input {reg} failed: {rr}")
+                raise OSError(f"read input {reg} failed: {rr}")
             return rr.registers
 
     def raw_read(self, function, address, count):
@@ -236,7 +236,7 @@ class Inverter:
                 return list(rr.registers), None
             code = getattr(rr, "exception_code", None)
             if not isinstance(code, int):
-                raise IOError(f"read {address}..{address + count - 1} failed: {rr}")
+                raise OSError(f"read {address}..{address + count - 1} failed: {rr}")
             return None, code
 
     def write_holding(self, reg, value):
@@ -245,14 +245,14 @@ class Inverter:
             if rr.isError():                 # some firmwares only accept FC16
                 rr = c.write_registers(reg, [value], **{UNIT_KW: self.unit})
             if rr.isError():
-                raise IOError(f"write {reg}={value} failed: {rr}")
+                raise OSError(f"write {reg}={value} failed: {rr}")
 
     def write_block(self, reg, values):
         """FC16 (write multiple registers). Newer Solis firmware ignores some FC06 writes."""
         with self.session() as c:
             rr = c.write_registers(reg, list(values), **{UNIT_KW: self.unit})
             if rr.isError():
-                raise IOError(f"write {reg}..{reg + len(values) - 1} failed: {rr}")
+                raise OSError(f"write {reg}..{reg + len(values) - 1} failed: {rr}")
 
     def close(self):
         with self.lock:

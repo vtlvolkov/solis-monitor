@@ -214,7 +214,7 @@ class Controller:
         try:
             after = self.devices.set_capacity(kwh)
         except ValueError as exc:
-            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
         summary = (f"Battery capacity: {before['capacity_kwh'] if before['capacity_kwh'] is not None else '--'}"
                    f" → {after['capacity_kwh'] if after['capacity_kwh'] is not None else '--'} kWh"
                    + ("" if after["source"] == "saved" else f" (from {after['source']})"))
@@ -243,7 +243,7 @@ class Controller:
         try:
             after = self.addresses.set(host, port, unit)
         except ValueError as exc:
-            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
         self.inv.reconfigure(after["host"], after["port"], after["unit"])
         if self.poll_status:
             self.poll_status.reset()
@@ -260,7 +260,7 @@ class Controller:
         try:
             prefix = scan.parse_network(network)
         except ValueError as exc:
-            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".")
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
         if not self.scan_lock.acquire(blocking=False):
             raise ControlError(409, "A scan is already running.")
         try:
@@ -279,7 +279,7 @@ class Controller:
         try:
             function, address, count = rawread.check(function, address, count)
         except ValueError as exc:
-            raise ControlError(400, str(exc) + ".")
+            raise ControlError(400, str(exc) + ".") from exc
         started = time.monotonic()
         registers, code = self.inv.raw_read(function, address, count)
         out = {"function": function, "function_name": rawread.FUNCTIONS[function], "address": address, "count": count,

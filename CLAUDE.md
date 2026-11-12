@@ -8,7 +8,7 @@ A Docker Compose stack that monitors a Solis S6-EH1P hybrid inverter over Modbus
 
 ## Commands
 
-No linter or CI. Everything runs through Docker Compose (requires a filled-in `.env`, see `.env.example`):
+Python is linted with ruff (`poller/ruff.toml` and `web/backend/ruff.toml`, identical: pyflakes, import order, bugbear, pyupgrade, simplifications; no line-length rule; tests may use semicolons and lambdas). It runs in CI (`lint` job), in both Dockerfiles' test stages (so a lint error fails `docker compose build`), and locally with `uvx ruff check poller web/backend` (plus `uvx ruff check deploy --config poller/ruff.toml`); `--fix` applies the safe fixes. Everything else runs through Docker Compose (requires a filled-in `.env`, see `.env.example`):
 
 ```bash
 docker compose up -d --build           # full stack
@@ -17,7 +17,7 @@ docker compose up -d --build web       # after editing web/
 docker compose logs -f poller
 ```
 
-Tests (they also run inside both Dockerfiles' test stages, so a failing test fails `docker compose build`, and in `.github/workflows/test.yml`):
+Tests (they also run inside both Dockerfiles' test stages, after ruff, so a failing test fails `docker compose build`, and in `.github/workflows/test.yml`):
 
 ```bash
 cd poller && uv run --no-project --python 3.12 --with-requirements requirements-dev.txt pytest          # control + device decoding

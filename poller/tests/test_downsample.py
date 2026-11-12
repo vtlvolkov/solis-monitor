@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import downsample
 from downsample import Downsampler, aggregation_flux, task_flux
 
 T0 = datetime(2026, 11, 12, 18, 0, tzinfo=timezone.utc)

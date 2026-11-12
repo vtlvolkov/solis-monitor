@@ -160,7 +160,7 @@ def build(ctx: Context) -> APIRouter:
             "events": call(repo.events, max(1, range_s // 86400) + 31),
         }
         results = await asyncio.gather(*jobs.values())
-        rows = dict(zip(jobs, results))
+        rows = dict(zip(jobs, results, strict=True))
         events = rows.pop("events")
         body = shape(rows, limits, t - timedelta(seconds=range_s), t, s.tz, events, rng)
         cache[key] = {"at": t, "body": body}

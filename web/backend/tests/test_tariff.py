@@ -94,7 +94,8 @@ def test_changes_survive_a_restart_and_the_file_wins_over_env(tmp_path):
     again = TariffStore(Tariff(day=99.0), path)                        # .env changed afterwards: ignored, the file is the truth
     assert again.source == "saved"
     assert again.at(eff - timedelta(seconds=1)) == OLD and again.at(eff) == NEW
-    assert json.load(open(path))["versions"][0]["from"] is None
+    with open(path) as f:
+        assert json.load(f)["versions"][0]["from"] is None
     assert not os.path.exists(path + ".tmp")
 
 

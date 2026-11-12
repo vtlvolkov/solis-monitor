@@ -8,11 +8,21 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import api
-import control
-from control import (REG_BACKUP_SOC, REG_CLOCK, REG_FORCE_CHARGE_SOC, REG_MAX_CHARGE_A, REG_MAX_CHARGE_SOC,
-                     REG_MAX_DISCHARGE_A, REG_OVERDISCHARGE_SOC,
-                     REG_STORAGE_SWITCH, REG_TOU_CHARGE, REG_TOU_DISCHARGE, REG_TOU_SWITCH, Config, ControlError,
-                     Controller)
+from control import (
+    REG_BACKUP_SOC,
+    REG_CLOCK,
+    REG_FORCE_CHARGE_SOC,
+    REG_MAX_CHARGE_A,
+    REG_MAX_CHARGE_SOC,
+    REG_OVERDISCHARGE_SOC,
+    REG_STORAGE_SWITCH,
+    REG_TOU_CHARGE,
+    REG_TOU_DISCHARGE,
+    REG_TOU_SWITCH,
+    Config,
+    ControlError,
+    Controller,
+)
 
 # Holding registers read from the live S6-EH1P on 2026-10-18.
 DUMP = {
@@ -247,7 +257,7 @@ def test_tou_writes_slot_block_then_switch():
     assert inv.writes == [("fc16", base, [100, 300, 490, 23, 0, 7, 0]),   # voltage kept
                           ("fc16", REG_TOU_SWITCH, [0b11])]
     assert r["verified"] is True
-    assert "Charge slot 2: 00:00-00:00 50 A 50% (off) -> 23:00-07:00 30 A 100% (on)" == r["applied"]
+    assert r["applied"] == "Charge slot 2: 00:00-00:00 50 A 50% (off) -> 23:00-07:00 30 A 100% (on)"
 
 
 def test_tou_discharge_slot_and_floor():

@@ -49,8 +49,8 @@ def scan_hosts(hosts, port: int = 502, unit: int = 1, connect_timeout: float = 0
     """The hosts of `hosts` that have `port` open and answer Modbus, in the order given."""
     hosts = list(hosts)
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        opened = [h for h, ok in zip(hosts, pool.map(lambda h: _open(h, port, connect_timeout), hosts)) if ok]
-        return [h for h, ok in zip(opened, pool.map(lambda h: probe(h, port, unit), opened)) if ok]
+        opened = [h for h, ok in zip(hosts, pool.map(lambda h: _open(h, port, connect_timeout), hosts), strict=True) if ok]
+        return [h for h, ok in zip(opened, pool.map(lambda h: probe(h, port, unit), opened), strict=True) if ok]
 
 
 def scan_network(network: str, port: int = 502, unit: int = 1, **kw) -> list[str]:

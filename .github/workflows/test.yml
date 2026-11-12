@@ -5,6 +5,15 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/ruff-action@v3
+        with: { version: "0.17.5", args: "check poller web/backend" }
+      - uses: astral-sh/ruff-action@v3
+        with: { version: "0.17.5", args: "check deploy --config poller/ruff.toml" }
+
   poller:
     runs-on: ubuntu-24.04
     defaults: { run: { working-directory: poller } }

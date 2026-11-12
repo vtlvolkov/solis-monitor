@@ -8,8 +8,18 @@ from fastapi.testclient import TestClient
 from app import updates
 from app.config import Settings
 from app.main import create_app
-from app.updates import (Bridge, RateLimited, ReleaseFeed, ReleaseLookupError, delay_after_limit, fetch_latest_release,
-                         is_installed_release, is_newer, next_delay, parse_version)
+from app.updates import (
+    Bridge,
+    RateLimited,
+    ReleaseFeed,
+    ReleaseLookupError,
+    delay_after_limit,
+    fetch_latest_release,
+    is_installed_release,
+    is_newer,
+    next_delay,
+    parse_version,
+)
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 AUTH = ("me", "pw")

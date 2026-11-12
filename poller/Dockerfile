@@ -3,9 +3,9 @@ FROM --platform=$BUILDPLATFORM python:3.12-slim AS test
 WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
-COPY *.py pytest.ini ./
+COPY *.py pytest.ini ruff.toml ./
 COPY tests ./tests
-RUN python -m pytest -q -p no:cacheprovider && touch /tested
+RUN ruff check . && python -m pytest -q -p no:cacheprovider && touch /tested
 
 # --- runtime ------------------------------------------------------------------------
 FROM python:3.12-slim

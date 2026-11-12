@@ -1,0 +1,23 @@
+# Lint rules for the Python code (the same file sits in poller/ and web/backend/; CI also runs it over deploy/).
+# No line-length rule: the code uses long lines on purpose where a table or a message reads better that way.
+target-version = "py312"
+line-length = 160
+exclude = [".venv", "node_modules", "__pycache__"]
+
+[lint]
+select = [
+  "E4", "E7", "E9", "F",   # pyflakes and the pycodestyle errors that are real mistakes
+  "I",                     # import order
+  "B",                     # bugbear: likely bugs (mutable defaults, raise without from, zip without strict ...)
+  "UP",                    # modern syntax for the Python this runs on
+  "SIM",                   # simplifications
+  "RUF100",                # no stale "noqa" comments
+]
+ignore = [
+  "B008",     # FastAPI's Query(...) in defaults is the framework's idiom
+  "SIM102", "SIM105", "SIM108",   # nested ifs, try/except-pass and ternaries are a matter of taste here
+  "UP017",    # datetime.timezone.utc is spelled out on purpose where the zone matters
+]
+
+[lint.per-file-ignores]
+"**/tests/*" = ["E702", "E731", "B011"]    # tests put short statements on one line and use lambdas as fixtures

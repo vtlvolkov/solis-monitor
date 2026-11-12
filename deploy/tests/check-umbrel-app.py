@@ -95,10 +95,11 @@ for app in apps:
     main = load(ROOT / "docker-compose.yml")["services"]
     ignored_env = {"web": {"SOLIS_REPO", "UPDATE_DIR", "BACKUP_DIR"}, "poller": set()}      # the host bridge (updates, backups) does not exist on Umbrel
     for svc in ("poller", "web"):
-        mine = set((services.get(svc, {}).get("environment") or {}))
+        mine = set(services.get(svc, {}).get("environment") or {})
         theirs = set(main[svc]["environment"]) - ignored_env[svc]
         check(theirs <= mine, f"{name} {svc}: the main docker-compose.yml sets {sorted(theirs - mine)} but the Umbrel compose does not")
-        mounts = lambda s: {str(v).split(":")[1] for v in s.get("volumes", [])}
+        def mounts(s):
+            return {str(v).split(":")[1] for v in s.get("volumes", [])}
         extra = {"/control", "/backups"} if svc == "web" else set()
         check(mounts(main[svc]) - extra <= mounts(services.get(svc, {})),
               f"{name} {svc}: the main compose mounts {sorted(mounts(main[svc]) - extra)} but the Umbrel compose mounts {sorted(mounts(services.get(svc, {})))}")

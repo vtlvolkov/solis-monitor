@@ -17,7 +17,7 @@ WORKDIR /app
 COPY backend/requirements.txt backend/requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY backend/ ./
-RUN python -m pytest -q -p no:cacheprovider && touch /tested
+RUN ruff check . && python -m pytest -q -p no:cacheprovider && touch /tested
 
 # --- runtime: FastAPI serves the API and the built files -----------------------
 FROM python:3.12-slim
