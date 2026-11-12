@@ -19,6 +19,12 @@ class Repo(Protocol):
     def first_time(self) -> datetime | None: ...
     def control_log(self, limit: int) -> list[dict]: ...
     def events(self, days: int) -> list[dict]: ...
+    # Grid quality (routes/grid.py): computed in InfluxDB so a month of 10-second readings never crosses the wire
+    def histogram(self, field: str, range_s: int, start: float, width: float, count: int, min_valid: float
+                  ) -> list[tuple[float, int]]: ...
+    def hourly(self, field: str, range_s: int, fn: str, min_valid: float) -> list[tuple[datetime, float]]: ...
+    def hourly_outside(self, field: str, range_s: int, lo: float, hi: float, min_valid: float) -> list[tuple[datetime, int]]: ...
+    def hourly_excursions(self, field: str, range_s: int, limit: float, below: bool, min_valid: float) -> list[tuple[datetime, int]]: ...
 
 
 def _field_filter(fields) -> str:
@@ -73,6 +79,45 @@ def control_log_flux(bucket: str, limit: int) -> str:
             f'|> filter(fn: (r) => r._measurement == "solis_control") '
             f'|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value") '
             f'|> group() |> sort(columns: ["_time"], desc: true) |> limit(n: {limit})')
+
+
+def _valid(field: str, min_valid: float) -> str:
+    """Readings during an outage (0 V, 0 Hz) are not grid quality: only values at or above min_valid count."""
+    assert field in FIELD_SET and isinstance(min_valid, (int, float))
+    return (f'|> filter(fn: (r) => r._measurement == "solis" and r._field == "{field}" and r._value >= {float(min_valid)}) ')
+
+
+def histogram_flux(bucket: str, field: str, range_s: int, start: float, width: float, count: int, min_valid: float) -> str:
+    """Counts per bin [start + i*width, start + (i+1)*width): Flux's histogram() is cumulative, difference() undoes that."""
+    assert isinstance(range_s, int) and isinstance(count, int) and 1 <= count <= 400
+    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
+            f'|> group() |> histogram(bins: linearBins(start: {float(start)}, width: {float(width)}, count: {count}, infinity: false)) '
+            f'|> difference(nonNegative: true, columns: ["_value"]) |> keep(columns: ["le", "_value"])')
+
+
+def hourly_flux(bucket: str, field: str, range_s: int, fn: str, min_valid: float) -> str:
+    assert isinstance(range_s, int) and fn in {"min", "max", "mean", "count"}
+    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
+            f'|> group() |> aggregateWindow(every: 1h, fn: {fn}, createEmpty: false, timeSrc: "_start")')
+
+
+def hourly_outside_flux(bucket: str, field: str, range_s: int, lo: float, hi: float, min_valid: float) -> str:
+    """How many readings per hour were below lo or above hi."""
+    assert isinstance(range_s, int)
+    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
+            f'|> filter(fn: (r) => r._value < {float(lo)} or r._value > {float(hi)}) '
+            f'|> group() |> aggregateWindow(every: 1h, fn: count, createEmpty: false, timeSrc: "_start")')
+
+
+def hourly_excursions_flux(bucket: str, field: str, range_s: int, limit: float, below: bool, min_valid: float) -> str:
+    """How many excursions (contiguous runs of readings past the limit) began in each hour: a 0/1 flag per reading,
+    its difference, and the +1 steps counted."""
+    assert isinstance(range_s, int)
+    cond = f"r._value < {float(limit)}" if below else f"r._value > {float(limit)}"
+    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
+            f'|> group() |> map(fn: (r) => ({{r with _value: if {cond} then 1 else 0}})) '
+            f'|> difference(columns: ["_value"]) |> filter(fn: (r) => r._value == 1) '
+            f'|> aggregateWindow(every: 1h, fn: count, createEmpty: false, timeSrc: "_start")')
 
 
 def events_flux(bucket: str, days: int) -> str:
@@ -132,6 +177,24 @@ class InfluxRepo:
         return [{"time": r.get_time(), "kind": r.values.get("kind"), "key": r.values.get("key"),
                  **{k: r.values.get(k) for k in keep}}
                 for table in self.api.query(events_flux(self.bucket, days)) for r in table.records]
+
+    def histogram(self, field, range_s, start, width, count, min_valid):
+        rows = [(r.values.get("le"), r.get_value()) for table in self.api.query(histogram_flux(self.bucket, field, range_s, start, width, count, min_valid))
+                for r in table.records]
+        # "le" is the bin's upper edge; the first bin (below start) is dropped by difference(), so edges map back to starts
+        return [(float(le) - width, int(v)) for le, v in rows if le is not None and v is not None]
+
+    def _hourly_rows(self, query):
+        return [(r.get_time(), r.get_value()) for table in self.api.query(query) for r in table.records if r.get_value() is not None]
+
+    def hourly(self, field, range_s, fn, min_valid):
+        return [(t, float(v)) for t, v in self._hourly_rows(hourly_flux(self.bucket, field, range_s, fn, min_valid))]
+
+    def hourly_outside(self, field, range_s, lo, hi, min_valid):
+        return [(t, int(v)) for t, v in self._hourly_rows(hourly_outside_flux(self.bucket, field, range_s, lo, hi, min_valid))]
+
+    def hourly_excursions(self, field, range_s, limit, below, min_valid):
+        return [(t, int(v)) for t, v in self._hourly_rows(hourly_excursions_flux(self.bucket, field, range_s, limit, below, min_valid))]
 
     def close(self):
         self.client.close()

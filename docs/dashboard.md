@@ -45,6 +45,12 @@ Ranges: `1h 3h 6h 12h 24h 2d 7d 30d`. `every=auto` keeps each series at 500 poin
 
 Code: `web/backend` (FastAPI) and `web/frontend` (Vite + Preact + uPlot). `web/Dockerfile` builds both into one image.
 
+## Grid quality
+
+**Events → Grid quality** judges the supply against the standard (EN 50160 / ДСТУ: 230 V ±10 %, so 207–253 V, and 50 Hz ±0.2 Hz) over the last 24 hours, 7 or 30 days: the share of time outside the band and the minutes it adds up to, the number of sags (below the band) and surges (above it), the frequency's excursions, and the outages of the period. The voltage and frequency distributions show where the readings sit, the **voltage by hour of day** chart shows when the grid is weak (a Kyiv evening is usually visible), and the day-by-day table has the worst days highlighted. Readings taken during an outage (0 V) are left out; outages are counted from the event log instead. Everything is computed in the database from the 10-second readings, so a month is a few seconds on a Raspberry Pi the first time and cached for five minutes after that.
+
+**Limits** (top right) lets you judge against other numbers than the standard's — for example a 220 V ±10 % band, or the wider 49.5–50.5 Hz. They are kept in your browser and every figure on the page is recomputed with them; **Back to the standard** restores the defaults.
+
 ## Export to CSV
 
 **Charts → Export CSV** opens a dialog: the period (the range shown, or a span of days), the step (10 s raw readings up to one day, 1 min up to a week, 15 min, 1 h, or one row per day with the daily kWh totals), which columns (power; battery; grid; energy counters; status and faults) and the format: standard CSV, or the Excel variant with semicolons and a decimal comma that a Ukrainian or European Excel opens directly. Every row starts with the local time (ISO 8601) and the Unix time. The file is streamed from the server, so a month at 15 minutes is as quick as an hour at 10 seconds.

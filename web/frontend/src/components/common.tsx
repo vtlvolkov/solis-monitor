@@ -128,7 +128,7 @@ export function TodayRow({ fields }: { fields: Fields }) {
   );
 }
 
-export type View = 'overview' | 'devices' | 'charts' | 'events' | 'settings' | 'tv' | 'cost';
+export type View = 'overview' | 'devices' | 'charts' | 'events' | 'settings' | 'tv' | 'cost' | 'grid';
 
 export function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   const item = (v: View, label: string, icon: ComponentChildren) => (

@@ -4,6 +4,7 @@ import { useLang } from './lib/i18n';
 import { useLive, useNow } from './lib/live';
 import { Charts } from './pages/Charts';
 import { CostHistory } from './pages/CostHistory';
+import { GridQuality } from './pages/GridQuality';
 import { Devices } from './pages/Devices';
 import { Events } from './pages/Events';
 import { parseView as readDevice, type DeviceId } from './lib/devices';
@@ -13,7 +14,7 @@ import { Tv } from './pages/Tv';
 
 const readView = (): View => {
   const v = new URLSearchParams(location.search).get('view');
-  return v === 'charts' || v === 'settings' || v === 'devices' || v === 'events' || v === 'tv' || v === 'cost' ? v : 'overview';
+  return v === 'charts' || v === 'settings' || v === 'devices' || v === 'events' || v === 'tv' || v === 'cost' || v === 'grid' ? v : 'overview';
 };
 
 export function App() {
@@ -51,6 +52,7 @@ export function App() {
           : view === 'settings' ? <Settings live={live} now={now} />
           : view === 'events' ? <Events live={live} now={now} />
           : view === 'cost' ? <CostHistory live={live} now={now} />
+          : view === 'grid' ? <GridQuality live={live} now={now} />
           : view === 'devices' ? <Devices live={live} now={now} device={device} onOpen={(d) => go('devices', d)} />
           : <Overview live={live} now={now} />}
       </main>

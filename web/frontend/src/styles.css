@@ -273,6 +273,22 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .restore-typed { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; max-width: 280px; }
 .restore-typed input { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px; padding: 6px 10px; font: inherit; }
 .modal-actions .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
+/* Grid quality page */
+.stat.tone-ok .stat-value { color: var(--c-ok); }
+.stat.tone-warn .stat-value { color: var(--c-warn); }
+.stat.tone-bad .stat-value { color: var(--c-danger); }
+.grid-verdict { margin: -4px 0 14px; }
+.histogram, .hour-profile { width: 100%; height: auto; display: block; }
+.table-wrap { overflow-x: auto; }
+.grid-table tbody tr { cursor: default; }
+.grid-table tbody tr:hover { background: transparent; }
+.grid-table td.bad { color: var(--c-danger); }
+.grid-table tr.warn td:first-child { color: var(--c-warn); }
+.band-note { color: var(--c-muted); font-size: 0.78rem; text-align: right; }
+.grid-limits { margin-bottom: 14px; }
+.grid-limits-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; margin: 10px 0; }
+.grid-limits-form .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.grid-limits-form input { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px; padding: 6px 10px; font: inherit; }
 .backup-list li.removing { background: var(--c-surface2); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
 .update-line { margin-top: 10px; font-size: 0.92rem; }
 .update-line a { color: var(--c-warn); }
