@@ -60,6 +60,15 @@ export function BackupCard() {
   if (!b) {
     return <Card title="Backups">{loadError ? <div class="setting-hint">{t(loadError)}</div> : <Skeleton h={120} />}</Card>;
   }
+  if (b.managed_by) {                                      // the Umbrel app: no helper on the host, umbrelOS backs the app's data up
+    return (
+      <Card title="Backups" class="backup-card">
+        <p class="setting-hint" data-testid="backup-managed"><strong>{t(b.reason ?? 'Backups are handled by {platform}.', { platform: b.managed_by })}</strong></p>
+        <p class="setting-hint">{t("The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.")}</p>
+        <p class="setting-hint">{t('Export to CSV on the Charts, Events and Cost pages works as usual.')}</p>
+      </Card>
+    );
+  }
 
   const start = async () => {
     setBusy(true); setError(null);
