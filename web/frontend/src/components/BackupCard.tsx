@@ -65,7 +65,6 @@ export function BackupCard() {
       <Card title="Backups" class="backup-card">
         <p class="setting-hint" data-testid="backup-managed"><strong>{t(b.reason ?? 'Backups are handled by {platform}.', { platform: b.managed_by })}</strong></p>
         <p class="setting-hint">{t("The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.")}</p>
-        <p class="setting-hint">{t('Export to CSV on the Charts, Events and Cost pages works as usual.')}</p>
       </Card>
     );
   }

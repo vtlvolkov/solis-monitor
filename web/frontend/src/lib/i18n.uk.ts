@@ -516,7 +516,6 @@ export const UK: Record<string, string> = {
   "Backups are handled by {platform}.": "Резервне копіювання виконує {platform}.",
   "The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.":
     "Тека даних застосунку (історія та налаштування, збережені на цій панелі) входить до власних резервних копій застосунків платформи. Тут нічого не треба налаштовувати, і з цієї сторінки нічого завантажувати.",
-  "Export to CSV on the Charts, Events and Cost pages works as usual.": "Експорт у CSV на сторінках Графіки, Події та Вартість працює як звичайно.",
   // CSV export
   "Export CSV": "Експорт CSV",
   "The shown range: {range}": "Показаний діапазон: {range}",
