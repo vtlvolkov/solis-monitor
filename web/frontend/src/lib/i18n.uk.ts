@@ -532,6 +532,8 @@ export const UK: Record<string, string> = {
   "{p} % of readings outside {band}": "{p} % показань поза {band}",
   "A sag or surge is one excursion below {lo} V or above {hi} V lasting at least one reading. Readings during an outage are left out; the standard allows 10 % deviation for 95 % of the time.":
     "Просідання чи стрибок — одне відхилення нижче {lo} В або вище {hi} В тривалістю щонайменше одне показання. Показання під час відключення не враховуються; стандарт допускає відхилення 10 % протягом 95 % часу.",
+  "Back to {range}": "Назад до {range}",
+  "Band: lowest to highest reading of each hour · line: average · dots: hours often outside the standard": "Смуга: від найнижчого до найвищого показання кожної години · лінія: середнє · точки: години, часто поза стандартом",
   "Limits": "Межі", "Lowest voltage": "Найнижча напруга", "Highest voltage": "Найвища напруга", "Lowest frequency": "Найнижча частота", "Highest frequency": "Найвища частота",
   "{name} must be between {lo} and {hi}": "{name} має бути між {lo} і {hi}",
   "What counts as \"within the standard\" on this page. The supply standard (EN 50160 / ДСТУ) is 230 V ±10 % and 50 Hz ±0.2 Hz. Saved in this browser; the server recomputes everything on this page with these limits.":

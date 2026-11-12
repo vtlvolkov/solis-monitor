@@ -31,8 +31,8 @@ export function limitsError(l: Partial<Record<keyof Limits, unknown>>): string |
 }
 export const LIMIT_NAMES: Record<keyof Limits, string> = { v_min: tx('Lowest voltage'), v_max: tx('Highest voltage'), hz_min: tx('Lowest frequency'), hz_max: tx('Highest frequency') };
 
-export const qualityUrl = (range: GridRange, l: Limits): string =>
-  `/api/grid/quality?range=${range}` + (isStandard(l) ? '' : `&v_min=${l.v_min}&v_max=${l.v_max}&hz_min=${l.hz_min}&hz_max=${l.hz_max}`);
+export const qualityUrl = (range: GridRange, l: Limits, day: string | null = null): string =>
+  `/api/grid/quality?${day ? `date=${day}` : `range=${range}`}` + (isStandard(l) ? '' : `&v_min=${l.v_min}&v_max=${l.v_max}&hz_min=${l.hz_min}&hz_max=${l.hz_max}`);
 
 export const vBand = (l: Limits): string => `${l.v_min}–${l.v_max} ${t('V')}`;
 export const hzBand = (l: Limits): string => `${l.hz_min.toFixed(1)}–${l.hz_max.toFixed(1)} ${t('Hz')}`;
@@ -47,7 +47,7 @@ export interface DayRow {
   out_min: number; sags: number; surges: number; hz_out_min: number; outages: number; outage_s: number;
 }
 export interface GridQualityPayload {
-  range: GridRange; step_s: number; tz: string; limits: Limits;
+  range: string; date: string | null; start: number; stop: number; step_s: number; tz: string; limits: Limits;
   voltage: { mean: number | null; min: number | null; max: number | null; p05: number | null; p95: number | null; bins: Bin[]; bin_width: number };
   frequency: { mean: number | null; min: number | null; max: number | null; bins: Bin[]; bin_width: number };
   out: { v_pct: number; hz_pct: number; v_min: number; hz_min: number; sags: number; surges: number };   // minutes outside, and counts of excursions

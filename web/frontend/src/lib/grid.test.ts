@@ -22,5 +22,6 @@ describe('grid quality helpers', () => {
   it('sends limits only when they differ from the standard', () => {
     expect(qualityUrl('7d', STANDARD)).toBe('/api/grid/quality?range=7d');
     expect(qualityUrl('24h', { v_min: 200, v_max: 250, hz_min: 49.5, hz_max: 50.5 })).toBe('/api/grid/quality?range=24h&v_min=200&v_max=250&hz_min=49.5&hz_max=50.5');
+    expect(qualityUrl('7d', STANDARD, '2026-11-11')).toBe('/api/grid/quality?date=2026-11-11');
   });
 });

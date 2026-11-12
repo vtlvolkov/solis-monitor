@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import { Card, ErrorBanner, Header, Skeleton } from '../components/common';
+import { DayPicker, useDayParam } from '../components/DayPicker';
 import { Histogram } from '../charts/Histogram';
 import { HourProfile } from '../charts/HourProfile';
 import { useFetch } from './Charts';
@@ -12,6 +13,7 @@ import type { LiveState } from '../lib/live';
 import { goTo } from '../lib/nav';
 
 const dayLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+const dayLong = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const dur = (s: number) => (s < 60 ? t('{n} min', { n: 0 }) : fmtMinutes(s / 60));
 
 function readRange(): GridRange {
@@ -35,12 +37,13 @@ function Tile({ title, value, sub, tone, testId }: { title: string; value: strin
  */
 export function GridQuality({ live, now }: { live: LiveState; now: number }) {
   const [range, setRange] = useState<GridRange>(readRange);
+  const [day, setDay] = useDayParam();
   const [limits, setLimits] = useState<Limits>(loadLimits);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<keyof Limits, string>>({ v_min: '', v_max: '', hz_min: '', hz_max: '' });
   const [draftError, setDraftError] = useState<string | null>(null);
   const pick = (r: GridRange) => { setRange(r); const p = new URLSearchParams(location.search); p.set('range', r); history.replaceState(null, '', `?${p}`); };
-  const { data, error, loading } = useFetch<GridQualityPayload>(qualityUrl(range, limits), 300_000);
+  const { data, error, loading } = useFetch<GridQualityPayload>(qualityUrl(range, limits, day), day ? null : 300_000);
   const d = data;
   const v = d ? verdict(d.out.v_pct, d.outages.count) : null;
   const L = d?.limits ?? limits;
@@ -60,11 +63,13 @@ export function GridQuality({ live, now }: { live: LiveState; now: number }) {
           <button type="button" class="link" onClick={() => goTo('events')} data-testid="grid-back">← {t('Events')}</button>
           <div class="seg" role="group" aria-label={t('Period')}>
             {GRID_RANGES.map((r) => (
-              <button type="button" key={r} class={r === range ? 'on' : ''} aria-pressed={r === range} onClick={() => pick(r)} data-testid={`grid-range-${r}`}>{t(RANGE_LABELS[r])}</button>
+              <button type="button" key={r} class={r === range && !day ? 'on' : ''} aria-pressed={r === range && !day} onClick={() => { pick(r); setDay(null); }} data-testid={`grid-range-${r}`}>{t(RANGE_LABELS[r])}</button>
             ))}
           </div>
+          <DayPicker day={day} onChange={setDay} />
         </div>
         <div class="controls-group">
+          {day && <button type="button" class="link" onClick={() => setDay(null)} data-testid="day-back">{t('Back to {range}', { range: t(RANGE_LABELS[range]) })}</button>}
           {loading && <span class="spinner" aria-label={t('Loading')} />}
           <button type="button" class="btn btn-small" onClick={editing ? () => setEditing(false) : openLimits} data-testid="grid-limits">
             {t('Limits')}: {vBand(limits)} · {hzBand(limits)}{isStandard(limits) ? '' : ' *'}
@@ -103,7 +108,7 @@ export function GridQuality({ live, now }: { live: LiveState; now: number }) {
           <Tile title={t('Outages')} value={String(d.outages.count)} sub={d.outages.count ? t('{total} total · longest {longest}', { total: dur(d.outages.total_s), longest: dur(d.outages.longest_s) }) : t('none in this period')} tone={d.outages.count ? 'warn' : 'ok'} />
         </div>
       )}
-      {v && <div class={`update-result tone-${v.tone} grid-verdict`} role="status" data-testid="grid-verdict">{v.text} <span class="muted">· {t('{p} % of readings outside {band}', { p: d!.out.v_pct.toFixed(1), band: vBand(L) })}</span></div>}
+      {v && <div class={`update-result tone-${v.tone} grid-verdict`} role="status" data-testid="grid-verdict">{d!.date ? <strong>{dayLong(d!.date)} · </strong> : null}{v.text} <span class="muted">· {t('{p} % of readings outside {band}', { p: d!.out.v_pct.toFixed(1), band: vBand(L) })}</span></div>}
 
       <div class="chart-grid">
         {!d ? <Card title="Voltage distribution"><Skeleton h={180} /></Card> : (
@@ -119,12 +124,12 @@ export function GridQuality({ live, now }: { live: LiveState; now: number }) {
         )}
         <div class="span-2">
           {!d ? <Card title="Voltage by hour of day"><Skeleton h={200} /></Card> : (
-            <Card title="Voltage by hour of day" aside={<span class="band-note">{t('Band: lowest to highest reading · line: average · dots: hours often outside the standard')}</span>}>
+            <Card title="Voltage by hour of day" aside={<span class="band-note">{d.date ? t('Band: lowest to highest reading of each hour · line: average · dots: hours often outside the standard') : t('Band: lowest to highest reading · line: average · dots: hours often outside the standard')}</span>}>
               <HourProfile hours={d.hours} lo={L.v_min} hi={L.v_max} />
             </Card>
           )}
         </div>
-        <div class="span-2">
+        {!d?.date && <div class="span-2">
           <Card title="Day by day">
             {!d ? <Skeleton h={200} /> : (
               <div class="table-wrap">
@@ -159,7 +164,7 @@ export function GridQuality({ live, now }: { live: LiveState; now: number }) {
             )}
             <div class="setting-hint">{t('A sag or surge is one excursion below {lo} V or above {hi} V lasting at least one reading. Readings during an outage are left out; the standard allows 10 % deviation for 95 % of the time.', { lo: L.v_min, hi: L.v_max })}</div>
           </Card>
-        </div>
+        </div>}
       </div>
     </div>
   );

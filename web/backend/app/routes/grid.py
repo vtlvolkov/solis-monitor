@@ -56,8 +56,8 @@ def percentiles(bins: list[tuple[float, int]], width: float, qs=(0.05, 0.95)) ->
     return out
 
 
-def shape(rows: dict, limits: dict, start: datetime, now: datetime, tz: str, events: list[dict], rng: str) -> dict:
-    """rows: the repo's answers (see build); pure, so the tests can feed it."""
+def shape(rows: dict, limits: dict, start: datetime, stop: datetime, now: datetime, tz: str, events: list[dict], rng: str, date: str | None = None) -> dict:
+    """rows: the repo's answers (see build) for [start, stop); pure, so the tests can feed it."""
     zone = ZoneInfo(tz)
     v_bins, hz_bins = rows["v_hist"], rows["hz_hist"]
     hourly = defaultdict(dict)                                   # hour start -> {min, max, mean, count, v_out, hz_out, sags, surges}
@@ -87,16 +87,20 @@ def shape(rows: dict, limits: dict, start: datetime, now: datetime, tz: str, eve
         a = agg(by_hour.get(hr, []))
         hours.append({"hour": hr, "mean": None if a["mean"] is None else round(a["mean"], 1), "min": a["min"], "max": a["max"],
                       "out_pct": None if not a["count"] else round(100 * a["v_out"] / a["count"], 1)})
-    first_day, last_day = start.astimezone(zone).date(), now.astimezone(zone).date()
+    first_day, last_day = start.astimezone(zone).date(), (stop - timedelta(seconds=1)).astimezone(zone).date()
     paired = shaping.pair_events(events, now)
-    outages = [e for e in paired["outages"] if e["start"] and datetime.fromisoformat(e["start"]) >= start or e["ongoing"] or
-               (e["end"] and datetime.fromisoformat(e["end"]) >= start)]
+    outages = []
+    for e in paired["outages"]:                                  # the ones that overlap [start, stop)
+        t0 = datetime.fromisoformat(e["start"]) if e["start"] else start
+        t1 = datetime.fromisoformat(e["end"]) if e["end"] else now
+        if t1 > start and t0 < stop:
+            outages.append(e)
     out_by_day = defaultdict(lambda: {"n": 0, "s": 0})
     durations = []
     for e in outages:
         t0 = datetime.fromisoformat(e["start"]) if e["start"] else start
         t1 = datetime.fromisoformat(e["end"]) if e["end"] else now
-        t0 = max(t0, start)
+        t0, t1 = max(t0, start), min(t1, stop)
         d = (t1 - t0).total_seconds()
         durations.append(d)
         day = t0.astimezone(zone).date()
@@ -116,7 +120,7 @@ def shape(rows: dict, limits: dict, start: datetime, now: datetime, tz: str, eve
     hz_vals = [(b + HZ_BINS[1] / 2, c) for b, c in hz_bins if c]
     hz_total = sum(c for _, c in hz_vals)
     return {
-        "range": rng, "step_s": STEP_S, "tz": tz, "limits": limits,
+        "range": rng, "date": date, "start": round(start.timestamp()), "stop": round(stop.timestamp()), "step_s": STEP_S, "tz": tz, "limits": limits,
         "voltage": {"mean": None if whole["mean"] is None else round(whole["mean"], 1), "min": whole["min"], "max": whole["max"],
                     "p05": p05, "p95": p95, "bins": [{"from": b, "count": c} for b, c in v_bins if c], "bin_width": V_BINS[1]},
         "frequency": {"mean": None if not hz_total else round(sum(v * c for v, c in hz_vals) / hz_total, 2),
@@ -137,32 +141,42 @@ def build(ctx: Context) -> APIRouter:
     cache: dict = {}
 
     @r.get("/api/grid/quality")
-    async def api_grid_quality(range: str = Query("7d"), v_min: float | None = Query(None), v_max: float | None = Query(None),
-                               hz_min: float | None = Query(None), hz_max: float | None = Query(None)):
-        if range not in RANGES:
-            raise HTTPException(status_code=400, detail="range must be 24h, 7d or 30d")
-        rng, range_s = parse_range(range)
+    async def api_grid_quality(range: str = Query("7d"), date: str | None = Query(None), v_min: float | None = Query(None),
+                               v_max: float | None = Query(None), hz_min: float | None = Query(None), hz_max: float | None = Query(None)):
+        """The last 24h/7d/30d, or one exact local day (date=YYYY-MM-DD, like the Charts and Events day view)."""
         limits = parse_limits(v_min, v_max, hz_min, hz_max)
         t = now()
+        if date:
+            d = shaping.parse_day(date)
+            if d is None or d > t.astimezone(ZoneInfo(s.tz)).date():
+                raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD, not in the future")
+            start, stop = shaping.local_range(d, d, s.tz)
+            stop = min(stop, t)
+            rng, day = d.isoformat(), d.isoformat()
+        else:
+            if range not in RANGES:
+                raise HTTPException(status_code=400, detail="range must be 24h, 7d or 30d")
+            rng, range_s = parse_range(range)
+            start, stop, day = t - timedelta(seconds=range_s), t, None
         key = (rng, tuple(sorted(limits.items())))
         hit = cache.get(key)
-        if hit and (t - hit["at"]).total_seconds() < CACHE_S:
+        if hit and (t - hit["at"]).total_seconds() < (CACHE_S if stop >= t - timedelta(minutes=5) else 6 * 3600):   # a past day does not change
             return hit["body"]
         # Ten independent queries; the database runs them side by side (a month of raw readings each for some)
         jobs = {
-            "v_hist": call(repo.histogram, "grid_voltage", range_s, *V_BINS, V_VALID),
-            "hz_hist": call(repo.histogram, "grid_frequency", range_s, *HZ_BINS, HZ_VALID),
-            **{fn: call(repo.hourly, "grid_voltage", range_s, fn, V_VALID) for fn in ("min", "max", "mean", "count")},
-            "v_out": call(repo.hourly_outside, "grid_voltage", range_s, limits["v_min"], limits["v_max"], V_VALID),
-            "hz_out": call(repo.hourly_outside, "grid_frequency", range_s, limits["hz_min"], limits["hz_max"], HZ_VALID),
-            "sags": call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_min"], True, V_VALID),
-            "surges": call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_max"], False, V_VALID),
-            "events": call(repo.events, max(1, range_s // 86400) + 31),
+            "v_hist": call(repo.histogram, "grid_voltage", start, stop, *V_BINS, V_VALID),
+            "hz_hist": call(repo.histogram, "grid_frequency", start, stop, *HZ_BINS, HZ_VALID),
+            **{fn: call(repo.hourly, "grid_voltage", start, stop, fn, V_VALID) for fn in ("min", "max", "mean", "count")},
+            "v_out": call(repo.hourly_outside, "grid_voltage", start, stop, limits["v_min"], limits["v_max"], V_VALID),
+            "hz_out": call(repo.hourly_outside, "grid_frequency", start, stop, limits["hz_min"], limits["hz_max"], HZ_VALID),
+            "sags": call(repo.hourly_excursions, "grid_voltage", start, stop, limits["v_min"], True, V_VALID),
+            "surges": call(repo.hourly_excursions, "grid_voltage", start, stop, limits["v_max"], False, V_VALID),
+            "events": call(repo.events, (t - start).days + 31),
         }
         results = await asyncio.gather(*jobs.values())
         rows = dict(zip(jobs, results, strict=True))
         events = rows.pop("events")
-        body = shape(rows, limits, t - timedelta(seconds=range_s), t, s.tz, events, rng)
+        body = shape(rows, limits, start, stop, t, s.tz, events, rng, day)
         cache[key] = {"at": t, "body": body}
         return body
 
