@@ -217,6 +217,13 @@ valid_backup_dir() {      # valid_backup_dir PATH: prints why not, and fails, wh
   rm -f "$probe"
 }
 
+# One field of a request from the dashboard: a string, number or true/false. The web app writes it with Python's json
+# (a space after each colon), a hand-made one may have none: both must read the same, or the action is missed and the
+# request falls back to making a backup.
+req_value() {      # req_value KEY JSON
+  printf '%s' "$2" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\", }]*\).*/\1/p" | sed -n 1p
+}
+
 BREPORT=""; BREPORT_DONE=""; BREPORT_STARTED=""
 breport() {          # breport STATE MESSAGE [FILE]: progress for the dashboard's Backup tab (only when it asked for this backup)
   [[ -n "$BREPORT" ]] || return 0
@@ -246,10 +253,14 @@ cmd_backup() {
     BREPORT_STARTED="$(now_iso)"
     exec 8>/tmp/solis-monitor-backup.lock
     flock -n 8 || { echo "another backup is running"; BREPORT=""; exit 0; }
-    action="$(printf '%s' "$request" | sed -n 's/.*"action":"\([a-z-]*\)".*/\1/p' | sed -n 1p)"
-    if [[ "$action" == set-folder ]]; then set_backup_folder "$request"; return $?; fi
-    if [[ "$action" == remove ]]; then remove_backup "$request"; return $?; fi
-    if [[ "$action" == restore ]]; then restore_from_dashboard "$request"; return $?; fi
+    action="$(req_value action "$request")"
+    case "$action" in
+      "") ;;                                                             # no action: make a backup
+      set-folder) set_backup_folder "$request"; return $? ;;
+      remove) remove_backup "$request"; return $? ;;
+      restore) restore_from_dashboard "$request"; return $? ;;
+      *) breport failed "The server does not know that request."; echo "solis-monitor: unknown request '$action'" >&2; return 1 ;;
+    esac
   fi
   target="${target:-$(backup_dir)}"
   site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
@@ -294,8 +305,8 @@ make_archive() {          # make_archive FILE: the database (online), the saved 
 # told not to), so a wrong click is itself recoverable; then the same restore as `solis-monitor restore FILE --yes`.
 restore_from_dashboard() {
   local name first
-  name="$(printf '%s' "$1" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | sed -n 1p)"
-  first="$(printf '%s' "$1" | sed -n 's/.*"backup_first":\(true\|false\).*/\1/p' | sed -n 1p)"
+  name="$(req_value name "$1")"
+  first="$(req_value backup_first "$1")"
   if [[ ! "$name" =~ ^solis-monitor(-[A-Za-z0-9][A-Za-z0-9-]{0,60})?-[0-9]{8}-[0-9]{6}\.tar\.gz$ ]]; then
     breport failed "That is not the name of a backup."; echo "solis-monitor: refused to restore '$name'" >&2; return 1
   fi
@@ -316,7 +327,7 @@ restore_from_dashboard() {
 
 remove_backup() {         # the dashboard asked to delete one archive from the backup folder
   local name
-  name="$(printf '%s' "$1" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | sed -n 1p)"
+  name="$(req_value name "$1")"
   if [[ ! "$name" =~ ^solis-monitor(-[A-Za-z0-9][A-Za-z0-9-]{0,60})?-[0-9]{8}-[0-9]{6}\.tar\.gz$ ]]; then
     breport failed "That is not the name of a backup."; echo "solis-monitor: refused to remove '$name'" >&2; return 1
   fi
@@ -329,8 +340,8 @@ remove_backup() {         # the dashboard asked to delete one archive from the b
 
 set_backup_folder() {     # the dashboard asked for another folder (and how many archives to keep there)
   local d keep reason
-  d="$(printf '%s' "$1" | sed -n 's/.*"dir":"\([^"]*\)".*/\1/p' | sed -n 1p)"
-  keep="$(printf '%s' "$1" | sed -n 's/.*"keep":\([0-9]*\).*/\1/p' | sed -n 1p)"
+  d="$(req_value dir "$1")"
+  keep="$(req_value keep "$1")"
   [[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 && "$keep" -le 50 ]] || keep=5
   if ! reason="$(valid_backup_dir "$d")"; then breport failed "$reason"; echo "solis-monitor: $reason" >&2; return 1; fi
   write_backup_config "$d" "$keep"

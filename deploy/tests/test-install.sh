@@ -267,7 +267,7 @@ echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/nowhere\",\"keep\":5}" > "$T/i
 out=$(upd backup --from-dashboard 2>&1); check "a folder that does not exist is refused" '[[ "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"does not exist"* ]]'
 echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/ro\",\"keep\":5}" > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); check "a folder that cannot be written is refused" '[[ "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not writable"* ]] || [[ $EUID -eq 0 ]]'
-echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/usb/solis\",\"keep\":3}" > "$T/inst/control/backup-request"
+echo "{\"requested_at\": \"now\", \"action\": \"set-folder\", \"dir\": \"$T/mnt/usb/solis\", \"keep\": 3}" > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); rc=$?
 check "an existing folder under an allowed root is accepted and saved" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Folder set to $T/mnt/usb/solis" && "$(cfg_of dir)" == "$T/mnt/usb/solis" && "$(cfg_of keep)" == 3 ]]'
 echo '{}' > "$T/inst/control/backup-request"; upd backup --from-dashboard >/dev/null 2>&1
@@ -279,13 +279,16 @@ out=$(upd status 2>&1); check "status shows the latest backup in the set folder"
 
 echo "backup removed from the dashboard"
 victim="$(ls -1t "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | sed -n 2p | xargs -n1 basename)"
-echo "{\"action\":\"remove\",\"name\":\"$victim\"}" > "$T/inst/control/backup-request"
+echo "{\"requested_at\": \"now\", \"action\": \"remove\", \"name\": \"$victim\"}" > "$T/inst/control/backup-request"   # as the web app writes it
 out=$(upd backup --from-dashboard 2>&1); rc=$?
 check "a listed archive is removed, the index follows, and the page is told" '[[ $rc -eq 0 && ! -e "$T/mnt/usb/solis/$victim" && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == 3 && "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Removed $victim" ]] && ! grep -q "$victim" "$T/inst/control/backups.json"'
 : > "$T/inst/.env.keep"; echo '{"action":"remove","name":"../../.env.keep"}' > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); check "a name that is not an archive is refused" '[[ $? -ne 0 && -e "$T/inst/.env.keep" && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not the name of a backup"* ]]'
 echo '{"action":"remove","name":"solis-monitor-19990101-000000.tar.gz"}' > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); check "a missing archive is reported" '[[ $? -ne 0 && "$(bstatus_of message)" == "No such backup." ]]'
+n_before="$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)"
+echo '{"requested_at": "now", "action": "frobnicate"}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "an unknown request is refused, not taken for a backup" '[[ $? -ne 0 && "$(bstatus_of state)" == failed && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == "$n_before" ]]'
 
 echo "restore from the dashboard"
 target="$(ls -1t "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | sed -n 2p | xargs -n1 basename)"
@@ -296,7 +299,7 @@ echo "{\"action\":\"restore\",\"name\":\"$target\",\"backup_first\":true}" > "$T
 out=$(upd backup --from-dashboard 2>&1); rc=$?
 check "the current state is backed up first, then the archive is restored" '[[ $rc -eq 0 && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == $((before + 1)) ]] && grep -q "influx backup" "$T/docker.log" && grep -q "influx restore --full" "$T/docker.log" && grep -q "^compose stop poller web$" "$T/docker.log"'
 check "the page is told, step by step, and the login from the backup applies" '[[ "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Restored from $target" && "$(env_of WEB_BASIC_AUTH)" != "changed:Changed-pw1" ]] && grep -q "$target" "$T/inst/control/backups.json"'
-echo "{\"action\":\"restore\",\"name\":\"$target\",\"backup_first\":false}" > "$T/inst/control/backup-request"
+echo "{\"requested_at\": \"now\", \"action\": \"restore\", \"name\": \"$target\", \"backup_first\": false}" > "$T/inst/control/backup-request"
 : > "$T/docker.log"; sleep 1; out=$(upd backup --from-dashboard 2>&1); rc=$?
 check "backup_first false skips the safety backup" '[[ $rc -eq 0 && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == $((before + 1)) ]] && ! grep -q "influx backup" "$T/docker.log" && grep -q "influx restore --full" "$T/docker.log"'
 echo '{"action":"restore","name":"../../.env","backup_first":false}' > "$T/inst/control/backup-request"
