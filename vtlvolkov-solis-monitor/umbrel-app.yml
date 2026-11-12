@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.7.0"
+version: "0.7.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  charts stay quick as the history grows, and the 30-day grid quality works
+  Grid quality at 30 days fixed, and a day picker for it
 
-  - The database now keeps 1-minute aggregates of every reading (an InfluxDB task the poller sets up and backfills by itself), and everything a day or longer reads them: a month chart costs the same at any age of the install. Live ranges and the grid-quality details still use the 10-second readings
-  - Grid quality at 30 days failed with "InfluxDB unavailable" on real hardware: its queries ran into a timeout. They have a long one now, run side by side, and part of the work comes from the aggregates
-  - After updating, run `solis-monitor secure-tokens` once: the dashboard's read-only token must cover the new bucket (until then long charts simply keep reading the raw data; `solis-monitor status` reminds you). Nothing to do on umbrelOS
+  - Grid quality at 30 days failed with "InfluxDB unavailable": a single stray frequency reading (59.5 Hz, a measurement glitch) made the database refuse the distribution query. Such readings no longer break the page; they still count as outside the band
+  - Grid quality has the day picker from Charts and Events: pick one day to see its tiles, distributions and voltage by hour
+  - When the database refuses a query, the message now says why instead of only "InfluxDB unavailable"
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
