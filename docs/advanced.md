@@ -58,6 +58,14 @@ solis-monitor secure-tokens      # makes the read-only token in the running data
 
 Building from source with your own `.env`: run `docker exec solis-influxdb influx bucket list --name solis` for the bucket ID, then `docker exec solis-influxdb influx auth create --org home --read-bucket <ID> --description dashboard`, put the token in `.env` as `INFLUX_READ_TOKEN`, set `CONTROL_TOKEN` to any long random string, and `docker compose up -d`. A reset database (`docker compose down -v`) no longer knows the read-only token: clear `INFLUX_READ_TOKEN` and run `secure-tokens` again.
 
+### Backup and restore
+
+`solis-monitor backup` writes one `.tar.gz` (in `/opt/solis-monitor/backups/`, or the file or folder you name) with the InfluxDB history (an online `influx backup`, nothing stops), the files saved from the dashboard (logger address, battery capacity, outages in progress, tariff versions, a changed password), `.env` and the compose file. It holds every password and token, so it is created readable by root only; copy it somewhere else than this machine, because a dead SD card is the reason to have it (for example `solis-monitor backup /mnt/usb/`, or a cron line that runs it and rsyncs the folder).
+
+`solis-monitor restore FILE` puts one back, on the same install or on a fresh one made with the installer (any inverter address or password you typed there is replaced by the backup's). It stops the poller and the dashboard, restores the database in full (`influx restore --full`, so the tokens in the restored `.env` match it), takes `.env` from the backup except the installer's own lines (which release is installed and from where), puts the saved files back and starts everything again. Nothing from before the restore is kept.
+
+The Umbrel app is backed up by umbrelOS together with its other apps (`app-data/vtlvolkov-solis-monitor/data`); these commands are for installer-based installs.
+
 ### Stop or reset
 
 ```bash

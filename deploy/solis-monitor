@@ -9,6 +9,8 @@
 #   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
 #   solis-monitor reset-login            forgot the dashboard password you set? go back to the one in .env
 #   solis-monitor secure-tokens          give the dashboard a read-only database token and its own poller secret (installs do this)
+#   solis-monitor backup [FILE|DIR]      one .tar.gz with the history, the saved settings and .env (default: backups/ here)
+#   solis-monitor restore FILE [--yes]   put a backup back, on this or a fresh install (replaces the history and .env)
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
@@ -103,6 +105,9 @@ cmd_status() {
     echo "Tokens:    the dashboard still uses the database admin token (solis-monitor secure-tokens)"
   fi
   poller_health
+  local last
+  last="$(ls -1t "$DIR"/backups/solis-monitor-*.tar.gz 2>/dev/null | sed -n 1p || true)"
+  if [[ -n "$last" ]]; then echo "Backup:    $(date -r "$last" +%Y-%m-%d\ %H:%M)  $last"; else echo "Backup:    none yet (solis-monitor backup)"; fi
   compose ps --format 'table {{.Name}}\t{{.Status}}'
   echo "--- poller, last lines ---"
   compose logs --tail 5 poller 2>&1 || true
@@ -152,6 +157,81 @@ cmd_secure_tokens() {
   chmod 600 .env
   compose up -d poller web
   echo "Applied."
+}
+
+# One archive with everything that makes this site: the database (influx backup, taken online), the files saved from
+# the dashboard (logger address, battery capacity, events in progress; tariff versions, a changed password), .env and
+# the compose file. Keep it somewhere else than this machine: a dead SD card is the reason to have it.
+cmd_backup() {
+  local target="${1:-$DIR/backups}" site stamp file tmp
+  site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  if [[ "$target" == *.tar.gz ]]; then file="$target"; else file="$target/solis-monitor${site:+-$site}-$stamp.tar.gz"; fi
+  mkdir -p "$(dirname "$file")" || die "cannot create $(dirname "$file")"
+  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  echo "Backing up the database ..."
+  # influx backup writes a folder inside the container; it is streamed out as a tar so nothing is left behind there.
+  compose exec -T influxdb sh -c 'rm -rf /tmp/solis-backup && influx backup /tmp/solis-backup >&2 && tar -C /tmp/solis-backup -c . && rm -rf /tmp/solis-backup' \
+    > "$tmp/influxdb.tar" || die "the database backup failed (is the stack running? solis-monitor status)"
+  [[ -s "$tmp/influxdb.tar" ]] || die "the database backup is empty"
+  compose exec -T poller tar -C /data -c . > "$tmp/poller-data.tar" 2>/dev/null || : > "$tmp/poller-data.tar"
+  compose exec -T web tar -C /data -c . > "$tmp/web-data.tar" 2>/dev/null || : > "$tmp/web-data.tar"
+  cp .env "$tmp/env"; cp docker-compose.yml "$tmp/docker-compose.yml"
+  printf '{"format":1,"created":"%s","version":"%s","site":"%s"}\n' "$(now_iso)" "$(json_text "$(env_value SOLIS_VERSION)")" "$(json_text "$(env_value SITE_NAME)")" > "$tmp/manifest.json"
+  tar -czf "$file" -C "$tmp" manifest.json env docker-compose.yml influxdb.tar poller-data.tar web-data.tar
+  chmod 600 "$file"                      # it holds .env, with every password and token
+  echo "Backup written: $file ($(du -h "$file" | cut -f1))"
+  echo "It contains your passwords and tokens: keep it private, and copy it off this machine."
+}
+
+# The opposite: the database is replaced in full (influx restore --full, so the tokens in the restored .env match it),
+# the saved files are put back, and .env is taken from the backup except for the installer's own lines (which release
+# is installed, from where). Works on the install the backup was made on and on a fresh one. Nothing is kept from before.
+cmd_restore() {
+  local file="" yes="" tmp ans manifest created version site key
+  while (($#)); do
+    case "$1" in
+      --yes) yes=1; shift ;;
+      -*) die "unknown option $1" ;;
+      *) file="$1"; shift ;;
+    esac
+  done
+  [[ -n "$file" ]] || die "usage: solis-monitor restore FILE [--yes]"
+  [[ -r "$file" ]] || die "cannot read $file"
+  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  tar -xzf "$file" -C "$tmp" || die "$file is not a backup made by solis-monitor backup"
+  for key in manifest.json env influxdb.tar; do [[ -s "$tmp/$key" ]] || die "$file is missing $key: not a backup made by solis-monitor backup"; done
+  manifest="$(cat "$tmp/manifest.json")"
+  created="$(printf '%s' "$manifest" | sed -n 's/.*"created":"\([^"]*\)".*/\1/p')"
+  version="$(printf '%s' "$manifest" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+  site="$(printf '%s' "$manifest" | sed -n 's/.*"site":"\([^"]*\)".*/\1/p')"
+  echo "Backup from ${created:-?}${site:+ of \"$site\"}, made on version ${version:-?}."
+  echo "Restoring REPLACES this install's history, the settings saved on the dashboard and .env (the installed version is kept)."
+  if [[ -z "$yes" ]]; then
+    read -rp "Continue? [y/N] " ans || true           # no terminal (EOF) counts as no
+    [[ "${ans:-n}" == [yY]* ]] || { echo "Nothing changed."; return 1; }
+  fi
+  echo "Stopping the poller and the dashboard ..."
+  compose stop poller web
+  compose up -d influxdb
+  echo "Restoring the database ..."
+  compose exec -T influxdb sh -c 'rm -rf /tmp/solis-restore && mkdir /tmp/solis-restore && tar -C /tmp/solis-restore -x && influx restore --full /tmp/solis-restore >&2 && rm -rf /tmp/solis-restore' \
+    < "$tmp/influxdb.tar" || die "the database restore failed; the poller and the dashboard are stopped (solis-monitor apply starts them again)"
+  # .env from the backup; the installer's lines (which release, from where) stay those of this install
+  local keep=() name
+  for name in SOLIS_IMAGE_PREFIX SOLIS_VERSION SOLIS_REPO; do keep+=("$name=$(env_value "$name")"); done
+  install -m 600 "$tmp/env" .env
+  for name in "${keep[@]}"; do set_env "${name%%=*}" "${name#*=}"; done
+  # the database's CLI (used by secure-tokens and the docs) must use the restored admin token from now on
+  compose exec -T influxdb influx config set --config-name default --token "$(env_value INFLUX_TOKEN)" >/dev/null 2>&1 || true
+  echo "Starting with the restored settings ..."
+  ensure_ctl
+  compose up -d --force-recreate --remove-orphans          # every container gets the restored .env
+  if [[ -s "$tmp/poller-data.tar" ]]; then compose exec -T poller tar -C /data -x < "$tmp/poller-data.tar" || echo "could not restore the poller's saved files" >&2; fi
+  if [[ -s "$tmp/web-data.tar" ]]; then compose exec -T web tar -C /data -x < "$tmp/web-data.tar" || echo "could not restore the dashboard's saved files" >&2; fi
+  compose restart poller web                                # they read those files when they start
+  if wait_healthy; then echo "Restored. The dashboard is up with the history and settings from the backup."
+  else echo "Restored, but the dashboard or the poller is not healthy yet. Look at: solis-monitor logs poller" >&2; return 1; fi
 }
 
 cmd_update() {
@@ -411,8 +491,10 @@ case "${1:-}" in
   dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
   reset-login) cmd_reset_login ;;
   secure-tokens) cmd_secure_tokens ;;
+  backup) shift; cmd_backup "${1:-}" ;;
+  restore) shift; cmd_restore "$@" ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,13p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,15p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

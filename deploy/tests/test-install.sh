@@ -36,9 +36,15 @@ case "\$1" in
       config) if [[ "\$*" == *" -q"* ]]; then [[ -n "\${SHIM_CONFIG_FAIL:-}" ]] && { echo "error: invalid .env" >&2; exit 1; }; exit 0
               else exec "$REAL_DOCKER" "\$@"; fi ;;
       pull) cat "$T/inst/control/update-status.json" >> "$T/trace.log" 2>/dev/null ;;
-      exec) case "\$*" in                      # the database's CLI, for secure-tokens
+      exec) case "\$*" in                      # the database's CLI, for secure-tokens, backup and restore
               *"influx bucket list"*) echo '[{"id": "0a1b2c3d4e5f6071", "name": "solis"}]' ;;
               *"influx auth create"*) echo '{"id": "7", "description": "x", "token": "READ-ONLY-TOKEN-'"\${SHIM_TOKEN_N:-1}"'", "permissions": ["read:orgs/1/buckets/0a1b2c3d4e5f6071"]}' ;;
+              *"influx backup"*) tar -C "$T/fake/influx" -c . ;;                                  # a backup streams out as tar
+              *"influx restore"*) cat > "$T/restored-influx.tar" ;;                               # a restore streams one in
+              *"poller tar -C /data -c"*) tar -C "$T/fake/poller" -c . ;;
+              *"web tar -C /data -c"*) tar -C "$T/fake/web" -c . ;;
+              *"poller tar -C /data -x"*) mkdir -p "$T/restored/poller" && tar -C "$T/restored/poller" -x ;;
+              *"web tar -C /data -x"*) mkdir -p "$T/restored/web" && tar -C "$T/restored/web" -x ;;
             esac ;;
       *) : ;;
     esac ;;
@@ -174,6 +180,32 @@ out=$(upd status 2>&1); check "status says the dashboard has a read-only token" 
 sed -i '/^INFLUX_READ_TOKEN=/d' "$T/inst/.env"
 out=$(upd status 2>&1); check "status points to secure-tokens while the admin token is in use" '[[ "$out" == *"solis-monitor secure-tokens"* ]]'
 upd secure-tokens >/dev/null 2>&1
+
+echo "solis-monitor backup and restore"
+mkdir -p "$T/fake/influx/20261112" "$T/fake/poller" "$T/fake/web"
+echo manifest > "$T/fake/influx/20261112/manifest"; echo '{"host": "192.168.7.7"}' > "$T/fake/poller/inverter.json"; echo '{"v": 1}' > "$T/fake/web/tariff.json"
+: > "$T/docker.log"; out=$(upd backup 2>&1); rc=$?
+bk="$(ls "$T"/inst/backups/solis-monitor-*.tar.gz 2>/dev/null | sed -n 1p)"
+check "backup writes one private archive" '[[ $rc -eq 0 && -s "$bk" && "$(stat -c %a "$bk")" == 600 && "$out" == *"Backup written"* ]]'
+mkdir -p "$T/unpacked" && tar -xzf "$bk" -C "$T/unpacked"
+check "it holds the database, the saved files, .env and a manifest" '[[ -s "$T/unpacked/influxdb.tar" && -s "$T/unpacked/poller-data.tar" && -s "$T/unpacked/web-data.tar" && -s "$T/unpacked/env" && "$(cat "$T/unpacked/manifest.json")" == *"\"version\":\"v9.9.10\""* ]] && tar -tf "$T/unpacked/influxdb.tar" | grep -q 20261112/manifest && grep -q "^WEB_BASIC_AUTH=" "$T/unpacked/env"'
+check "the database was backed up online, inside its container" 'grep -q "^compose exec -T influxdb sh -c .*influx backup" "$T/docker.log"'
+out=$(upd backup "$T/elsewhere/site.tar.gz" 2>&1); check "a file name of your own is used as given" '[[ -s "$T/elsewhere/site.tar.gz" ]]'
+out=$(upd status 2>&1); check "status shows the latest backup" '[[ "$out" == *"Backup:    20"* && "$out" == *"/backups/solis-monitor-"* ]]'
+# restore onto an install with other settings and a newer version: the backup's settings come back, the version stays
+set_env_test() { if grep -qE "^$1=" "$T/inst/.env"; then sed -i "s|^$1=.*|$1=$2|" "$T/inst/.env"; else echo "$1=$2" >> "$T/inst/.env"; fi; }
+set_env_test WEB_BASIC_AUTH "other:Other-pw1"; set_env_test SOLIS_VERSION v9.9.30
+: > "$T/docker.log"; rm -rf "$T/restored"
+out=$(upd restore "$bk" 2>&1 </dev/null); rc=$?
+check "restore asks first, and does nothing without a yes" '[[ $rc -ne 0 && "$out" == *"Nothing changed"* ]] && ! grep -q "influx restore" "$T/docker.log" && [[ "$(env_of WEB_BASIC_AUTH)" == "other:Other-pw1" ]]'
+out=$(upd restore "$bk" --yes 2>&1); rc=$?
+check "restore --yes puts the database back in full" '[[ $rc -eq 0 ]] && grep -q "^compose stop poller web$" "$T/docker.log" && grep -q "influx restore --full" "$T/docker.log" && tar -tf "$T/restored-influx.tar" | grep -q 20261112/manifest'
+check "the saved files are back in both containers, which are then restarted" '[[ "$(cat "$T/restored/poller/inverter.json")" == *192.168.7.7* && -s "$T/restored/web/tariff.json" ]] && grep -q "^compose restart poller web$" "$T/docker.log"'
+check ".env is the backup's, except the installed version" '[[ "$(env_of WEB_BASIC_AUTH)" == "$(grep "^WEB_BASIC_AUTH=" "$T/unpacked/env" | cut -d= -f2-)" && "$(env_of WEB_BASIC_AUTH)" != "other:Other-pw1" && "$(env_of SOLIS_VERSION)" == v9.9.30 && "$(stat -c %a "$T/inst/.env")" == 600 ]] && grep -q "^compose up -d --force-recreate" "$T/docker.log"'
+check "the database CLI is pointed at the restored token" 'grep -q "^compose exec -T influxdb influx config set --config-name default --token $(env_of INFLUX_TOKEN)$" "$T/docker.log"'
+echo "not a backup" > "$T/bogus.tar.gz"
+out=$(upd restore "$T/bogus.tar.gz" --yes 2>&1); check "a file that is not a backup is refused before anything is touched" '[[ $? -ne 0 && "$out" == *"not a backup"* ]]'
+set_env_test SOLIS_VERSION v9.9.10          # back to what the update tests below expect
 
 echo "solis-monitor reset-login"
 : > "$T/docker.log"; out=$(upd reset-login 2>&1)

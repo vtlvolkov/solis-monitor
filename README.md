@@ -143,6 +143,8 @@ solis-monitor auto-update on    # optional: look for a new release every night (
 solis-monitor logs poller       # recent log lines of a service (poller, web or influxdb); add -f to follow
 solis-monitor edit              # open your settings file (.env) in an editor, then apply the changes
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
+solis-monitor backup            # one .tar.gz with your history, saved settings and .env; copy it off the machine
+solis-monitor restore FILE      # put a backup back, here or on a fresh install
 ```
 
 **From the dashboard:** when a newer release exists, an **Update available** badge appears next to the Online pill on every page (the server looks for one every 6 hours). Click it to open **Settings → System → Software** with the update ready to confirm, or press **Check for updates** there yourself.
