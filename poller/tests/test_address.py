@@ -9,6 +9,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import address
+import api
 import control
 import poller
 import scan
@@ -211,7 +212,7 @@ def server(tmp_path, env_host="192.168.0.105"):
     ctl = control.Controller(inv, control.Config({"INFLUX_TOKEN": "secret"}), audit=lambda a, **f: audits.append((a, f)))
     ctl.addresses = address.AddressStore(str(tmp_path / "inverter.json"), env_host, 502, 1)
     ctl.poll_status, ctl.devices = address.PollStatus(), FakeDevices()
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return ctl, inv, audits, srv
 

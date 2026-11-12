@@ -7,6 +7,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+import api
 import control
 from control import (REG_BACKUP_SOC, REG_CLOCK, REG_FORCE_CHARGE_SOC, REG_MAX_CHARGE_A, REG_MAX_CHARGE_SOC,
                      REG_MAX_DISCHARGE_A, REG_OVERDISCHARGE_SOC,
@@ -295,7 +296,7 @@ def test_clock_sync_writes_server_local_time():
 @pytest.fixture
 def server():
     ctl, inv, *_ = make()
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_port}", inv
     srv.shutdown()
@@ -332,7 +333,7 @@ def test_health_follows_the_poll_loop_not_the_inverter():
     t = [1000.0]
     ctl, *_ = make()
     ctl.poll_status, ctl.poll_interval = address.PollStatus(clock=lambda: t[0]), 10
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{srv.server_port}/health"
     try:

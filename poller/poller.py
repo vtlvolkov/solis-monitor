@@ -3,7 +3,7 @@
 Solis hybrid inverter -> InfluxDB 2 poller (Modbus TCP).
 
 Reads input registers (FC04) every POLL_INTERVAL seconds and writes one point
-to measurement "solis". Also serves the internal control API (control.py) on the
+to measurement "solis". Also serves the internal control API (api.py + control.py) on the
 same Modbus connection, so this process stays the inverter's only client.
 Configuration comes from environment variables (see docker-compose.yml / .env).
 """
@@ -21,6 +21,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 from pymodbus.client import ModbusTcpClient
 
 import address
+import api
 import control
 import device
 import faults
@@ -286,7 +287,7 @@ def main():
     ctl.addresses, ctl.poll_status, ctl.poll_interval = addresses, status, POLL_INTERVAL
     ctl.devices = device.DeviceReader(inv, ttl=90, capacity=device.CapacityStore(
         os.getenv("CAPACITY_FILE", "/data/battery-capacity.json"), os.getenv("BATTERY_CAPACITY_KWH")))
-    server = control.serve(ctl)
+    server = api.serve(ctl)
 
     def keep_caches_warm():                       # device/settings reads take seconds; serve them from cache
         n = 0

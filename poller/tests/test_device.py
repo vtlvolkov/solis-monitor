@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
+import api
 import control
 import device
 
@@ -167,7 +168,7 @@ def test_reader_caches():
 def test_http_device_endpoint():
     ctl = control.Controller(FakeInverter(), control.Config({"INFLUX_TOKEN": "secret"}))
     ctl.devices = device.DeviceReader(ctl.inv)
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/device",
@@ -190,7 +191,7 @@ def test_http_battery_capacity(tmp_path):
                              audit=lambda action, **f: audit.append((action, f)))
     ctl.devices = device.DeviceReader(ctl.inv, capacity=device.CapacityStore(str(tmp_path / "c.json")))
     ctl.devices.refresh()
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
     def call(method, body=None, token="secret"):

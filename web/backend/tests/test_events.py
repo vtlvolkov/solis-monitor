@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 
 from app import shaping, validation
 from app.config import Settings
-from app.main import create_app, valid_setting
+from app.main import create_app
+from app.routes.settings import valid_setting
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 

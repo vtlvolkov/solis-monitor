@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+import api as control_api
 import control
 import rawread
 from control import Config, ControlError, Controller
@@ -101,7 +102,7 @@ def test_bad_input_is_a_400_and_never_reaches_the_inverter():
 def api():
     ctl, inv = make(regs={33000: 1})
     ctl.cfg.port = 0
-    server = ThreadingHTTPServer(("127.0.0.1", 0), control.make_handler(ctl))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), control_api.make_handler(ctl))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}", inv
     server.shutdown()
