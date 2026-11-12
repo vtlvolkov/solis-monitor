@@ -12,7 +12,8 @@
 #   solis-monitor backup [FILE|DIR]      one .tar.gz with the history, the saved settings and .env (default: backups/ here)
 #                                        (default: the folder set on the Settings page, else backups/ here; --from-dashboard: asked
 #                                        for on the Settings page, which also keeps only the newest N there)
-#   solis-monitor restore FILE [--yes]   put a backup back, on this or a fresh install (replaces the history and .env)
+#   solis-monitor restore FILE [--yes]   put a backup back, on this or a fresh install (replaces the history and .env);
+#                                        the dashboard's Backup tab can do this too, for the archives in its folder
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
 set -euo pipefail
@@ -233,11 +234,27 @@ cmd_backup() {
     action="$(printf '%s' "$request" | sed -n 's/.*"action":"\([a-z-]*\)".*/\1/p' | sed -n 1p)"
     if [[ "$action" == set-folder ]]; then set_backup_folder "$request"; return $?; fi
     if [[ "$action" == remove ]]; then remove_backup "$request"; return $?; fi
+    if [[ "$action" == restore ]]; then restore_from_dashboard "$request"; return $?; fi
   fi
   target="${target:-$(backup_dir)}"
   site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
   stamp="$(date +%Y%m%d-%H%M%S)"
   if [[ "$target" == *.tar.gz ]]; then file="$target"; else file="$target/solis-monitor${site:+-$site}-$stamp.tar.gz"; fi
+  make_archive "$file"
+  if [[ "$(dirname "$file")" == "$(backup_dir)" ]]; then
+    if [[ -n "$BREPORT" ]]; then
+      # Asked for from the dashboard: keep only the newest N in the backup folder, so clicking cannot fill the disk.
+      # Archives made by hand elsewhere, and the ones you downloaded, are not touched.
+      local keep old; keep="$(backup_keep)"
+      ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
+    fi
+    write_backup_index "$(backup_dir)"
+  fi
+  [[ -z "$BREPORT" ]] || breport ok "Backup written" "$(basename "$file")"
+}
+
+make_archive() {          # make_archive FILE: the database (online), the saved files, .env and the compose file, as one .tar.gz
+  local file="$1" tmp
   mkdir -p "$(dirname "$file")" || die "cannot create $(dirname "$file")"
   tmp="$(mktemp -d)"
   echo "Backing up the database ..."
@@ -253,18 +270,33 @@ cmd_backup() {
   breport running "Packing the archive"
   tar -czf "$file" -C "$tmp" manifest.json env docker-compose.yml influxdb.tar poller-data.tar web-data.tar
   chmod 600 "$file"                      # it holds .env, with every password and token
+  rm -rf "$tmp"
   echo "Backup written: $file ($(du -h "$file" | cut -f1))"
   echo "It contains your passwords and tokens: keep it private, and copy it off this machine."
-  if [[ "$(dirname "$file")" == "$(backup_dir)" ]]; then
-    if [[ -n "$BREPORT" ]]; then
-      # Asked for from the dashboard: keep only the newest N in the backup folder, so clicking cannot fill the disk.
-      # Archives made by hand elsewhere, and the ones you downloaded, are not touched.
-      local keep old; keep="$(backup_keep)"
-      ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
-    fi
+}
+
+# The dashboard asked to restore one of the archives in the backup folder. First a backup of the current state (unless
+# told not to), so a wrong click is itself recoverable; then the same restore as `solis-monitor restore FILE --yes`.
+restore_from_dashboard() {
+  local name first
+  name="$(printf '%s' "$1" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | sed -n 1p)"
+  first="$(printf '%s' "$1" | sed -n 's/.*"backup_first":\(true\|false\).*/\1/p' | sed -n 1p)"
+  if [[ ! "$name" =~ ^solis-monitor(-[A-Za-z0-9][A-Za-z0-9-]{0,60})?-[0-9]{8}-[0-9]{6}\.tar\.gz$ ]]; then
+    breport failed "That is not the name of a backup."; echo "solis-monitor: refused to restore '$name'" >&2; return 1
+  fi
+  local file; file="$(backup_dir)/$name"
+  if [[ ! -f "$file" ]]; then breport failed "No such backup."; return 1; fi
+  if [[ "$first" != false ]]; then
+    local site stamp
+    site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    breport running "Backing up the current state first"
+    make_archive "$(backup_dir)/solis-monitor${site:+-$site}-$stamp.tar.gz"
     write_backup_index "$(backup_dir)"
   fi
-  [[ -z "$BREPORT" ]] || breport ok "Backup written" "$(basename "$file")"
+  cmd_restore "$file" --yes
+  write_backup_index "$(backup_dir)"
+  breport ok "Restored from $name"
 }
 
 remove_backup() {         # the dashboard asked to delete one archive from the backup folder
@@ -306,7 +338,7 @@ cmd_restore() {
   done
   [[ -n "$file" ]] || die "usage: solis-monitor restore FILE [--yes]"
   [[ -r "$file" ]] || die "cannot read $file"
-  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"; finish_breport' EXIT      # finish_breport: a no-op unless the dashboard asked
   tar -xzf "$file" -C "$tmp" || die "$file is not a backup made by solis-monitor backup"
   for key in manifest.json env influxdb.tar; do [[ -s "$tmp/$key" ]] || die "$file is missing $key: not a backup made by solis-monitor backup"; done
   manifest="$(cat "$tmp/manifest.json")"
@@ -320,9 +352,11 @@ cmd_restore() {
     [[ "${ans:-n}" == [yY]* ]] || { echo "Nothing changed."; return 1; }
   fi
   echo "Stopping the poller and the dashboard ..."
+  breport running "Stopping the poller and the dashboard"
   compose stop poller web
   compose up -d influxdb
   echo "Restoring the database ..."
+  breport running "Restoring the database"
   compose exec -T influxdb sh -c 'rm -rf /tmp/solis-restore && mkdir /tmp/solis-restore && tar -C /tmp/solis-restore -x && influx restore --full /tmp/solis-restore >&2 && rm -rf /tmp/solis-restore' \
     < "$tmp/influxdb.tar" || die "the database restore failed; the poller and the dashboard are stopped (solis-monitor apply starts them again)"
   # .env from the backup; the installer's lines (which release, from where) stay those of this install
@@ -333,6 +367,7 @@ cmd_restore() {
   # the database's CLI (used by secure-tokens and the docs) must use the restored admin token from now on
   compose exec -T influxdb influx config set --config-name default --token "$(env_value INFLUX_TOKEN)" >/dev/null 2>&1 || true
   echo "Starting with the restored settings ..."
+  breport running "Starting with the restored settings"
   ensure_ctl
   compose up -d --force-recreate --remove-orphans          # every container gets the restored .env
   if [[ -s "$tmp/poller-data.tar" ]]; then compose exec -T poller tar -C /data -x < "$tmp/poller-data.tar" || echo "could not restore the poller's saved files" >&2; fi
@@ -626,6 +661,6 @@ case "${1:-}" in
   restore) shift; cmd_restore "$@" ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,17p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,18p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

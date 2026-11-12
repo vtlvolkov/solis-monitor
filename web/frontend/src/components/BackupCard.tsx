@@ -25,6 +25,11 @@ export function BackupCard() {
   const [keep, setKeep] = useState('5');
   const [formError, setFormError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);     // the archive whose Remove is waiting for a confirmation
+  const [restoring, setRestoring] = useState<string | null>(null);   // the archive the Restore dialog is open for
+  const [backupFirst, setBackupFirst] = useState(true);
+  const [typed, setTyped] = useState('');
+  const [offline, setOffline] = useState(false);                     // the dashboard itself is being replaced (a restore)
+  const restoreAsked = useRef(false);
   const asked = useRef<{ startedBefore: string | null; at: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -45,14 +50,21 @@ export function BackupCard() {
       try {
         const next = await getJson<BackupPayload>('/api/settings/backups');
         setB(next);
+        setOffline(false);
         const a = asked.current;
         if (!next.busy && (!a || next.status?.started !== a.startedBefore)) {
           setFollowing(false);                             // finished (ok or failed): the result stays on screen
+          if (restoreAsked.current && next.status?.state === 'ok') {
+            restoreAsked.current = false;
+            setTimeout(() => location.reload(), 1500);     // everything on the dashboard is from the backup now
+          }
         } else if (a && !next.busy && Date.now() - a.at > PICKUP_TIMEOUT_MS) {
           setFollowing(false);
           setError(t('The server did not pick up the request. On the server run: solis-monitor dashboard-updates on'));
         }
-      } catch { /* a blip; the next tick tries again */ }
+      } catch {
+        if (restoreAsked.current) setOffline(true);        // expected while the web container is replaced; otherwise a blip
+      }
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [following]);
@@ -119,9 +131,24 @@ export function BackupCard() {
     } finally { setBusy(false); }
   };
 
+  const restore = async (name: string) => {
+    setBusy(true); setError(null);
+    asked.current = { startedBefore: b.status?.started ?? null, at: Date.now() };
+    restoreAsked.current = true;
+    try {
+      setB(await postJson<BackupPayload>('/api/settings/backups/restore', { name, backup_first: backupFirst }));
+      setRestoring(null); setTyped('');
+      setFollowing(true);
+    } catch (e) {
+      asked.current = null; restoreAsked.current = false;
+      setError(t(e instanceof ApiError ? e.message : 'Request failed'));
+    } finally { setBusy(false); }
+  };
+
   const inProgress = following || b.busy;
   const result = b.status && !inProgress ? describeBackup(b.status) : null;
   const folder = b.folder.dir ?? b.folder.default_dir;
+  const restoringEntry = restoring ? b.backups.find((x) => x.name === restoring) : null;
   const elsewhere = b.backups.some((x) => !x.downloadable);
 
   return (
@@ -143,7 +170,40 @@ export function BackupCard() {
       {inProgress && (
         <div class="update-line" role="status" data-testid="backup-progress">
           <div class="progress indeterminate" role="progressbar" aria-label={t('Progress')}><div class="progress-fill" /></div>
-          <div class="setting-hint">{b.status?.state === 'running' && b.status.message ? t(b.status.message) : t('Waiting for the server to start the backup…')}</div>
+          <div class="setting-hint">{b.status?.state === 'running' && b.status.message ? t(b.status.message) : restoreAsked.current ? t('Waiting for the server to start the restore…') : t('Waiting for the server to start the backup…')}</div>
+          {offline && <div class="setting-hint">{t('The dashboard is restarting with the restored settings. This page reconnects by itself; if it asks for a password, use the one from the backup.')}</div>}
+        </div>
+      )}
+      {restoringEntry && (
+        <div class="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !busy) setRestoring(null); }} data-testid="restore-dialog">
+          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-title">
+            <div class="modal-head">
+              <h2 id="restore-title">{t('Restore this backup?')}</h2>
+              <button type="button" class="btn btn-small btn-quiet" onClick={() => setRestoring(null)} disabled={busy} aria-label={t('Close')}>✕</button>
+            </div>
+            <div class="restore-what">
+              <div><span class="muted">{t('Backup')}</span> <strong>{when(restoringEntry.created)}</strong> <span class="muted">· {formatSize(restoringEntry.size)}</span></div>
+              <code class="muted">{restoringEntry.name}</code>
+            </div>
+            <p class="setting-hint">
+              {t('The history, the settings saved on this dashboard and the configuration of the server are replaced with the ones in this backup. Everything recorded since it was made is lost. The dashboard restarts; if the password was different at that time, that password applies afterwards.')}
+            </p>
+            <label class="check">
+              <input type="checkbox" checked={backupFirst} onChange={(e) => setBackupFirst((e.target as HTMLInputElement).checked)} data-testid="restore-backup-first" />
+              <span><strong>{t('Back up the current state first')}</strong> <span class="muted">{t('(recommended: a wrong restore can then be undone by restoring that backup)')}</span></span>
+            </label>
+            <label class="field restore-typed">
+              <span>{t('Type {word} to continue', { word: 'restore' })}</span>
+              <input type="text" value={typed} onInput={(e) => setTyped((e.target as HTMLInputElement).value)} autocomplete="off" spellcheck={false} data-testid="restore-typed" />
+            </label>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-danger" onClick={() => restore(restoringEntry.name)} disabled={busy || typed.trim().toLowerCase() !== 'restore'} data-testid="restore-go">
+                {busy ? t('Asking the server…') : t('Restore')}
+              </button>
+              <button type="button" class="btn" onClick={() => setRestoring(null)} disabled={busy}>{t('Cancel')}</button>
+            </div>
+            {error && <div class="field-error" role="alert">{error}</div>}
+          </div>
         </div>
       )}
       {result && <div class={`update-result tone-${result.tone}`} role="status" data-testid="backup-result">{result.text}</div>}
@@ -200,8 +260,12 @@ export function BackupCard() {
                     ? <a class="btn btn-small" href={downloadUrl(x.name)} download={x.name} data-testid="backup-download">{t('Download')}</a>
                     : <span class="muted backup-elsewhere" data-testid="backup-elsewhere">{t('on the server')}</span>}
                   {!b.managed_by && (
-                    <button type="button" class="btn btn-small btn-quiet" onClick={() => setRemoving(x.name)} disabled={inProgress || !b.can_backup}
-                            aria-label={t('Remove')} title={t('Remove')} data-testid="backup-remove">✕</button>
+                    <>
+                      <button type="button" class="btn btn-small" onClick={() => { setRestoring(x.name); setTyped(''); setBackupFirst(true); }}
+                              disabled={inProgress || !b.can_backup} data-testid="backup-restore">{t('Restore…')}</button>
+                      <button type="button" class="btn btn-small btn-quiet" onClick={() => setRemoving(x.name)} disabled={inProgress || !b.can_backup}
+                              aria-label={t('Remove')} title={t('Remove')} data-testid="backup-remove">✕</button>
+                    </>
                   )}
                 </>
               )}
@@ -211,7 +275,7 @@ export function BackupCard() {
       )}
       {elsewhere && <div class="setting-hint">{t('Files in {dir} can be copied from the server; the dashboard can download only from its own folder.', { dir: folder ?? '' })}</div>}
       {b.listed && <div class="setting-hint">{t('The server keeps the newest {n} made from here; older ones are removed. Backups made on the server by hand (solis-monitor backup) stay where you put them.', { n: b.folder.keep })}</div>}
-      <div class="setting-hint">{t('To put a backup back, on the server run: solis-monitor restore FILE')}</div>
+      <div class="setting-hint">{t('Restore… puts a backup back (on the server: solis-monitor restore FILE).')}</div>
     </Card>
   );
 }

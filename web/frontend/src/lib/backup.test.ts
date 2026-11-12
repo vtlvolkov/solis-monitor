@@ -31,6 +31,8 @@ describe('backup helpers', () => {
       .toBe('Folder set to /mnt/usb/solis');
     expect(describeBackup({ state: 'ok', message: 'Removed solis-monitor-20261112-180000.tar.gz', file: null, started: null, finished: null }).text)
       .toBe('Removed solis-monitor-20261112-180000.tar.gz');
+    expect(describeBackup({ state: 'ok', message: 'Restored from solis-monitor-20261112-180000.tar.gz', file: null, started: null, finished: null }).text)
+      .toBe('Restored from solis-monitor-20261112-180000.tar.gz');
   });
   it('builds the download link from the listed name only', () => {
     expect(downloadUrl('solis-monitor-Home-20261112-180000.tar.gz')).toBe('/api/settings/backups/solis-monitor-Home-20261112-180000.tar.gz');

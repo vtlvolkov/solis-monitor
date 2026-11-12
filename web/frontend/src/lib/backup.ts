@@ -55,6 +55,10 @@ export const SERVER_TEXTS = [
   tx('That folder is not writable for the backup helper.'),
   tx('The folder must be an absolute path on the server, like /mnt/usb/solis.'),
   tx('That is not the name of a backup.'),
+  tx('Backing up the current state first'),
+  tx('Stopping the poller and the dashboard'),
+  tx('Restoring the database'),
+  tx('Starting with the restored settings'),
 ];
 
 /** 1234567 -> "1.2 MB"; whole kB below a megabyte. */

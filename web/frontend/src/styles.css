@@ -268,6 +268,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .backup-list .btn-quiet:hover { color: var(--c-danger); }
 .backup-list .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
 .backup-confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.88rem; }
+.restore-what { display: grid; gap: 4px; font-size: 0.95rem; }
+.restore-what code { font-size: 0.85rem; }
+.restore-typed { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; max-width: 280px; }
+.restore-typed input { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px; padding: 6px 10px; font: inherit; }
+.modal-actions .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
 .backup-list li.removing { background: var(--c-surface2); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
 .update-line { margin-top: 10px; font-size: 0.92rem; }
 .update-line a { color: var(--c-warn); }

@@ -116,6 +116,32 @@ def build(ctx: Context) -> APIRouter:
         log.warning("backup removal requested from the dashboard: %s", body["name"])
         return JSONResponse({**state(t), "busy": True}, status_code=202)
 
+    @r.post("/api/settings/backups/restore")
+    async def api_backup_restore(request: Request):
+        """Ask the host to restore one of the listed archives: it backs the current state up first (unless told not
+        to), then replaces the database, the saved files and .env with the archive's. The dashboard restarts meanwhile."""
+        if (refused := ctx.refuse_write(request)) is not None:
+            return refused
+        body, bad = await ctx.json_body(request)
+        if bad is not None:
+            return bad
+        if (not isinstance(body, dict) or set(body) != {"name", "backup_first"} or not isinstance(body["name"], str)
+                or not NAME.fullmatch(body["name"]) or not isinstance(body["backup_first"], bool)):
+            return JSONResponse({"detail": "body must be {name, backup_first} for a listed backup"}, status_code=400)
+        t = now()
+        st = state(t)
+        if not st["can_backup"]:
+            return JSONResponse({"detail": st["reason"]}, status_code=409)
+        if st["busy"]:
+            return JSONResponse({"detail": "A backup is already running."}, status_code=409)
+        try:
+            bridge.request(now=t, action="restore", name=body["name"], backup_first=body["backup_first"])
+        except OSError as exc:
+            log.error("could not write the backup request: %s", exc)
+            return JSONResponse({"detail": "Could not reach the backup helper on the server."}, status_code=500)
+        log.warning("RESTORE requested from the dashboard: %s (backup first: %s)", body["name"], body["backup_first"])
+        return JSONResponse({**state(t), "busy": True}, status_code=202)
+
     @r.get("/api/settings/backups/{name}")
     async def api_backup_download(name: str):
         """One archive, as the host wrote it. It holds .env: this route is behind the Settings login like every change."""

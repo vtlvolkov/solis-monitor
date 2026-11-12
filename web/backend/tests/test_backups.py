@@ -163,3 +163,17 @@ def test_removal_is_a_request_to_the_host_for_a_listed_name_only(tmp_path):
     assert r.status_code == 202 and r.json()["busy"] is True
     assert json.loads((e.control / "backup-request").read_text()) == {"requested_at": NOW.isoformat(), "action": "remove", "name": GOOD}
     assert post({"name": GOOD}).status_code == 409
+
+
+def test_restore_is_a_request_to_the_host_with_the_safety_backup_flag(tmp_path):
+    e = Env(tmp_path)
+    post = lambda body: e.client.post("/api/settings/backups/restore", headers=JSON, json=body, auth=AUTH)
+    for bad in ({"name": GOOD}, {"name": "../.env", "backup_first": True}, {"name": GOOD, "backup_first": "yes"}, {"name": GOOD, "backup_first": True, "x": 1}):
+        assert post(bad).status_code == 400, bad
+    assert not (e.control / "backup-request").exists()
+    r = post({"name": GOOD, "backup_first": True})
+    assert r.status_code == 202 and r.json()["busy"] is True
+    assert json.loads((e.control / "backup-request").read_text()) == {"requested_at": NOW.isoformat(), "action": "restore", "name": GOOD, "backup_first": True}
+    assert post({"name": GOOD, "backup_first": False}).status_code == 409
+    e2 = Env(tmp_path / "m", managed_by="umbrelOS")
+    assert e2.client.post("/api/settings/backups/restore", headers=JSON, json={"name": GOOD, "backup_first": True}, auth=AUTH).status_code == 409

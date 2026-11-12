@@ -488,7 +488,7 @@ export const UK: Record<string, string> = {
   "{n} B": "{n} Б", "{n} kB": "{n} кБ", "{n} MB": "{n} МБ", "{n} GB": "{n} ГБ",
   "The server keeps the newest {n} made from here; older ones are removed. Backups made on the server by hand (solis-monitor backup) stay where you put them.":
     "Сервер зберігає {n} найновіших копій, створених звідси; старіші видаляються. Копії, зроблені на сервері вручну (solis-monitor backup), залишаються там, куди ви їх поклали.",
-  "To put a backup back, on the server run: solis-monitor restore FILE": "Щоб відновити копію, на сервері виконайте: solis-monitor restore FILE",
+  "Restore… puts a backup back (on the server: solis-monitor restore FILE).": "Відновити… повертає копію (на сервері: solis-monitor restore FILE).",
   "The server does not show its backups folder to the dashboard. On the server run: solis-monitor update":
     "Сервер не показує панелі свою теку резервних копій. На сервері виконайте: solis-monitor update",
   "A backup is already running.": "Створення копії вже триває.",
@@ -514,6 +514,17 @@ export const UK: Record<string, string> = {
   "Remove": "Видалити", "Remove this backup? It cannot be undone.": "Видалити цю копію? Це не можна скасувати.",
   "That is not the name of a backup.": "Це не назва резервної копії.",
   "Backups are handled by {platform}.": "Резервне копіювання виконує {platform}.",
+  "Restore…": "Відновити…", "Restore": "Відновити", "Restore this backup?": "Відновити цю резервну копію?",
+  "The history, the settings saved on this dashboard and the configuration of the server are replaced with the ones in this backup. Everything recorded since it was made is lost. The dashboard restarts; if the password was different at that time, that password applies afterwards.":
+    "Історія, налаштування, збережені на цій панелі, і конфігурація сервера замінюються тими, що в цій копії. Усе, записане після її створення, буде втрачено. Панель перезапуститься; якщо пароль тоді був іншим, далі діятиме той пароль.",
+  "Back up the current state first": "Спершу зробити копію поточного стану",
+  "(recommended: a wrong restore can then be undone by restoring that backup)": "(рекомендовано: помилкове відновлення можна буде скасувати, відновивши цю копію)",
+  "Type {word} to continue": "Введіть {word}, щоб продовжити",
+  "Waiting for the server to start the restore…": "Очікування, поки сервер почне відновлення…",
+  "The dashboard is restarting with the restored settings. This page reconnects by itself; if it asks for a password, use the one from the backup.":
+    "Панель перезапускається з відновленими налаштуваннями. Ця сторінка перепідключиться сама; якщо вона запитає пароль, введіть той, що був у копії.",
+  "Backing up the current state first": "Спершу копіювання поточного стану", "Stopping the poller and the dashboard": "Зупинка опитувача й панелі",
+  "Restoring the database": "Відновлення бази даних", "Starting with the restored settings": "Запуск із відновленими налаштуваннями",
   "The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.":
     "Тека даних застосунку (історія та налаштування, збережені на цій панелі) входить до власних резервних копій застосунків платформи. Тут нічого не треба налаштовувати, і з цієї сторінки нічого завантажувати.",
   // CSV export
@@ -564,6 +575,7 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^Backups are handled by (.+)\.$/, "Резервне копіювання виконує $1."],
   [/^Folder set to (.+)$/, "Теку змінено на $1"],
   [/^Removed (solis-monitor\S+\.tar\.gz)$/, "Видалено $1"],
+  [/^Restored from (solis-monitor\S+\.tar\.gz)$/, "Відновлено з $1"],
   [/^That folder is not allowed\. Use one under (.+) \(or add its root to SOLIS_BACKUP_ROOTS in \.env\)\.$/, "Ця тека не дозволена. Виберіть теку в $1 (або додайте її корінь до SOLIS_BACKUP_ROOTS у .env)."],
   [/^Too many wrong passwords\. Try again in (\d+) min\.$/, "Забагато неправильних паролів. Спробуйте за $1 хв."],
   [/^Downloading the files of (\S+)$/, "Завантаження файлів версії $1"],

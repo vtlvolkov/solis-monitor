@@ -282,6 +282,27 @@ out=$(upd backup --from-dashboard 2>&1); check "a name that is not an archive is
 echo '{"action":"remove","name":"solis-monitor-19990101-000000.tar.gz"}' > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); check "a missing archive is reported" '[[ $? -ne 0 && "$(bstatus_of message)" == "No such backup." ]]'
 
+echo "restore from the dashboard"
+target="$(ls -1t "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | sed -n 2p | xargs -n1 basename)"
+before="$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)"
+set_env_test WEB_BASIC_AUTH "changed:Changed-pw1"
+: > "$T/docker.log"; rm -rf "$T/restored"; sleep 1
+echo "{\"action\":\"restore\",\"name\":\"$target\",\"backup_first\":true}" > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "the current state is backed up first, then the archive is restored" '[[ $rc -eq 0 && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == $((before + 1)) ]] && grep -q "influx backup" "$T/docker.log" && grep -q "influx restore --full" "$T/docker.log" && grep -q "^compose stop poller web$" "$T/docker.log"'
+check "the page is told, step by step, and the login from the backup applies" '[[ "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Restored from $target" && "$(env_of WEB_BASIC_AUTH)" != "changed:Changed-pw1" ]] && grep -q "$target" "$T/inst/control/backups.json"'
+echo "{\"action\":\"restore\",\"name\":\"$target\",\"backup_first\":false}" > "$T/inst/control/backup-request"
+: > "$T/docker.log"; sleep 1; out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "backup_first false skips the safety backup" '[[ $rc -eq 0 && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == $((before + 1)) ]] && ! grep -q "influx backup" "$T/docker.log" && grep -q "influx restore --full" "$T/docker.log"'
+echo '{"action":"restore","name":"../../.env","backup_first":false}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a name that is not an archive is refused" '[[ $? -ne 0 && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not the name of a backup"* ]]'
+echo '{"action":"restore","name":"solis-monitor-19990101-000000.tar.gz","backup_first":false}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a missing archive is reported" '[[ $? -ne 0 && "$(bstatus_of message)" == "No such backup." ]]'
+echo "not a backup" > "$T/mnt/usb/solis/solis-monitor-20200101-000000.tar.gz"
+echo '{"action":"restore","name":"solis-monitor-20200101-000000.tar.gz","backup_first":false}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a broken archive fails before anything is stopped, and the page is told" '[[ $? -ne 0 && "$(bstatus_of state)" == failed ]] && ! grep -q "^compose stop" <(tail -3 "$T/docker.log")'
+rm -f "$T/mnt/usb/solis/solis-monitor-20200101-000000.tar.gz"
+
 status_of() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/update-status.json"; }
 : > "$T/docker.log"; rm -f "$T/inst/control/update-status.json"
 upd update --from-dashboard > /dev/null 2>&1
