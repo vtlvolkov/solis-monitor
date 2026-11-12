@@ -9,10 +9,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/ruff-action@v3
-        with: { version: "0.17.5", args: "check poller web/backend" }
-      - uses: astral-sh/ruff-action@v3
-        with: { version: "0.17.5", args: "check deploy --config poller/ruff.toml" }
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: pip install ruff==0.17.5
+      - run: ruff check poller web/backend                    # each has its own ruff.toml
+      - run: ruff check deploy --config poller/ruff.toml      # the deploy scripts borrow the poller's
 
   poller:
     runs-on: ubuntu-24.04
