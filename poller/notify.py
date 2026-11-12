@@ -118,6 +118,16 @@ class Alerts:
     def _kw(w):
         return f"{w / 1000:.2f} kW" if w is not None else "unknown load"
 
+    def restore(self, active: list[dict]) -> None:
+        """Events still going on when the poller last stopped (EventTracker.active_events()): remember them so the
+        end of an outage reports its real start and duration, without announcing them again."""
+        for ev in active:
+            if ev["kind"] == "outage":
+                self.outage = (ev["since"], ev.get("soc"))
+                self.soc_sent = {lvl for lvl in self.soc_levels if ev.get("soc") is not None and ev["soc"] <= lvl}
+            elif ev["kind"] == "alarm":
+                self.alarms[ev["key"]] = ev["since"]
+
     def events(self, events: list[dict], vals: dict) -> None:
         now = self.clock()
         for ev in events:

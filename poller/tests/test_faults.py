@@ -48,6 +48,34 @@ def test_tracker_debounces_and_pairs():
     assert [(e["state"], e["soc"]) for e in ev] == [("end", 61.0)]
 
 
+def test_tracker_state_survives_a_restart(tmp_path):
+    path = str(tmp_path / "events.json")
+    t = [1_000_000.0]
+    lost = {**OK, "fault_code_01": 1, "grid_voltage": 0.0, "battery_soc": 88.0}
+    first = EventTracker(debounce=1, path=path, clock=lambda: t[0])
+    assert first.update(OK) == [] and not (tmp_path / "events.json").exists()      # nothing to remember yet
+    assert [e["state"] for e in first.update(lost)] == ["start"]
+    t[0] += 1800
+    again = EventTracker(debounce=2, path=path, clock=lambda: t[0])                  # the poller restarted mid-outage
+    assert again.active_events() == [{"key": "grid", "kind": "outage", "name": "Grid outage", "severity": "warning",
+                                      "since": 1_000_000.0, "soc": 88.0}]
+    assert again.update(lost) == [] and again.update(lost) == []                      # still out: no second start
+    again.update(OK)
+    ev = again.update({**OK, "battery_soc": 61.0})
+    assert [(e["kind"], e["state"], e["soc"]) for e in ev] == [("outage", "end", 61.0)]
+    assert EventTracker(path=path).active_events() == []                              # the end is remembered too
+
+
+def test_tracker_without_a_file_and_with_a_broken_one(tmp_path):
+    t = EventTracker(debounce=1)
+    assert [e["state"] for e in t.update({**OK, "fault_code_02": 2})] == ["start"]    # no path: works in memory
+    (tmp_path / "events.json").write_text("{not json")
+    t = EventTracker(debounce=1, path=str(tmp_path / "events.json"))
+    assert t.active_events() == []
+    assert [e["state"] for e in t.update({**OK, "fault_code_02": 2})] == ["start"]    # and the file is usable again
+    assert EventTracker(path=str(tmp_path / "events.json")).active_events()[0]["key"] == "f2b1"
+
+
 def test_tracker_alarms_start_and_end():
     t = EventTracker(debounce=1)
     ev = t.update({**OK, "fault_code_02": 2})

@@ -54,6 +54,23 @@ def test_outage_start_and_end():
     assert sent[-1] == "✅ Power is back (21:15). Outage lasted 2 h 11 min; battery 98% → 71%."
 
 
+def test_restored_outage_is_not_announced_again_but_ends_with_its_real_duration():
+    sent, clock = [], Clock()
+    a = Alerts(sent.append, soc_levels=(50, 30, 20), offline_after_s=300, battery=lambda: (5.12, 20), clock=clock)
+    a.restore([{"key": "grid", "kind": "outage", "name": "Grid outage", "severity": "warning",
+                "since": clock() - 3600, "soc": 88.0},
+               {"key": "f2b1", "kind": "alarm", "name": "Backup overload", "severity": "fault", "since": clock() - 600}])
+    assert sent == []                                                                  # picking up quietly
+    a.snapshot({"battery_soc": 45.0, "total_load_power": 500.0})
+    assert len(sent) == 1 and "45%" in sent[0]                                         # the levels crossed meanwhile, once
+    clock.t += 600
+    a.events([{"kind": "alarm", "key": "f2b1", "name": "Backup overload", "severity": "fault", "state": "end",
+               "soc": 44.0, "load": 500.0},
+              {"kind": "outage", "key": "grid", "name": "Grid outage", "severity": "warning", "state": "end",
+               "soc": 44.0, "load": 500.0}], {})
+    assert "after 20 min" in sent[1] and "Outage lasted 1 h 10 min" in sent[2] and "88% → 44%" in sent[2]
+
+
 def test_soc_levels_once_each_during_outage_only():
     a, sent, _ = make()
     a.snapshot({"battery_soc": 40})                         # no outage: nothing

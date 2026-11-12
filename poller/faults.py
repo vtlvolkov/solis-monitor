@@ -2,6 +2,12 @@
 Fault/alarm decoding (Solis ESINV-33000ID protocol, Appendix 2/5/6 and BMS 33145/33146)
 and grid-outage / alarm event tracking for the dashboard's Events tab.
 """
+import json
+import logging
+import os
+import time
+
+log = logging.getLogger("solis-poller")
 
 # (fault register 1..5 = 33116..33120, bit) -> name. 33116 bit 0 "No grid" is tracked as an outage.
 FAULT_BITS = {
@@ -106,12 +112,22 @@ def grid_lost(vals: dict) -> bool:
 
 class EventTracker:
     """Turns poll snapshots into start/end events. A change must be seen `debounce`
-    polls in a row before it counts, so a single odd reading doesn't create an event."""
+    polls in a row before it counts, so a single odd reading doesn't create an event.
 
-    def __init__(self, debounce: int = 2):
-        self.debounce = debounce
-        self.active: dict[str, tuple[str, str, str]] = {}     # key -> (kind, name, severity)
+    With a `path`, the active events are kept in a small JSON file (the poller's volume), so a restart in
+    the middle of an outage neither repeats its start nor forgets it: the next polls end it if the grid is
+    back, or carry on quietly if it is not. Without the file every restart would start from nothing, and an
+    outage that ended while the poller was down would stay open on the Events page forever."""
+
+    def __init__(self, debounce: int = 2, path: str | None = None, clock=time.time):
+        self.debounce, self.path, self.clock = debounce, path or None, clock
+        self.active: dict[str, dict] = {}              # "kind:key" -> {kind, name, severity, since, soc}
         self.pending: dict[str, int] = {}
+        self._load()
+
+    def active_events(self) -> list[dict]:
+        """What is going on right now (after a restart: what was going on when the poller stopped)."""
+        return [{"key": k.split(":", 1)[1], **v} for k, v in sorted(self.active.items())]
 
     def update(self, vals: dict) -> list[dict]:
         observed = {f"alarm:{k}": ("alarm", n, s) for k, (n, s) in active_alarms(vals).items()}
@@ -127,12 +143,43 @@ class EventTracker:
                 continue
             self.pending.pop(key)
             if key in observed:
-                self.active[key] = observed[key]
                 kind, name, sev = observed[key]
+                self.active[key] = {"kind": kind, "name": name, "severity": sev,
+                                    "since": self.clock(), "soc": vals.get("battery_soc")}
                 state = "start"
             else:
-                kind, name, sev = self.active.pop(key)
+                ev = self.active.pop(key)
+                kind, name, sev = ev["kind"], ev["name"], ev["severity"]
                 state = "end"
             events.append({"kind": kind, "key": key.split(":", 1)[1], "name": name, "severity": sev,
                            "state": state, "soc": vals.get("battery_soc"), "load": vals.get("total_load_power")})
+        if events:
+            self._save()
         return sorted(events, key=lambda e: (e["kind"], e["key"]))
+
+    def _load(self) -> None:
+        if not self.path or not os.path.exists(self.path):
+            return
+        try:
+            with open(self.path) as f:
+                saved = json.load(f)["active"]
+            self.active = {str(k): {"kind": str(v["kind"]), "name": str(v["name"]), "severity": str(v["severity"]),
+                                    "since": float(v["since"]), "soc": None if v.get("soc") is None else float(v["soc"])}
+                           for k, v in saved.items() if ":" in k}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            log.error("event state file %s is unreadable (%s): starting with no active events", self.path, exc)
+            self.active = {}
+
+    def _save(self) -> None:
+        if not self.path:
+            return
+        try:
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"active": self.active, "saved_at": self.clock()}, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.path)                 # a crash never leaves half a file
+        except OSError as exc:
+            log.warning("could not save the event state to %s: %s", self.path, exc)

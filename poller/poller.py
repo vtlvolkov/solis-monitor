@@ -306,7 +306,7 @@ def main():
              inv.host or "(no address yet)", inv.port, inv.unit, POLL_INTERVAL, INFLUX_URL, INFLUX_BUCKET)
     failures = 0
     told_unset = False
-    tracker = faults.EventTracker()
+    tracker = faults.EventTracker(path=os.getenv("EVENTS_FILE", "/data/events.json"))
 
     def battery_for_runtime():                    # (capacity kWh, SOC floor on backup) from cached device info
         d = ctl.devices.cached()
@@ -314,6 +314,9 @@ def main():
             return d["battery"]["capacity_kwh"], d["backup"]["eps_dod_pct"]
         return None
     alerts = notify.from_env(battery_for_runtime)
+    if tracker.active_events():                     # still going on when we last stopped: no new start, no new alert
+        alerts.restore(tracker.active_events())
+        log.info("Resuming with active events: %s", ", ".join(e["name"] for e in tracker.active_events()))
 
     while not stop.is_set():
         started = time.monotonic()

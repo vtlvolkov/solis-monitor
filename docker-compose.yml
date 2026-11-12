@@ -50,6 +50,7 @@ services:
       MIN_WRITE_INTERVAL_S: ${MIN_WRITE_INTERVAL_S:-60}
       BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}   # the Settings page can override it (saved in poller-data)
       CAPACITY_FILE: /data/battery-capacity.json
+      EVENTS_FILE: /data/events.json                    # outages/alarms in progress, so a restart does not lose or repeat them
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       ALERT_SOC_LEVELS: ${ALERT_SOC_LEVELS:-50,30,20}
@@ -57,7 +58,7 @@ services:
       SITE_NAME: ${SITE_NAME:-}
       TZ: ${TZ:-Europe/Kyiv}
     volumes:
-      - poller-data:/data     # battery capacity saved from the Settings page
+      - poller-data:/data     # the logger address and battery capacity saved from the Settings page, events in progress
 
   web:
     image: ${SOLIS_IMAGE_PREFIX:-solis-monitor}-web:${SOLIS_VERSION:-latest}
