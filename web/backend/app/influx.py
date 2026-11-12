@@ -110,10 +110,12 @@ def _valid(field: str, min_valid: float, measurement: str = "solis") -> str:
 
 
 def histogram_flux(bucket: str, field: str, range_s: int, start: float, width: float, count: int, min_valid: float) -> str:
-    """Counts per bin [start + i*width, start + (i+1)*width): Flux's histogram() is cumulative, difference() undoes that."""
+    """Counts per bin [start + i*width, start + (i+1)*width): Flux's histogram() is cumulative, difference() undoes that.
+    `infinity: true` adds a last bin up to +Inf: without it one stray reading above the bins (a 59.5 Hz glitch) makes
+    the whole query fail. The caller drops that bin; such readings still count in the out-of-band figures."""
     assert isinstance(range_s, int) and isinstance(count, int) and 1 <= count <= 400
     return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
-            f'|> group() |> histogram(bins: linearBins(start: {float(start)}, width: {float(width)}, count: {count}, infinity: false)) '
+            f'|> group() |> histogram(bins: linearBins(start: {float(start)}, width: {float(width)}, count: {count}, infinity: true)) '
             f'|> difference(nonNegative: true, columns: ["_value"]) |> keep(columns: ["le", "_value"])')
 
 
@@ -232,8 +234,9 @@ class InfluxRepo:
     def histogram(self, field, range_s, start, width, count, min_valid):
         rows = [(r.values.get("le"), r.get_value()) for table in self.slow_api.query(histogram_flux(self.bucket, field, range_s, start, width, count, min_valid))
                 for r in table.records]
-        # "le" is the bin's upper edge; the first bin (below start) is dropped by difference(), so edges map back to starts
-        return [(float(le) - width, int(v)) for le, v in rows if le is not None and v is not None]
+        # "le" is the bin's upper edge; the first bin (below start) is dropped by difference(), so edges map back to starts.
+        # The +Inf overflow bin (readings above the last edge) is left out of the chart.
+        return [(float(le) - width, int(v)) for le, v in rows if le is not None and v is not None and float(le) != float("inf")]
 
     def _hourly_rows(self, query):
         return [(r.get_time(), r.get_value()) for table in self.slow_api.query(query) for r in table.records if r.get_value() is not None]

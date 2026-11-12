@@ -1,6 +1,7 @@
 """What every route module shares: the settings, the data sources (InfluxDB and the poller's internal API),
 the login and tariff stores, and the checks a request must pass before it may change anything."""
 import asyncio
+import json
 import logging
 from urllib.parse import urlparse
 
@@ -19,6 +20,20 @@ NEEDS_PASSWORD = "Changes need a password. Set WEB_BASIC_AUTH=user:pass in .env 
 
 class InfluxUnavailable(Exception):
     pass
+
+
+def _describe(exc: Exception) -> str:
+    """One line: the exception's name, and for an InfluxDB answer its status and message (not the headers)."""
+    status, body = getattr(exc, "status", None), getattr(exc, "body", None)
+    if status is not None:
+        if isinstance(body, bytes):
+            body = body.decode("utf-8", "replace")
+        try:
+            body = json.loads(body).get("message", body) if body else ""
+        except (ValueError, AttributeError):
+            pass
+        return f"{type(exc).__name__} {status}: {str(body)[:300]}"
+    return f"{type(exc).__name__}: {str(exc).splitlines()[0][:300] if str(exc) else ''}"
 
 
 class Context:
@@ -41,8 +56,9 @@ class Context:
         try:
             return await asyncio.to_thread(fn, *args)
         except Exception as exc:          # connection refused, timeout, auth, Flux error ...
-            log.warning("InfluxDB query failed: %s", exc)
-            raise InfluxUnavailable(f"InfluxDB unavailable ({type(exc).__name__})") from exc
+            detail = _describe(exc)
+            log.warning("InfluxDB query failed: %s", detail)
+            raise InfluxUnavailable(f"InfluxDB unavailable: {detail}") from exc
 
     async def poller(self, fn, *args):
         """Call the poller's internal API off the event loop; (status, body), 502 when the poller is unreachable."""

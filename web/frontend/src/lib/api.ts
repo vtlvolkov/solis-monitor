@@ -46,11 +46,15 @@ export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> 
     throw new ApiError('Dashboard server unreachable', 0);
   }
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail = res.statusText, error = '';
     try {
-      detail = (await res.json()).detail ?? detail;
+      const body = await res.json();
+      detail = body.detail ?? detail;
+      error = typeof body.error === 'string' ? body.error : '';
     } catch { /* not JSON */ }
-    throw new ApiError(res.status === 503 ? 'InfluxDB unavailable' : String(detail), res.status);
+    // a 503 is the database: say so, and pass its own words on (the server puts them after the colon)
+    const why = error.includes(': ') ? error.slice(error.indexOf(': ') + 2) : '';
+    throw new ApiError(res.status === 503 ? (why ? `InfluxDB unavailable — ${why}` : 'InfluxDB unavailable') : String(detail), res.status);
   }
   return res.json() as Promise<T>;
 }

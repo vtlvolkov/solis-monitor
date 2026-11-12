@@ -92,6 +92,21 @@ def test_hourly_stats_may_come_from_the_minute_aggregates_but_counts_never():
     assert 'histogram(' in calls[-1]                                          # went through slow_api (the only one here)
 
 
+def test_histogram_has_an_overflow_bin_that_is_dropped():
+    from app.influx import InfluxRepo
+    assert "infinity: true" in histogram_flux("b", "grid_frequency", 3600, 49.5, 0.01, 100, 40.0)
+    r = InfluxRepo.__new__(InfluxRepo)
+    class Rec:
+        def __init__(self, le, v): self.values, self._v = {"le": le}, v
+        def get_value(self): return self._v
+    class T:
+        records = [Rec(49.51, 3), Rec(50.0, 400), Rec(float("inf"), 1)]       # the 59.5 Hz glitch lands in +Inf
+    class Api:
+        def query(self, q): return [T()]
+    r.bucket, r.slow_api = "solis", Api()
+    assert r.histogram("grid_frequency", 3600, 49.5, 0.01, 100, 40.0) == [(49.5, 3), (49.99, 400)]
+
+
 def test_percentiles_from_bins():
     bins = [(200.0, 10), (225.0, 100), (230.0, 300), (235.0, 90)]
     assert percentiles(bins, 1.0) == [225.5, 235.5]
