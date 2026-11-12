@@ -17,6 +17,7 @@ TEST_TAG = re.compile(r"(v\d{1,4}\.\d{1,4}\.\d{1,4})-[0-9A-Za-z.-]{1,40}")      
 REPO = re.compile(r"[A-Za-z0-9_.-]{1,60}/[A-Za-z0-9_.-]{1,100}")
 STATES = {"running", "ok", "rolled_back", "failed"}
 REQUEST, STATUS, BRIDGE = "update-request", "update-status.json", "bridge.json"
+UNCLAIMED_S = 120          # the host takes a request within seconds; after this nothing is watching for it
 
 
 class ReleaseLookupError(Exception):
@@ -170,6 +171,18 @@ class Bridge:
 
     def pending(self) -> bool:
         return os.path.exists(os.path.join(self.dir, self.REQUEST))
+
+    def unclaimed(self, now: datetime, after: float = UNCLAIMED_S) -> bool:
+        """A request the host has not taken for `after` seconds: its path unit removes the file as it starts, so
+        nothing is watching (not installed, or the service fails before it runs). The page must not wait forever."""
+        if not self.pending():
+            return False
+        raw = self._read(self.REQUEST) or {}
+        try:
+            asked = datetime.fromisoformat(str(raw.get("requested_at")).replace("Z", "+00:00"))
+            return (now - asked).total_seconds() > after
+        except (TypeError, ValueError):
+            return True
 
     def request(self, to: str | None = None, now: datetime | None = None, **info) -> None:
         """Ask the host. For an update the content is informational only (the host works out the target itself);

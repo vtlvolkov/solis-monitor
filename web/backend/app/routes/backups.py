@@ -33,6 +33,9 @@ def build(ctx: Context) -> APIRouter:
             if started is None or (t - started).total_seconds() > 1800:
                 status = {**status, "state": "failed", "message": "The backup stopped without reporting. On the server, see: solis-monitor logs"}
         busy = bridge.pending() or bool(status and status["state"] == "running")
+        if bridge.pending() and bridge.unclaimed(t):     # written, never taken: a new request may replace it
+            busy, status = False, {"state": "failed", "file": None, "started": None, "finished": None,
+                                   "message": "The server did not pick up the request. On the server run: solis-monitor dashboard-updates on"}
         cfg = bridge.config()
         return {"can_backup": reason is None, "reason": reason, "busy": busy, "managed_by": s.updates_managed_by or None,
                 "status": status, "backups": bridge.list(), "listed": bridge.mounted(),

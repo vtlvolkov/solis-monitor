@@ -52,6 +52,9 @@ def build(ctx: Context, releases=None):
             if started is None or (t - started).total_seconds() > 1800:
                 status = {**status, "state": "failed", "message": "The updater stopped without reporting. On the server, see: solis-monitor logs"}
         busy = bridge.pending() or bool(status and status["state"] == "running")
+        if bridge.pending() and bridge.unclaimed(t):     # written, never taken: a new request may replace it
+            busy, status = False, {"state": "failed", "from": None, "to": None, "percent": None, "started": None, "finished": None,
+                                   "message": "The server did not pick up the request. On the server run: solis-monitor dashboard-updates on"}
         return {"version": s.solis_version or None, "can_update": reason is None, "reason": reason, "busy": busy,
                 "managed_by": s.updates_managed_by or None,
                 "latest": {**latest, "checked_at": checked["at"].isoformat(), "available": available} if latest else None,

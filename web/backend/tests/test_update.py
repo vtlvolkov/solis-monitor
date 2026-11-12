@@ -142,6 +142,17 @@ def test_a_stuck_running_status_expires(tmp_path):
     assert e.get()["status"]["state"] == "failed"                      # no usable start time: do not wait
 
 
+def test_a_request_nobody_takes_stops_the_wait(tmp_path):
+    e = Env(tmp_path)
+    assert e.post().status_code == 202
+    e.t = NOW + timedelta(minutes=1)
+    assert e.get()["busy"] is True                                      # the host may still be starting
+    e.t = NOW + timedelta(minutes=3)                                    # no path unit took it
+    body = e.get()
+    assert body["busy"] is False and body["status"]["state"] == "failed" and "did not pick up" in body["status"]["message"]
+    assert e.post().status_code == 202                                  # and it can be asked again
+
+
 def test_update_when_already_current(tmp_path):
     e = Env(tmp_path, latest=release("v0.1.3"))
     r = e.post()

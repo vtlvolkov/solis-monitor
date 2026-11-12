@@ -496,6 +496,8 @@ export const UK: Record<string, string> = {
   "Backing up from the dashboard is not set up. On the server run: solis-monitor dashboard-updates on":
     "Резервне копіювання з панелі не налаштовано. На сервері виконайте: solis-monitor dashboard-updates on",
   "The backup stopped without reporting. On the server, see: solis-monitor logs": "Створення копії зупинилося без звіту. На сервері дивіться: solis-monitor logs",
+  "The server did not pick up the request. On the server run: solis-monitor dashboard-updates on":
+    "Сервер не прийняв запит. На сервері виконайте: solis-monitor dashboard-updates on",
   "The backup stopped before it finished. See: solis-monitor logs": "Створення копії зупинилося, не завершившись. Дивіться: solis-monitor logs",
   "Backing up the database": "Копіювання бази даних", "Packing the archive": "Пакування архіву", "Backup written": "Копію записано",
   "No such backup.": "Такої копії немає.",

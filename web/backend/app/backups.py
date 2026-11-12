@@ -39,6 +39,11 @@ class BackupBridge(Bridge):
                 "file": file if isinstance(file, str) and NAME.fullmatch(file) else None,
                 "started": _text(raw.get("started"), 40), "finished": _text(raw.get("finished"), 40)}
 
+    def ready(self) -> bool:
+        """bridge.json alone is not enough: `dashboard-updates on` before v0.4.0 set up updating only, without the
+        backup watcher. The one that installs it also writes backup-config.json, so that file says it is there."""
+        return super().ready() and self._read(CONFIG) is not None
+
     def mounted(self) -> bool:
         return os.path.isdir(self.backups_dir)
 

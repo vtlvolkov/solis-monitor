@@ -23,6 +23,7 @@ class Env:
             self.backups.mkdir()
         if bridge:
             (self.control / "bridge.json").write_text(json.dumps({"enabled": True, "version": "v0.3.3"}))
+            (self.control / "backup-config.json").write_text("{}")   # what dashboard-updates on (v0.4.0+) leaves
         s = Settings(static_dir="/nonexistent", basic_auth=auth, solis_version="v0.3.3", update_dir=str(self.control),
                      backup_dir=str(self.backups), updates_managed_by=managed_by)
         self.client = TestClient(create_app(repo=object(), control=object(), settings=s, now=lambda: self.t))
@@ -107,6 +108,26 @@ def test_refused_without_the_bridge_a_password_or_on_a_managed_platform(tmp_path
     e = Env(tmp_path / "c", auth="")
     r = e.client.post("/api/settings/backups", headers=JSON, json={})
     assert r.status_code == 403
+
+
+def test_a_request_nobody_takes_stops_the_wait_and_can_be_made_again(tmp_path):
+    e = Env(tmp_path)
+    assert e.post().status_code == 202
+    e.t = NOW.replace(minute=1)                                          # a minute: the host may still be starting
+    assert e.get()["busy"] is True
+    e.t = NOW.replace(minute=3)                                          # no path unit took it
+    body = e.get()
+    assert body["busy"] is False and body["status"]["state"] == "failed" and "did not pick up" in body["status"]["message"]
+    assert e.post().status_code == 202                                  # asking again replaces the stale request
+    assert json.loads((e.control / "backup-request").read_text())["requested_at"] == e.t.isoformat()
+
+
+def test_an_install_set_up_before_backups_existed_is_told_to_set_them_up(tmp_path):
+    e = Env(tmp_path)
+    (e.control / "backup-config.json").unlink()                         # dashboard-updates on from before v0.4.0
+    body = e.get()
+    assert body["can_backup"] is False and "dashboard-updates on" in body["reason"]
+    assert e.post().status_code == 409 and not (e.control / "backup-request").exists()
 
 
 def test_without_the_mount_the_page_still_works(tmp_path):
