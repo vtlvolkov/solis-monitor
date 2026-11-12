@@ -103,7 +103,11 @@ cmd_status() {
     echo "Updates:   manual (solis-monitor update)"
   fi
   if [[ -n "$(env_value CONTROL_TOKEN)" && -n "$(env_value INFLUX_READ_TOKEN)" ]]; then
-    echo "Tokens:    the dashboard reads the database with a read-only token"
+    if read_token_covers_all_buckets "$(env_value INFLUX_READ_TOKEN)"; then
+      echo "Tokens:    the dashboard reads the database with a read-only token"
+    else
+      echo "Tokens:    the dashboard's read-only token predates the 1-minute aggregates; long charts read the raw data until you run: solis-monitor secure-tokens"
+    fi
   else
     echo "Tokens:    the dashboard still uses the database admin token (solis-monitor secure-tokens)"
   fi
@@ -138,23 +142,34 @@ PY
   esac
 }
 
+read_token_covers_all_buckets() {   # read_token_covers_all_buckets TOKEN: does the database know it as "read every bucket of the org"?
+  local entry
+  entry="$(compose exec -T influxdb influx auth list --json 2>/dev/null | tr -d '\n\t' | grep -o "{[^{}]*\"token\": *\"$1\"[^{}]*}" || true)"
+  [[ -n "$entry" ]] || return 0                       # cannot tell (the database is down, or the CLI changed): leave it alone
+  printf '%s' "$entry" | grep -q '"read:orgs/[0-9a-f]*/buckets"'
+}
+
 # Least privilege for the dashboard container: its own secret for the poller's internal API (CONTROL_TOKEN) and a
 # read-only InfluxDB token (INFLUX_READ_TOKEN) instead of the database's admin token, which it never needed.
 # install.sh runs this once the database is up; an install made before these existed runs it once by hand.
 cmd_secure_tokens() {
-  local changed="" org bucket id token
+  local changed="" org token
   if [[ -z "$(env_value CONTROL_TOKEN)" ]]; then
     set_env CONTROL_TOKEN "$(random_hex 32)"; changed=1
     echo "CONTROL_TOKEN: the dashboard and the poller now share their own secret, not the database token."
   fi
-  if [[ -z "$(env_value INFLUX_READ_TOKEN)" ]]; then
-    org="$(env_value INFLUX_ORG)"; bucket="$(env_value INFLUX_BUCKET)"
-    id="$(compose exec -T influxdb influx bucket list --org "$org" --name "$bucket" --json 2>/dev/null | sed -n 's/.*"id": *"\([0-9a-f]*\)".*/\1/p' | sed -n 1p || true)"
-    [[ -n "$id" ]] || die "could not find the database bucket '$bucket' (is the stack running? solis-monitor status)"
-    token="$(compose exec -T influxdb influx auth create --org "$org" --read-bucket "$id" --description "Solis Monitor dashboard (read-only)" --json 2>/dev/null | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | sed -n 1p || true)"
+  local current; current="$(env_value INFLUX_READ_TOKEN)"
+  if [[ -n "$current" ]] && ! read_token_covers_all_buckets "$current"; then
+    # made by an earlier version for the one bucket of that time: the 1-minute aggregates (v0.7) need a wider one
+    echo "The dashboard's read-only token covers only the raw readings; replacing it with one for every bucket."
+    current=""
+  fi
+  if [[ -z "$current" ]]; then
+    org="$(env_value INFLUX_ORG)"
+    token="$(compose exec -T influxdb influx auth create --org "$org" --read-buckets --description "Solis Monitor dashboard (read-only)" --json 2>/dev/null | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | sed -n 1p || true)"
     [[ -n "$token" ]] || die "the database did not create a read-only token (try: docker compose logs influxdb)"
     set_env INFLUX_READ_TOKEN "$token"; changed=1
-    echo "INFLUX_READ_TOKEN: the dashboard now reads the database with a read-only token."
+    echo "INFLUX_READ_TOKEN: the dashboard now reads the database with a read-only token (every bucket, read only)."
   fi
   if [[ -z "$changed" ]]; then echo "Already done: the dashboard has its own tokens."; return 0; fi
   chmod 600 .env

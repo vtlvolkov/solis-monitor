@@ -76,6 +76,22 @@ def test_flux_builders_only_take_known_fields_and_numbers():
         raise AssertionError("accepted a bad query")
 
 
+def test_hourly_stats_may_come_from_the_minute_aggregates_but_counts_never():
+    from app.influx import InfluxRepo, hourly_flux
+    assert '_measurement == "solis_min"' in hourly_flux("solis_1m", "grid_voltage", 86400, "min", 100.0, "solis_min")
+    r = InfluxRepo.__new__(InfluxRepo)
+    calls = []
+    class Api:
+        def query(self, q): calls.append(q); return []
+    r.bucket, r.bucket_1m, r.api, r.slow_api, r.clock, r._ready = "solis", "solis_1m", Api(), Api(), lambda: 0.0, (0.0, True)
+    r.hourly("grid_voltage", 30 * 86400, "max", 100.0)
+    assert 'from(bucket: "solis_1m")' in calls[-1] and '_measurement == "solis_max"' in calls[-1]
+    r.hourly("grid_voltage", 30 * 86400, "count", 100.0)
+    assert 'from(bucket: "solis")' in calls[-1] and '_measurement == "solis"' in calls[-1]
+    r.histogram("grid_voltage", 30 * 86400, 150.0, 1.0, 150, 100.0)
+    assert 'histogram(' in calls[-1]                                          # went through slow_api (the only one here)
+
+
 def test_percentiles_from_bins():
     bins = [(200.0, 10), (225.0, 100), (230.0, 300), (235.0, 90)]
     assert percentiles(bins, 1.0) == [225.5, 235.5]

@@ -1,4 +1,10 @@
-"""InfluxDB query layer. The only module that talks to InfluxDB; tests replace it."""
+"""InfluxDB query layer. The only module that talks to InfluxDB; tests replace it.
+
+Two buckets: the raw 10-second readings, and 1-minute aggregates (measurements `solis` = mean, `solis_min`, `solis_max`)
+that an InfluxDB task fills (poller/downsample.py). Anything spanning a day or more reads the aggregates, so a month
+chart costs the same at any age of the install; live ranges and grid quality read the raw bucket. If the aggregate
+bucket is not there yet (an install that just updated, the backfill still running) the raw bucket answers everything."""
+import time
 from datetime import datetime
 from typing import Protocol
 
@@ -32,36 +38,52 @@ def _field_filter(fields) -> str:
     return " or ".join(f'r._field == "{f}"' for f in fields)
 
 
+DOWNSAMPLE_FROM_S = 12 * 3600          # spans this long or longer read the 1-minute bucket
+AGG_MEASUREMENT = {"mean": "solis", "last": "solis", "min": "solis_min", "max": "solis_max"}
+READY_CHECK_S = 300
+
+
+def use_downsampled(span_s: float, every: str) -> bool:
+    """The 1-minute bucket serves a window of a minute or more over half a day or more; raw serves the rest."""
+    return span_s >= DOWNSAMPLE_FROM_S and WINDOWS.get(every, 0) >= 60
+
+
+def ready_flux(bucket_1m: str) -> str:
+    """Has the task written anything in the last two hours? (Older-only data would mean the task is not running.)"""
+    return (f'from(bucket: "{bucket_1m}") |> range(start: -2h) |> filter(fn: (r) => r._measurement == "solis" and r._field == "grid_voltage") '
+            f'|> last() |> keep(columns: ["_time"])')
+
+
 def latest_flux(bucket: str) -> str:
     return (f'from(bucket: "{bucket}") |> range(start: -7d) '
             f'|> filter(fn: (r) => r._measurement == "solis") '
             f'|> group(columns: ["_field"]) |> last()')
 
 
-def history_flux(bucket: str, fields: list[str], range_s: int, every: str, agg: str) -> str:
+def history_flux(bucket: str, fields: list[str], range_s: int, every: str, agg: str, measurement: str = "solis") -> str:
     assert isinstance(range_s, int)
-    return _history_query(bucket, f"start: -{range_s}s", fields, every, agg)
+    return _history_query(bucket, f"start: -{range_s}s", fields, every, agg, measurement)
 
 
-def history_between_flux(bucket: str, fields: list[str], start: datetime, stop: datetime, every: str, agg: str) -> str:
+def history_between_flux(bucket: str, fields: list[str], start: datetime, stop: datetime, every: str, agg: str, measurement: str = "solis") -> str:
     return _history_query(bucket, f'start: {start.strftime("%Y-%m-%dT%H:%M:%SZ")}, stop: {stop.strftime("%Y-%m-%dT%H:%M:%SZ")}',
-                          fields, every, agg)
+                          fields, every, agg, measurement)
 
 
-def _history_query(bucket: str, time_range: str, fields: list[str], every: str, agg: str) -> str:
-    assert every in WINDOWS and agg in {"mean", "max", "min", "last"}
+def _history_query(bucket: str, time_range: str, fields: list[str], every: str, agg: str, measurement: str = "solis") -> str:
+    assert every in WINDOWS and agg in {"mean", "max", "min", "last"} and measurement in {"solis", "solis_min", "solis_max"}
     return (f'from(bucket: "{bucket}") |> range({time_range}) '
-            f'|> filter(fn: (r) => r._measurement == "solis" and ({_field_filter(fields)})) '
+            f'|> filter(fn: (r) => r._measurement == "{measurement}" and ({_field_filter(fields)})) '
             f'|> group(columns: ["_field"]) '
             f'|> aggregateWindow(every: {every}, fn: {agg}, createEmpty: false) '
             f'|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")')
 
 
-def window_max_flux(bucket: str, fields: list[str], start: datetime, every: str, stop: datetime | None = None) -> str:
-    assert every in WINDOWS
+def window_max_flux(bucket: str, fields: list[str], start: datetime, every: str, stop: datetime | None = None, measurement: str = "solis") -> str:
+    assert every in WINDOWS and measurement in {"solis", "solis_max"}
     end = f', stop: {stop.strftime("%Y-%m-%dT%H:%M:%SZ")}' if stop else ''
     return (f'from(bucket: "{bucket}") |> range(start: {start.strftime("%Y-%m-%dT%H:%M:%SZ")}{end}) '
-            f'|> filter(fn: (r) => r._measurement == "solis" and ({_field_filter(fields)})) '
+            f'|> filter(fn: (r) => r._measurement == "{measurement}" and ({_field_filter(fields)})) '
             f'|> group(columns: ["_field"]) '
             f'|> aggregateWindow(every: {every}, fn: max, createEmpty: false, timeSrc: "_start")')
 
@@ -81,10 +103,10 @@ def control_log_flux(bucket: str, limit: int) -> str:
             f'|> group() |> sort(columns: ["_time"], desc: true) |> limit(n: {limit})')
 
 
-def _valid(field: str, min_valid: float) -> str:
+def _valid(field: str, min_valid: float, measurement: str = "solis") -> str:
     """Readings during an outage (0 V, 0 Hz) are not grid quality: only values at or above min_valid count."""
     assert field in FIELD_SET and isinstance(min_valid, (int, float))
-    return (f'|> filter(fn: (r) => r._measurement == "solis" and r._field == "{field}" and r._value >= {float(min_valid)}) ')
+    return (f'|> filter(fn: (r) => r._measurement == "{measurement}" and r._field == "{field}" and r._value >= {float(min_valid)}) ')
 
 
 def histogram_flux(bucket: str, field: str, range_s: int, start: float, width: float, count: int, min_valid: float) -> str:
@@ -95,9 +117,9 @@ def histogram_flux(bucket: str, field: str, range_s: int, start: float, width: f
             f'|> difference(nonNegative: true, columns: ["_value"]) |> keep(columns: ["le", "_value"])')
 
 
-def hourly_flux(bucket: str, field: str, range_s: int, fn: str, min_valid: float) -> str:
-    assert isinstance(range_s, int) and fn in {"min", "max", "mean", "count"}
-    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid)}'
+def hourly_flux(bucket: str, field: str, range_s: int, fn: str, min_valid: float, measurement: str = "solis") -> str:
+    assert isinstance(range_s, int) and fn in {"min", "max", "mean", "count"} and measurement in {"solis", "solis_min", "solis_max"}
+    return (f'from(bucket: "{bucket}") |> range(start: -{range_s}s) {_valid(field, min_valid, measurement)}'
             f'|> group() |> aggregateWindow(every: 1h, fn: {fn}, createEmpty: false, timeSrc: "_start")')
 
 
@@ -129,11 +151,36 @@ def events_flux(bucket: str, days: int) -> str:
 
 
 class InfluxRepo:
-    def __init__(self, s: Settings):
-        self.bucket = s.influx_bucket
+    def __init__(self, s: Settings, clock=time.monotonic):
+        self.bucket, self.bucket_1m = s.influx_bucket, s.influx_bucket_1m
         self.client = InfluxDBClient(url=s.influx_url, token=s.influx_token, org=s.influx_org,
                                      timeout=8000)
         self.api = self.client.query_api()
+        # Grid quality scans a month of raw readings per query: give those a long timeout (the dashboard's own
+        # requests keep the short one, so a stuck database still fails fast everywhere else).
+        self.slow_client = InfluxDBClient(url=s.influx_url, token=s.influx_token, org=s.influx_org, timeout=120_000)
+        self.slow_api = self.slow_client.query_api()
+        self.clock = clock
+        self._ready: tuple[float, bool] = (-1e9, False)
+
+    def downsampled_ready(self) -> bool:
+        """The 1-minute bucket exists, this token may read it, and the task wrote recently. Checked every 5 minutes;
+        any failure (no bucket yet, no permission on an older read-only token) means "use the raw bucket"."""
+        at, ok = self._ready
+        if self.clock() - at < READY_CHECK_S:
+            return ok
+        try:
+            ok = any(r.get_time() for table in self.api.query(ready_flux(self.bucket_1m)) for r in table.records)
+        except Exception:
+            ok = False
+        self._ready = (self.clock(), ok)
+        return ok
+
+    def _source(self, span_s: float, every: str, agg: str) -> tuple[str, str]:
+        """(bucket, measurement) for a query."""
+        if use_downsampled(span_s, every) and self.downsampled_ready():
+            return self.bucket_1m, AGG_MEASUREMENT[agg]
+        return self.bucket, "solis"
 
     def latest(self):
         ts, vals = None, {}
@@ -145,10 +192,12 @@ class InfluxRepo:
         return (ts, vals) if ts else None
 
     def history(self, fields, range_s, every, agg):
-        return self._history_rows(history_flux(self.bucket, fields, range_s, every, agg), fields)
+        bucket, m = self._source(range_s, every, agg)
+        return self._history_rows(history_flux(bucket, fields, range_s, every, agg, m), fields)
 
     def history_between(self, fields, start, stop, every, agg):
-        return self._history_rows(history_between_flux(self.bucket, fields, start, stop, every, agg), fields)
+        bucket, m = self._source((stop - start).total_seconds(), every, agg)
+        return self._history_rows(history_between_flux(bucket, fields, start, stop, every, agg, m), fields)
 
     def _history_rows(self, query, fields):
         rows = sorted(((r.get_time(), r.values) for table in self.api.query(query) for r in table.records),
@@ -158,8 +207,10 @@ class InfluxRepo:
         return times, series
 
     def window_max(self, fields, start, every, stop=None):
+        span = ((stop or datetime.now(start.tzinfo)) - start).total_seconds()
+        bucket, m = self._source(span, every, "max")
         return [(r.get_time(), r.get_field(), float(r.get_value()))
-                for table in self.api.query(window_max_flux(self.bucket, fields, start, every, stop))
+                for table in self.api.query(window_max_flux(bucket, fields, start, every, stop, m))
                 for r in table.records if r.get_value() is not None]
 
     def first_time(self):
@@ -179,16 +230,18 @@ class InfluxRepo:
                 for table in self.api.query(events_flux(self.bucket, days)) for r in table.records]
 
     def histogram(self, field, range_s, start, width, count, min_valid):
-        rows = [(r.values.get("le"), r.get_value()) for table in self.api.query(histogram_flux(self.bucket, field, range_s, start, width, count, min_valid))
+        rows = [(r.values.get("le"), r.get_value()) for table in self.slow_api.query(histogram_flux(self.bucket, field, range_s, start, width, count, min_valid))
                 for r in table.records]
         # "le" is the bin's upper edge; the first bin (below start) is dropped by difference(), so edges map back to starts
         return [(float(le) - width, int(v)) for le, v in rows if le is not None and v is not None]
 
     def _hourly_rows(self, query):
-        return [(r.get_time(), r.get_value()) for table in self.api.query(query) for r in table.records if r.get_value() is not None]
+        return [(r.get_time(), r.get_value()) for table in self.slow_api.query(query) for r in table.records if r.get_value() is not None]
 
     def hourly(self, field, range_s, fn, min_valid):
-        return [(t, float(v)) for t, v in self._hourly_rows(hourly_flux(self.bucket, field, range_s, fn, min_valid))]
+        # min/max/mean per hour are the same from the 1-minute aggregates (60x fewer points); a count must be of raw readings
+        bucket, m = self._source(range_s, "1h", fn) if fn != "count" else (self.bucket, "solis")
+        return [(t, float(v)) for t, v in self._hourly_rows(hourly_flux(bucket, field, range_s, fn, min_valid, m))]
 
     def hourly_outside(self, field, range_s, lo, hi, min_valid):
         return [(t, int(v)) for t, v in self._hourly_rows(hourly_outside_flux(self.bucket, field, range_s, lo, hi, min_valid))]

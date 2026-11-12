@@ -38,7 +38,8 @@ case "\$1" in
       pull) cat "$T/inst/control/update-status.json" >> "$T/trace.log" 2>/dev/null ;;
       exec) case "\$*" in                      # the database's CLI, for secure-tokens, backup and restore
               *"influx bucket list"*) echo '[{"id": "0a1b2c3d4e5f6071", "name": "solis"}]' ;;
-              *"influx auth create"*) echo '{"id": "7", "description": "x", "token": "READ-ONLY-TOKEN-'"\${SHIM_TOKEN_N:-1}"'", "permissions": ["read:orgs/1/buckets/0a1b2c3d4e5f6071"]}' ;;
+              *"influx auth create"*) echo '{"id": "7", "description": "x", "token": "READ-ONLY-TOKEN-'"\${SHIM_TOKEN_N:-1}"'", "permissions": ["read:orgs/1/buckets"]}' ;;
+              *"influx auth list"*) printf '[\n{"id": "1", "token": "READ-ONLY-TOKEN-1", "permissions": ["read:orgs/1/buckets"]},\n{"id": "2", "token": "OLD-ONE-BUCKET-TOKEN", "permissions": ["read:orgs/1/buckets/0a1b2c3d4e5f6071"]}\n]\n' ;;
               *"influx backup"*) tar -C "$T/fake/influx" -c . ;;                                  # a backup streams out as tar
               *"influx restore"*) cat > "$T/restored-influx.tar" ;;                               # a restore streams one in
               *"poller tar -C /data -c"*) tar -C "$T/fake/poller" -c . ;;
@@ -111,7 +112,7 @@ check "inverter writes stay off" '[[ "$(env_of CONTROL_ENABLED)" == false ]]'
 check "inverter, site, port, release set" '[[ "$(env_of INVERTER_HOST)" == 127.0.0.1 && "$(env_of SITE_NAME)" == Test && "$(env_of WEB_PORT)" == 18088 && "$(env_of SOLIS_VERSION)" == v9.9.9 ]]'
 check "fresh random secrets" '[[ "$(env_of INFLUX_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of INFLUX_PASSWORD)" =~ ^[0-9a-f]{32}$ && -z "$(env_of MCP_TOKEN)" ]]'
 check "the dashboard gets its own poller secret, not the database token" '[[ "$(env_of CONTROL_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of CONTROL_TOKEN)" != "$(env_of INFLUX_TOKEN)" ]]'
-check "a read-only database token is made for the dashboard and applied" '[[ "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-1 ]] && grep -q "^compose exec -T influxdb influx auth create --org home --read-bucket 0a1b2c3d4e5f6071 " "$T/docker.log" && grep -q "^compose up -d poller web$" "$T/docker.log"'
+check "a read-only database token for every bucket is made for the dashboard and applied" '[[ "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-1 ]] && grep -q "^compose exec -T influxdb influx auth create --org home --read-buckets " "$T/docker.log" && grep -q "^compose up -d poller web$" "$T/docker.log"'
 check "images pulled before starting" 'grep -q "^pull ghcr.io/vtlvolkov/solis-monitor-poller:v9.9.9" "$T/docker.log" && grep -q "^pull ghcr.io/vtlvolkov/solis-monitor-web:v9.9.9" "$T/docker.log" && grep -q "^compose up -d" "$T/docker.log"'
 if [[ -n "$REAL_DOCKER" ]] && "$REAL_DOCKER" compose version >/dev/null 2>&1; then
   cfg=$(cd "$T/inst" && "$REAL_DOCKER" compose config 2>&1)
@@ -176,7 +177,12 @@ sed -i '/^CONTROL_TOKEN=/d; /^INFLUX_READ_TOKEN=/d' "$T/inst/.env"            # 
 : > "$T/docker.log"; out=$(SHIM_TOKEN_N=2 upd secure-tokens 2>&1); rc=$?
 check "an older install gets both tokens and a restart of poller and web" '[[ $rc -eq 0 && "$(env_of CONTROL_TOKEN)" =~ ^[0-9a-f]{64}$ && "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-2 ]] && grep -q "^compose up -d poller web$" "$T/docker.log"'
 check ".env stays private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
-out=$(upd status 2>&1); check "status says the dashboard has a read-only token" '[[ "$out" == *"read-only token"* ]]'
+out=$(upd status 2>&1); check "status says the dashboard has a read-only token" '[[ "$out" == *"reads the database with a read-only token"* ]]'
+set_env_test() { if grep -qE "^$1=" "$T/inst/.env"; then sed -i "s|^$1=.*|$1=$2|" "$T/inst/.env"; else echo "$1=$2" >> "$T/inst/.env"; fi; }
+set_env_test INFLUX_READ_TOKEN OLD-ONE-BUCKET-TOKEN                      # from before the 1-minute aggregates
+out=$(upd status 2>&1); check "status says an old one-bucket token should be replaced" '[[ "$out" == *"predates the 1-minute aggregates"* ]]'
+: > "$T/docker.log"; out=$(SHIM_TOKEN_N=3 upd secure-tokens 2>&1); rc=$?
+check "secure-tokens replaces a one-bucket token with one for every bucket" '[[ $rc -eq 0 && "$(env_of INFLUX_READ_TOKEN)" == READ-ONLY-TOKEN-3 && "$out" == *"covers only the raw readings"* ]] && grep -q "influx auth create --org home --read-buckets" "$T/docker.log"'
 sed -i '/^INFLUX_READ_TOKEN=/d' "$T/inst/.env"
 out=$(upd status 2>&1); check "status points to secure-tokens while the admin token is in use" '[[ "$out" == *"solis-monitor secure-tokens"* ]]'
 upd secure-tokens >/dev/null 2>&1
@@ -193,7 +199,6 @@ check "the database was backed up online, inside its container" 'grep -q "^compo
 out=$(upd backup "$T/elsewhere/site.tar.gz" 2>&1); check "a file name of your own is used as given" '[[ -s "$T/elsewhere/site.tar.gz" ]]'
 out=$(upd status 2>&1); check "status shows the latest backup" '[[ "$out" == *"Backup:    20"* && "$out" == *"/backups/solis-monitor-"* ]]'
 # restore onto an install with other settings and a newer version: the backup's settings come back, the version stays
-set_env_test() { if grep -qE "^$1=" "$T/inst/.env"; then sed -i "s|^$1=.*|$1=$2|" "$T/inst/.env"; else echo "$1=$2" >> "$T/inst/.env"; fi; }
 set_env_test WEB_BASIC_AUTH "other:Other-pw1"; set_env_test SOLIS_VERSION v9.9.30
 : > "$T/docker.log"; rm -rf "$T/restored"
 out=$(upd restore "$bk" 2>&1 </dev/null); rc=$?

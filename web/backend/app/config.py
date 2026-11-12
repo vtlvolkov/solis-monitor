@@ -16,6 +16,8 @@ class Settings:
     influx_token: str = field(default_factory=lambda: os.getenv("INFLUX_TOKEN", ""))
     influx_org: str = field(default_factory=lambda: os.getenv("INFLUX_ORG", "home"))
     influx_bucket: str = field(default_factory=lambda: os.getenv("INFLUX_BUCKET", "solis"))
+    # 1-minute aggregates (mean/min/max per field), kept by an InfluxDB task the poller sets up; read for a day or longer
+    influx_bucket_1m: str = field(default_factory=lambda: os.getenv("INFLUX_BUCKET_1M") or f'{os.getenv("INFLUX_BUCKET", "solis")}_1m')
     tz: str = field(default_factory=lambda: os.getenv("TZ", "Europe/Kyiv") or "Europe/Kyiv")
     basic_auth: str = field(default_factory=lambda: os.getenv("WEB_BASIC_AUTH", ""))
     auth_file: str = field(default_factory=lambda: os.getenv("AUTH_FILE", "/data/auth.json"))     # a password changed on the Settings page ("" = cannot be changed)

@@ -148,16 +148,20 @@ def build(ctx: Context) -> APIRouter:
         hit = cache.get(key)
         if hit and (t - hit["at"]).total_seconds() < CACHE_S:
             return hit["body"]
-        rows = {}
-        rows["v_hist"] = await call(repo.histogram, "grid_voltage", range_s, *V_BINS, V_VALID)
-        rows["hz_hist"] = await call(repo.histogram, "grid_frequency", range_s, *HZ_BINS, HZ_VALID)
-        for fn in ("min", "max", "mean", "count"):
-            rows[fn] = await call(repo.hourly, "grid_voltage", range_s, fn, V_VALID)
-        rows["v_out"] = await call(repo.hourly_outside, "grid_voltage", range_s, limits["v_min"], limits["v_max"], V_VALID)
-        rows["hz_out"] = await call(repo.hourly_outside, "grid_frequency", range_s, limits["hz_min"], limits["hz_max"], HZ_VALID)
-        rows["sags"] = await call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_min"], True, V_VALID)
-        rows["surges"] = await call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_max"], False, V_VALID)
-        events = await call(repo.events, max(1, range_s // 86400) + 31)
+        # Ten independent queries; the database runs them side by side (a month of raw readings each for some)
+        jobs = {
+            "v_hist": call(repo.histogram, "grid_voltage", range_s, *V_BINS, V_VALID),
+            "hz_hist": call(repo.histogram, "grid_frequency", range_s, *HZ_BINS, HZ_VALID),
+            **{fn: call(repo.hourly, "grid_voltage", range_s, fn, V_VALID) for fn in ("min", "max", "mean", "count")},
+            "v_out": call(repo.hourly_outside, "grid_voltage", range_s, limits["v_min"], limits["v_max"], V_VALID),
+            "hz_out": call(repo.hourly_outside, "grid_frequency", range_s, limits["hz_min"], limits["hz_max"], HZ_VALID),
+            "sags": call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_min"], True, V_VALID),
+            "surges": call(repo.hourly_excursions, "grid_voltage", range_s, limits["v_max"], False, V_VALID),
+            "events": call(repo.events, max(1, range_s // 86400) + 31),
+        }
+        results = await asyncio.gather(*jobs.values())
+        rows = dict(zip(jobs, results))
+        events = rows.pop("events")
         body = shape(rows, limits, t - timedelta(seconds=range_s), t, s.tz, events, rng)
         cache[key] = {"at": t, "body": body}
         return body

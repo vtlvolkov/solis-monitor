@@ -17,7 +17,7 @@
 - **Telegram alerts** for outages, low battery during an outage, alarms and a lost inverter connection.
 - **Works on phones and TVs**: a responsive layout, a wall-display mode and an Android TV app. English and Ukrainian.
 - **Read-only unless you say otherwise.** Changing battery settings from the dashboard is off by default.
-- **Your data stays with you** in a local InfluxDB database. Nothing is sent to any cloud.
+- **Your data stays with you** in a local InfluxDB database. Nothing is sent to any cloud. Long ranges read 1-minute aggregates the database keeps itself, so charts stay quick as the history grows.
 
 ## What you need
 

@@ -24,6 +24,7 @@ import address
 import api
 import control
 import device
+import downsample
 import faults
 import notify
 
@@ -36,6 +37,7 @@ INFLUX_URL = os.getenv("INFLUX_URL", "http://influxdb:8086")
 INFLUX_TOKEN = os.environ.get("INFLUX_TOKEN", "")
 INFLUX_ORG = os.getenv("INFLUX_ORG", "home")
 INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "solis")
+INFLUX_BUCKET_1M = os.getenv("INFLUX_BUCKET_1M") or f"{INFLUX_BUCKET}_1m"     # 1-minute aggregates, see downsample.py
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("solis-poller")
@@ -265,8 +267,10 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    influx = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+    influx = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG, timeout=120_000)
     writer = influx.write_api(write_options=SYNCHRONOUS)
+    # The 1-minute bucket and the InfluxDB task that fills it (plus the history from before it existed), in the background
+    downsample.Downsampler(influx, INFLUX_ORG, INFLUX_BUCKET, INFLUX_BUCKET_1M).run_in_background(stop)
     # The logger's address: saved from the Settings page, else INVERTER_HOST. It can be set (or changed) while we run.
     addresses = address.AddressStore(os.getenv("INVERTER_FILE", "/data/inverter.json"), INVERTER_HOST, INVERTER_PORT, MODBUS_UNIT)
     here = addresses.value()
