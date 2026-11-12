@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { CostBars } from '../charts/CostBars';
 import { Card, ErrorBanner, Header, Skeleton } from '../components/common';
+import { costExportUrl, savedSeparator } from '../lib/export';
 import {
   isDay, isMonth, money, monthOfDay, monthsBetween, shiftMonth, type CostDay, type CostHistoryPayload, type Metric,
 } from '../lib/cost';
@@ -77,6 +78,8 @@ export function CostHistory({ live, now }: { live: LiveState; now: number }) {
             </select>
             <button type="button" class="btn btn-small" disabled={shown >= current} onClick={() => pick(shiftMonth(shown, 1))}
                     aria-label={t('Next month')}>›</button>
+            <a class="btn btn-small cost-export" href={costExportUrl(shown, savedSeparator())}
+               download title={t('One row per day: import, day/night zones and cost')} data-testid="cost-export">{t('Export CSV')}</a>
           </div>
         )}
       </div>

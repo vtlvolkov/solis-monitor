@@ -44,3 +44,11 @@ Ranges: `1h 3h 6h 12h 24h 2d 7d 30d`. `every=auto` keeps each series at 500 poin
 **Language:** the dashboard is available in English and Ukrainian. The **EN / УК** button in the page header switches it and remembers the choice in the browser. Without a saved choice it follows the browser or TV language, and `?lang=uk` / `?lang=en` in the URL forces one. Fault and alarm names from the inverter are translated too; a name with no translation is shown in English. Telegram alerts are not translated (yet). To add a string: wrap it in `t('English text')` and add the Ukrainian text to `web/frontend/src/lib/i18n.uk.ts` (a test fails if one is missing).
 
 Code: `web/backend` (FastAPI) and `web/frontend` (Vite + Preact + uPlot). `web/Dockerfile` builds both into one image.
+
+## Export to CSV
+
+**Charts → Export CSV** opens a dialog: the period (the range shown, or a span of days), the step (10 s raw readings up to one day, 1 min up to a week, 15 min, 1 h, or one row per day with the daily kWh totals), which columns (power; battery; grid; energy counters; status and faults) and the format: standard CSV, or the Excel variant with semicolons and a decimal comma that a Ukrainian or European Excel opens directly. Every row starts with the local time (ISO 8601) and the Unix time. The file is streamed from the server, so a month at 15 minutes is as quick as an hour at 10 seconds.
+
+**Events → Export CSV** gives the outages and alarms of the shown period (or the picked day) as rows: kind, name, severity, start, end, whether it is still going on, duration, battery before and after, load at the start. **Cost → Export CSV** gives the shown month, one row per day: consumption, day and night zone, cost, what the battery saved, and the other daily counters.
+
+These downloads are read-only and open like the rest of the data (no Settings login).

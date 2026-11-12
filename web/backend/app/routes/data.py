@@ -215,4 +215,4 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
         return body
 
     return r, {"live": live, "history": api_history, "events": api_events,
-               "energy_summary": api_energy_summary, "cost": api_cost}
+               "energy_summary": api_energy_summary, "cost": api_cost, "cost_history": api_cost_history}

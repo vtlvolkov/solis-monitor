@@ -11,7 +11,7 @@
 
 - **Live power flow** between solar, grid, battery and your house, updated every 10 seconds, with gauges that turn amber and red as you approach the inverter's limits.
 - **Backup runtime estimate**: how long the battery would last if the grid went out right now.
-- **Charts** for any period from one hour to 30 days: power, battery charge, voltage, frequency, daily energy.
+- **Charts** for any period from one hour to 30 days: power, battery charge, voltage, frequency, daily energy. **Export to CSV** (Excel-ready) from the Charts, Events and Cost pages.
 - **Outage and alarm history**: when the grid dropped, for how long, and how far the battery fell.
 - **Electricity cost** with day and night rates, per day and per month. Changing a price never rewrites past days.
 - **Telegram alerts** for outages, low battery during an outage, alarms and a lost inverter connection.

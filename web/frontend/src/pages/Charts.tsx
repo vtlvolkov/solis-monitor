@@ -3,6 +3,7 @@ import { Card, ErrorBanner, Header, Skeleton } from '../components/common';
 import { TimeChart, type SeriesDef } from '../charts/TimeChart';
 import { DayPicker, useDayParam } from '../components/DayPicker';
 import { DayStats } from '../components/DayStats';
+import { ExportDialog } from '../components/ExportDialog';
 import { DailyChart, EnergyBars, EnergySummary, StatRow } from '../charts/widgets';
 import { spansInDay, type DayEnergy } from '../lib/day';
 import { usePoll, type EventsPayload } from '../lib/poll';
@@ -68,6 +69,7 @@ export function useFetch<T>(url: string, refreshMs: number | null) {
 export function Charts({ live, now }: { live: LiveState; now: number }) {
   const [range, setRange] = useState<Range>(readRange);
   const [auto, setAuto] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [day, setDay] = useDayParam();
 
   useEffect(() => {
@@ -122,9 +124,11 @@ export function Charts({ live, now }: { live: LiveState; now: number }) {
               <span>{t('Auto-refresh')}</span>
             </label>
           )}
+          <button type="button" class="btn btn-small" onClick={() => setExporting(true)} data-testid="export-open">{t('Export CSV')}</button>
           {hist.loading && <span class="spinner" aria-label={t('Loading')} />}
         </div>
       </div>
+      {exporting && <ExportDialog range={range} day={day} onClose={() => setExporting(false)} />}
       {err && <ErrorBanner message={err} stale={!!h || !!live.data?.time} />}
 
       {day ? <DayStats energy={dayEnergy} hist={h} events={dayEvents} now={now} />

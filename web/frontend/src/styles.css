@@ -241,6 +241,29 @@ button { font: inherit; color: inherit; }
 .backup-folder-edit .field-short input { max-width: 120px; }
 .backup-folder-edit .setting-hint, .backup-folder-edit .confirm-actions, .backup-folder-edit .field-error { flex-basis: 100%; }
 .backup-elsewhere { font-size: 0.85rem; }
+/* CSV export dialog */
+.modal-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal { background: linear-gradient(180deg, #25272b 0%, var(--c-surface) 100%); border: 1px solid var(--c-border); border-radius: 16px; padding: 18px 20px;
+         width: min(620px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: 0 16px 50px rgba(0, 0, 0, 0.6); display: grid; gap: 14px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; }
+.modal-head h2 { margin: 0; font-size: 1.1rem; }
+.modal-head .btn-quiet { color: var(--c-muted); background: transparent; border-color: transparent; }
+.modal-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--c-border); }
+.modal-actions .btn.disabled { opacity: 0.45; pointer-events: none; }
+.modal-actions a.btn { text-decoration: none; }
+.export-estimate { font-size: 0.85rem; margin-left: auto; }
+.export-section { display: grid; gap: 6px; }
+.export-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-muted); }
+.radio, .check { display: flex; align-items: flex-start; gap: 10px; font-size: 0.95rem; cursor: pointer; min-height: 30px; line-height: 1.35; }
+.radio > input[type="radio"], .check > input[type="checkbox"] { accent-color: var(--c-inverter); width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.radio > span, .check > span { min-width: 0; }
+.export-dates { display: inline-flex; align-items: center; gap: 8px; margin-left: 6px; flex-wrap: wrap; }
+.export-dates input { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 0.9rem; color-scheme: dark; }
+.export-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px 16px; }
+.seg-small button { padding: 6px 12px; min-height: 34px; font-size: 0.9rem; }
+.seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+.cost-export { margin-left: 10px; text-decoration: none; align-self: center; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .backup-list .btn-quiet { color: var(--c-muted); background: transparent; border-color: transparent; }
 .backup-list .btn-quiet:hover { color: var(--c-danger); }
 .backup-list .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }

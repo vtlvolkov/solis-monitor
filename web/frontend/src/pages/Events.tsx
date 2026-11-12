@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { Card, ErrorBanner, Header, Skeleton } from '../components/common';
 import { DayPicker, useDayParam } from '../components/DayPicker';
+import { eventsExportUrl, savedSeparator } from '../lib/export';
 import { DayTimeline } from '../components/DayTimeline';
 import { dayLabel, duration, outageBatteryKwh, spansInDay, withinDay } from '../lib/day';
 import type { DeviceInfo } from '../lib/devices';
@@ -83,7 +84,11 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
           </div>
           <DayPicker day={day} onChange={setDay} />
         </div>
-        {day && <button type="button" class="link" onClick={() => setDay(null)} data-testid="day-back">{t('Back to last {n} days', { n: days })}</button>}
+        <div class="controls-group">
+          {day && <button type="button" class="link" onClick={() => setDay(null)} data-testid="day-back">{t('Back to last {n} days', { n: days })}</button>}
+          <a class="btn btn-small" href={eventsExportUrl(days, day, savedSeparator())} download
+             title={t('Outages and alarms as rows: start, end, duration, battery before and after')} data-testid="events-export">{t('Export CSV')}</a>
+        </div>
       </div>
       {error && <ErrorBanner message={error} stale={!!raw} />}
 
