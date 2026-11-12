@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.3.3"
+version: "0.4.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  outages survive a poller restart, and a warning when the inverter's clock is off
+  backups and CSV export
 
-  - An outage or alarm in progress is remembered across a poller restart (an update, a reboot): it is not announced twice, and one that ended while the poller was down is closed instead of staying open on the Events page forever. "Power is back" still reports the real start and duration
-  - Telegram: a message when the inverter's clock is 5 minutes or more off (ALERT_CLOCK_DRIFT_MIN, 0 = off), with how to set it (Settings → General → Inverter clock → Sync). The inverter's daily energy totals reset at its own midnight, so a wrong clock bends them
-  - Internal: the web API is split into routers and the poller's HTTP handler moved out of control.py; no change in behaviour
+  - Settings → Backup: make a backup of the whole site (history, saved settings, configuration) from the dashboard, download it, choose the folder on the server it goes to (a USB drive or network share, for example) and how many to keep, and remove old ones. Existing installs: run `solis-monitor update`, then `solis-monitor dashboard-updates on` once more, to enable the tab's helper
+  - On the server: `solis-monitor backup` and `solis-monitor restore FILE` (also onto a fresh install)
+  - Export to CSV: Charts → Export CSV (period, step from 10 s to one row per day, column groups, standard or Excel format with semicolons and a decimal comma); one-click Export CSV on the Events and Cost pages
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
