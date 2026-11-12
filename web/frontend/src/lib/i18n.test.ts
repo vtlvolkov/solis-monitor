@@ -51,7 +51,7 @@ describe('Ukrainian dictionary', () => {
   });
 
   it.skipIf(!existsSync(FAULTS_PY))('translates every poller fault and status name', () => {
-    const py = readFileSync(FAULTS_PY, 'utf8');
+    const py = readFileSync(FAULTS_PY, 'utf8').replace(/"""[\s\S]*?"""/g, '');     // docstrings are not names
     const names = [...py.matchAll(/"([A-Za-z0-9][^"]*)"/g)].map((m) => m[1])
       .filter((n) => !n.includes('\n') && /^[A-Z0-9]/.test(n) && !/^(Code|Fault \d|BMS fault|key|kind|alarm|outage|start|end|fault|warning)/.test(n) && !n.includes('{'))
       .filter((n) => !/^(f\d|bms\d|op\d)/.test(n) && !['Grid outage'].includes(n));
