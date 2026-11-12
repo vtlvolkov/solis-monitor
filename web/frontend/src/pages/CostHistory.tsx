@@ -79,7 +79,7 @@ export function CostHistory({ live, now }: { live: LiveState; now: number }) {
             <button type="button" class="btn btn-small" disabled={shown >= current} onClick={() => pick(shiftMonth(shown, 1))}
                     aria-label={t('Next month')}>›</button>
             <a class="btn btn-small cost-export" href={costExportUrl(shown, savedSeparator())}
-               download title={t('One row per day: import, day/night zones and cost')} data-testid="cost-export">{t('Export CSV')}</a>
+               download="" title={t('One row per day: import, day/night zones and cost')} data-testid="cost-export">{t('Export CSV')}</a>
           </div>
         )}
       </div>

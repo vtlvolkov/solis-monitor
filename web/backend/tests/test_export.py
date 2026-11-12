@@ -78,6 +78,13 @@ def test_days_are_local_and_one_row_per_day_at_1d():
     assert repo.calls[0][1] == datetime(2026, 11, 9, 22, 0, tzinfo=timezone.utc)   # local midnight in Kyiv (UTC+2 in November)
 
 
+def test_every_column_may_be_exported_at_once():
+    c, _ = client()
+    from app.validation import FIELDS
+    r = c.get(f"/api/export.csv?fields={','.join(FIELDS)}&range=1h&every=15m")      # 50+ fields: the JSON API caps at 12, a CSV does not
+    assert r.status_code == 200 and r.text.split("\r\n")[0] == "time,unix," + ",".join(FIELDS)
+
+
 def test_limits_and_bad_parameters():
     c, _ = client()
     assert c.get("/api/export.csv?fields=grid_power&range=7d&every=10s").status_code == 400     # raw only up to a day

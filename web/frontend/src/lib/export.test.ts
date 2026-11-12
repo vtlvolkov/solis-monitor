@@ -20,6 +20,10 @@ describe('CSV export', () => {
     expect(estimateRows(86400, '10s')).toBe(8640);
     expect(estimateRows(10, '1d')).toBe(1);
   });
+  it('the default column groups fit in one request (the JSON API caps at 12 fields, the CSV route does not)', () => {
+    const u = exportUrl({ period: { range: '6h' }, resolution: '1m', groups: ['power', 'battery', 'grid'], separator: 'comma' });
+    expect(new URL(u, 'http://x').searchParams.get('fields')!.split(',').length).toBe(13);
+  });
   it('builds the URLs the server expects', () => {
     expect(exportUrl({ period: { range: '6h' }, resolution: '1m', groups: ['power'], separator: 'comma' }))
       .toBe('/api/export.csv?range=6h&every=1m&fields=grid_power%2Cbattery_power_signed%2Ctotal_load_power%2Chouse_load_power%2Cbackup_load_power%2Cpv_power&sep=%2C');

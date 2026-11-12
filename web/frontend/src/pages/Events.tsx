@@ -86,7 +86,7 @@ export function Events({ live, now }: { live: LiveState; now: number }) {
         </div>
         <div class="controls-group">
           {day && <button type="button" class="link" onClick={() => setDay(null)} data-testid="day-back">{t('Back to last {n} days', { n: days })}</button>}
-          <a class="btn btn-small" href={eventsExportUrl(days, day, savedSeparator())} download
+          <a class="btn btn-small" href={eventsExportUrl(days, day, savedSeparator())} download=""
              title={t('Outages and alarms as rows: start, end, duration, battery before and after')} data-testid="events-export">{t('Export CSV')}</a>
         </div>
       </div>

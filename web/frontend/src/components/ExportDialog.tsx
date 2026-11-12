@@ -93,7 +93,7 @@ export function ExportDialog({ range, day, onClose }: { range: Range; day: strin
         </div>
 
         <div class="modal-actions">
-          <a class={`btn btn-primary ${valid ? '' : 'disabled'}`} href={url} download aria-disabled={!valid}
+          <a class={`btn btn-primary ${valid ? '' : 'disabled'}`} href={url} download="" aria-disabled={!valid}
              onClick={(e) => { if (!valid) e.preventDefault(); else setTimeout(onClose, 300); }} data-testid="export-download">
             {t('Download CSV')}
           </a>

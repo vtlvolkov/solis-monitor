@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 
 from .. import shaping
 from ..context import Context
-from ..validation import ENERGY_FIELDS, parse_days, parse_fields, parse_range
+from ..validation import ENERGY_FIELDS, FIELD_SET, parse_days, parse_range
 
 # The resolutions the dialog offers -> the InfluxDB window; "1d" is one row per local day (below).
 RESOLUTIONS = {"10s": 10, "1m": 60, "15m": 900, "1h": 3600, "1d": 86400}
@@ -27,6 +27,17 @@ COST_COLUMNS = ("date", "kwh", "day_kwh", "night_kwh", "cost", "day_cost", "nigh
 
 def _bad(msg: str) -> HTTPException:
     return HTTPException(status_code=400, detail=msg)
+
+
+def parse_export_fields(raw: str) -> list[str]:
+    """Like validation.parse_fields, without the JSON API's 12-field cap: a CSV may well want every column."""
+    names = [f.strip() for f in (raw or "").split(",") if f.strip()]
+    if not names:
+        raise _bad("fields is required")
+    unknown = [f for f in names if f not in FIELD_SET]
+    if unknown:
+        raise _bad(f"unknown field(s): {', '.join(sorted(set(unknown)))}")
+    return list(dict.fromkeys(names))
 
 
 def parse_sep(raw: str) -> str:
@@ -130,7 +141,7 @@ def build(ctx: Context, api: dict) -> APIRouter:
         return await export_readings(fields, range, from_, to, every, sep)
 
     async def export_readings(fields, range_, from_, to, every, sep):
-        names = parse_fields(fields)
+        names = parse_export_fields(fields)
         sp = parse_sep(sep)
         t = now()
         start, stop, label = period(range_, from_, to, t)
