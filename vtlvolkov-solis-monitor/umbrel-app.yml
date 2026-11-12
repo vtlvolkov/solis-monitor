@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.3.1"
+version: "0.3.2"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,9 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  Events cards line up, and test releases can update
+  poller healthcheck, and the dashboard reads the database with a read-only token
 
-  - Events: the two top cards now end on the same line, with or without a picked day
-  - A site on a test release (like v0.3.0-rc.1) now sees the Update button for a newer release, and can update to its own final version
+  - The poller container reports its health (the poll loop keeps turning; an unplugged inverter does not count as unhealthy), and updates wait for it before calling a release good
+  - The dashboard no longer holds the database admin token: new installs get a read-only token and a separate secret for the poller's API. On an older install run `solis-monitor secure-tokens` once; `solis-monitor status` says when that is still to do
+  - `solis-monitor status` shows whether the poller is reading the inverter, and why not
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
