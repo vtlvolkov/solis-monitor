@@ -9,6 +9,7 @@ unreachable Telegram never delays polling.
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   both required; alerts are off without them
     ALERT_SOC_LEVELS=50,30,20               battery levels reported during an outage
     ALERT_OFFLINE_MIN=5                     minutes of failed polls before "inverter unreachable"
+    ALERT_CLOCK_DRIFT_MIN=5                 the inverter's clock this far from the real time -> one message (0 = never)
 
 Test from the host:  docker exec solis-poller python notify.py --test
 """
@@ -93,10 +94,13 @@ class Alerts:
     or None, for runtime estimates."""
 
     def __init__(self, send, soc_levels=(50, 30, 20), offline_after_s=300, battery=lambda: None,
-                 tz="Europe/Kyiv", clock=time.time):
+                 tz="Europe/Kyiv", clock=time.time, clock_drift_s=300):
         self.send, self.battery, self.clock = send, battery, clock
         self.soc_levels = sorted({int(x) for x in soc_levels}, reverse=True)
         self.offline_after_s = offline_after_s
+        self.clock_drift_s = clock_drift_s      # 0 = never mention the inverter's clock
+        self.drift_sent = False
+        self._drift_streak: tuple[bool, int, str] = (False, 0, "")     # (off?, consecutive reads, last read_at)
         self.zone = ZoneInfo(tz)
         self.outage = None                       # (start_ts, soc_at_start)
         self.alarms: dict[str, float] = {}       # key -> start_ts
@@ -165,6 +169,28 @@ class Alerts:
             self.send(f"🔋 Battery at {_pct(soc)} during the outage: "
                       f"{fmt_runtime(self._runtime(soc, load))} left at {self._kw(load)}.")
 
+    def clock_drift(self, drift_s: float | None, read_at: str) -> None:
+        """The inverter's clock against the real time (device.clock_drift_s), once per device read: a message
+        when it has been off by ALERT_CLOCK_DRIFT_MIN on three reads in a row, and one when it is right again.
+        Its *_today energy counters reset on its own midnight, so a wrong clock bends the daily totals."""
+        if not self.clock_drift_s or drift_s is None or read_at == self._drift_streak[2]:
+            return
+        off = abs(drift_s) >= self.clock_drift_s
+        was, n, _ = self._drift_streak
+        n = n + 1 if off == was else 1
+        self._drift_streak = (off, n, read_at)
+        if n < 3 or off == self.drift_sent:
+            return
+        self.drift_sent = off
+        if off:
+            now = self.clock()
+            shown = self._hhmm(now + drift_s)
+            self.send(f"🕒 The inverter's clock is {fmt_duration(abs(drift_s))} {'ahead' if drift_s > 0 else 'behind'} "
+                      f"(it shows {shown} at {self._hhmm(now)}). Its daily energy totals reset at the wrong time until it is set: "
+                      f"Settings → General → Inverter clock → Sync.")
+        else:
+            self.send("🕒 The inverter's clock is right again.")
+
     def poll_failed(self, error) -> None:
         now = self.clock()
         if self.first_failure is None:
@@ -192,7 +218,8 @@ def from_env(battery=lambda: None) -> Alerts:
     tg = telegram_from_env()
     levels = [x for x in os.getenv("ALERT_SOC_LEVELS", "50,30,20").split(",") if x.strip()]
     alerts = Alerts(tg.send, soc_levels=levels, offline_after_s=float(os.getenv("ALERT_OFFLINE_MIN", "5")) * 60,
-                    battery=battery, tz=os.getenv("TZ") or "Europe/Kyiv")
+                    battery=battery, tz=os.getenv("TZ") or "Europe/Kyiv",
+                    clock_drift_s=float(os.getenv("ALERT_CLOCK_DRIFT_MIN", "5")) * 60)
     alerts.telegram = tg
     log.info("Telegram alerts %s", "enabled" if tg.enabled else "off (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set)")
     return alerts

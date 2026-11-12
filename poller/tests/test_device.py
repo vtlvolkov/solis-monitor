@@ -216,3 +216,11 @@ def test_http_battery_capacity(tmp_path):
         assert status == 200 and body["source"] == "inverter" and body["applied"].endswith("(from inverter)")
     finally:
         srv.shutdown()
+
+
+def test_clock_drift_reads_the_inverter_clock_in_the_site_zone():
+    # 2026-10-18 19:04 Kyiv (UTC+3) read at 16:04:30Z: the inverter shows 19:04:00, 30 s behind
+    assert device.clock_drift_s("2026-10-18T19:04:00", "2026-10-18T16:04:30+00:00", "Europe/Kyiv") == -30.0
+    assert device.clock_drift_s("2026-10-18T19:16:00", "2026-10-18T16:04:30+00:00", "Europe/Kyiv") == 690.0
+    assert device.clock_drift_s(None, "2026-10-18T16:04:30+00:00", "Europe/Kyiv") is None          # unreadable clock
+    assert device.clock_drift_s("2026-10-18T19:04:00", "2026-10-18T16:04:30+00:00", "Not/AZone") is None

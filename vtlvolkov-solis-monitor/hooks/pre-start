@@ -29,6 +29,8 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ALERT_SOC_LEVELS=50,30,20
 ALERT_OFFLINE_MIN=5
+# A message when the inverter's clock is this many minutes off (its daily totals depend on it). 0 = never.
+ALERT_CLOCK_DRIFT_MIN=5
 
 # Electricity prices per kWh (the cost card shows once TARIFF_DAY is set; later changes are made on the Settings page).
 TARIFF_CURRENCY=UAH

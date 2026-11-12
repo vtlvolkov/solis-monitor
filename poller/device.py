@@ -17,6 +17,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import faults
 
@@ -143,6 +144,19 @@ def estimated_packs(model: int, discharge_limit: int, connected: bool) -> int | 
     if model != DYNESS_MODEL or not connected or not discharge_limit or discharge_limit % DYNESS_PACK_LIMIT:
         return None
     return discharge_limit // DYNESS_PACK_LIMIT
+
+
+def clock_drift_s(clock: str | None, read_at: str, tz: str) -> float | None:
+    """Inverter clock minus the real time at the moment it was read, in seconds (+ = the inverter runs ahead).
+    The inverter keeps local time with no zone, so it is read in the site's zone. None when the clock was unreadable."""
+    if not clock:
+        return None
+    try:
+        shown = datetime.fromisoformat(clock).replace(tzinfo=ZoneInfo(tz))
+        real = datetime.fromisoformat(read_at)
+    except (ValueError, ZoneInfoNotFoundError):
+        return None
+    return round((shown - real).total_seconds(), 1)
 
 
 def rated_kwh(rated_ah) -> float | None:

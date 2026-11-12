@@ -101,6 +101,41 @@ def test_alarm_messages():
     assert sent == ["⚠️ Inverter alarm: Backup overload (fault).", "Alarm cleared: Backup overload after 2 min."]
 
 
+def test_clock_drift_needs_three_reads_then_one_message_each_way():
+    a, sent, _ = make()
+    a.clock_drift(-720.0, "r1"); a.clock_drift(-720.0, "r1"); a.clock_drift(-720.0, "r1")     # the same read, polled thrice
+    assert sent == []
+    a.clock_drift(-725.0, "r2")
+    assert sent == []                                                                        # two reads: a glitch could do that
+    a.clock_drift(-730.0, "r3")
+    assert len(sent) == 1 and "12 min behind" in sent[0] and "shows 18:51 at 19:04" in sent[0] and "Settings → General" in sent[0]
+    a.clock_drift(-735.0, "r4")
+    assert len(sent) == 1                                                                    # not again while it stays off
+    a.clock_drift(3.0, "r5"); a.clock_drift(2.0, "r6")
+    assert len(sent) == 1
+    a.clock_drift(1.0, "r7")
+    assert len(sent) == 2 and "right again" in sent[1]
+    a.clock_drift(400.0, "r8"); a.clock_drift(400.0, "r9"); a.clock_drift(400.0, "r10")
+    assert len(sent) == 3 and "7 min ahead" in sent[2]
+
+
+def test_clock_drift_can_be_turned_off_and_ignores_an_unreadable_clock():
+    a, sent, _ = make(clock_drift_s=0)
+    for i in range(4):
+        a.clock_drift(-3600.0, f"r{i}")
+    assert sent == []
+    a, sent, _ = make()
+    for i in range(4):
+        a.clock_drift(None, f"r{i}")
+    a.clock_drift(10.0, "r9"); a.clock_drift(10.0, "r10"); a.clock_drift(10.0, "r11")      # within 5 min: fine
+    assert sent == []
+
+
+def test_clock_drift_comes_from_the_environment(monkeypatch):
+    monkeypatch.setenv("ALERT_CLOCK_DRIFT_MIN", "2")
+    assert notify.from_env().clock_drift_s == 120.0
+
+
 def test_offline_after_threshold_and_recovery():
     a, sent, clock = make()
     a.poll_failed(TimeoutError("timed out"))

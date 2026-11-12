@@ -359,6 +359,9 @@ def main():
             records.append(p)
         alerts.events(events, vals)                   # Telegram, independent of InfluxDB
         alerts.snapshot(vals)
+        d = ctl.devices.cached()                      # the inverter's clock, from the device read (every 60 s)
+        if d:
+            alerts.clock_drift(device.clock_drift_s(d["inverter"]["clock"], d["read_at"], ctl.cfg.tz), d["read_at"])
         try:
             writer.write(bucket=INFLUX_BUCKET, record=records)
         except Exception as exc:
