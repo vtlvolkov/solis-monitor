@@ -474,6 +474,45 @@ export const UK: Record<string, string> = {
   "Server device failure": "Збій пристрою", "Acknowledge": "Підтвердження", "Server device busy": "Пристрій зайнятий",
   "Memory parity error": "Помилка парності пам'яті", "Gateway path unavailable": "Шлюз недоступний",
   "Gateway target device failed to respond": "Пристрій за шлюзом не відповів",
+  // Settings → Backup
+  "Backup": "Резервна копія", "Backups": "Резервні копії",
+  "A backup is one file with the whole history, the settings saved on this dashboard and the configuration of the server. It is made on the server; download it and keep it somewhere else than this machine.":
+    "Резервна копія — це один файл з усією історією, налаштуваннями, збереженими на цій панелі, і конфігурацією сервера. Вона створюється на сервері; завантажте її та зберігайте не на цій машині.",
+  "A backup contains your passwords and tokens.": "Резервна копія містить ваші паролі й токени.",
+  "Keep it as private as the server itself.": "Бережіть її так само, як і сам сервер.",
+  "Back up now": "Створити копію зараз", "Backing up…": "Створення копії…",
+  "Waiting for the server to start the backup…": "Очікування, поки сервер почне створення копії…",
+  "Backup made: {file}": "Копію створено: {file}", "Backup made.": "Копію створено.",
+  "Backup failed: {message}": "Не вдалося створити копію: {message}",
+  "On the server": "На сервері", "No backups yet.": "Копій ще немає.", "Download": "Завантажити",
+  "{n} B": "{n} Б", "{n} kB": "{n} кБ", "{n} MB": "{n} МБ", "{n} GB": "{n} ГБ",
+  "The server keeps the newest {n} made from here; older ones are removed. Backups made on the server by hand (solis-monitor backup) stay where you put them.":
+    "Сервер зберігає {n} найновіших копій, створених звідси; старіші видаляються. Копії, зроблені на сервері вручну (solis-monitor backup), залишаються там, куди ви їх поклали.",
+  "To put a backup back, on the server run: solis-monitor restore FILE": "Щоб відновити копію, на сервері виконайте: solis-monitor restore FILE",
+  "The server does not show its backups folder to the dashboard. On the server run: solis-monitor update":
+    "Сервер не показує панелі свою теку резервних копій. На сервері виконайте: solis-monitor update",
+  "A backup is already running.": "Створення копії вже триває.",
+  "Could not reach the backup helper on the server.": "Не вдалося зв'язатися з помічником резервного копіювання на сервері.",
+  "Backing up from the dashboard is not set up. On the server run: solis-monitor dashboard-updates on":
+    "Резервне копіювання з панелі не налаштовано. На сервері виконайте: solis-monitor dashboard-updates on",
+  "The backup stopped without reporting. On the server, see: solis-monitor logs": "Створення копії зупинилося без звіту. На сервері дивіться: solis-monitor logs",
+  "The backup stopped before it finished. See: solis-monitor logs": "Створення копії зупинилося, не завершившись. Дивіться: solis-monitor logs",
+  "Backing up the database": "Копіювання бази даних", "Packing the archive": "Пакування архіву", "Backup written": "Копію записано",
+  "No such backup.": "Такої копії немає.",
+  "Folder": "Тека", "Change": "Змінити", "Folder on the server": "Тека на сервері", "Keep the newest": "Зберігати найновіших",
+  "on the server": "на сервері",
+  "Enter a folder on the server, like /mnt/usb/solis.": "Введіть теку на сервері, наприклад /mnt/usb/solis.",
+  "The folder must be an absolute path on the server, like /mnt/usb/solis.": "Тека має бути абсолютним шляхом на сервері, наприклад /mnt/usb/solis.",
+  "Keep must be a whole number from {min} to {max}.": "Кількість має бути цілим числом від {min} до {max}.",
+  "An existing, writable folder under /mnt, /media, /srv, /home, /opt, /var/backups, /backup, /backups or /data, such as a mounted USB drive or network share. The dashboard can download only from its own folder; files elsewhere are listed, and you copy them from there.":
+    "Наявна тека з правом запису в /mnt, /media, /srv, /home, /opt, /var/backups, /backup, /backups або /data — наприклад, підключений USB-диск чи мережевий ресурс. Панель може завантажувати лише зі своєї теки; файли в інших теках показуються в списку, а копіюєте ви їх звідти.",
+  "Files in {dir} can be copied from the server; the dashboard can download only from its own folder.":
+    "Файли в {dir} можна скопіювати з сервера; панель може завантажувати лише зі своєї теки.",
+  "That folder name is not allowed.": "Така назва теки не дозволена.",
+  "That folder does not exist on the server. Create it, or mount the drive, first.": "Такої теки на сервері немає. Спершу створіть її або підключіть диск.",
+  "That folder is not writable for the backup helper.": "Помічник резервного копіювання не може писати в цю теку.",
+  "Remove": "Видалити", "Remove this backup? It cannot be undone.": "Видалити цю копію? Це не можна скасувати.",
+  "That is not the name of a backup.": "Це не назва резервної копії.",
 };
 
 /** Messages the poller builds with numbers in them: matched when there is no exact key. */
@@ -485,6 +524,10 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^Inverter not reachable: (.*)$/, "Інвертор недоступний: $1"],
   [/^GitHub's limit for your network is used up\. Try again after (\d{2}:\d{2})\.$/, "Ліміт GitHub для вашої мережі вичерпано. Спробуйте знову після $1."],
   [/^Updates are handled by (.+)\.$/, "Оновлення виконує $1."],
+  [/^Backups are handled by (.+)\.$/, "Резервне копіювання виконує $1."],
+  [/^Folder set to (.+)$/, "Теку змінено на $1"],
+  [/^Removed (solis-monitor\S+\.tar\.gz)$/, "Видалено $1"],
+  [/^That folder is not allowed\. Use one under (.+) \(or add its root to SOLIS_BACKUP_ROOTS in \.env\)\.$/, "Ця тека не дозволена. Виберіть теку в $1 (або додайте її корінь до SOLIS_BACKUP_ROOTS у .env)."],
   [/^Too many wrong passwords\. Try again in (\d+) min\.$/, "Забагато неправильних паролів. Спробуйте за $1 хв."],
   [/^Downloading the files of (\S+)$/, "Завантаження файлів версії $1"],
   [/^Restarting with (\S+)$/, "Перезапуск з $1"],

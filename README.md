@@ -143,7 +143,7 @@ solis-monitor auto-update on    # optional: look for a new release every night (
 solis-monitor logs poller       # recent log lines of a service (poller, web or influxdb); add -f to follow
 solis-monitor edit              # open your settings file (.env) in an editor, then apply the changes
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
-solis-monitor backup            # one .tar.gz with your history, saved settings and .env; copy it off the machine
+solis-monitor backup            # one .tar.gz with your history, saved settings and .env; copy it off the machine (also: Settings → Backup)
 solis-monitor restore FILE      # put a backup back, here or on a fresh install
 ```
 
@@ -178,9 +178,9 @@ Updates only ever install tagged releases, never unreleased code, and your setti
 ```bash
 (cd /opt/solis-monitor && sudo docker compose down -v)    # -v also deletes the stored history
 sudo systemctl disable --now solis-monitor-update.timer 2>/dev/null               # nightly updates, if turned on
-sudo systemctl disable --now solis-monitor-dashboard-update.path 2>/dev/null      # updates from the dashboard
+sudo systemctl disable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path 2>/dev/null   # from the dashboard
 sudo rm -rf /opt/solis-monitor /usr/local/bin/solis-monitor /etc/systemd/system/solis-monitor-update.* \
-            /etc/systemd/system/solis-monitor-dashboard-update.*
+            /etc/systemd/system/solis-monitor-dashboard-*
 sudo systemctl daemon-reload
 ```
 

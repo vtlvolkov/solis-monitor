@@ -138,7 +138,10 @@ def _text(v, limit=300):
 
 
 class Bridge:
-    """The shared folder with the host. All reads tolerate missing or garbage files."""
+    """The shared folder with the host. All reads tolerate missing or garbage files.
+    backups.BackupBridge is the same thing with its own request and status files."""
+
+    REQUEST, STATUS = REQUEST, STATUS
 
     def __init__(self, directory: str):
         self.dir = directory
@@ -156,7 +159,7 @@ class Bridge:
         return bool(info and info.get("enabled") is True and os.access(self.dir, os.W_OK))
 
     def status(self) -> dict | None:
-        raw = self._read(STATUS)
+        raw = self._read(self.STATUS)
         if not raw or raw.get("state") not in STATES:
             return None
         percent = raw.get("percent")
@@ -166,13 +169,16 @@ class Bridge:
                 "finished": _text(raw.get("finished"), 40)}
 
     def pending(self) -> bool:
-        return os.path.exists(os.path.join(self.dir, REQUEST))
+        return os.path.exists(os.path.join(self.dir, self.REQUEST))
 
-    def request(self, to: str, now: datetime | None = None) -> None:
-        """Ask the host to update. The content is informational only: the host works out the target itself."""
-        body = json.dumps({"requested_at": (now or datetime.now(timezone.utc)).isoformat(), "to": to})
-        tmp = os.path.join(self.dir, f".{REQUEST}.tmp")
+    def request(self, to: str | None = None, now: datetime | None = None, **info) -> None:
+        """Ask the host. For an update the content is informational only (the host works out the target itself);
+        a backup request may carry an action the host validates before acting on it."""
+        body = {"requested_at": (now or datetime.now(timezone.utc)).isoformat(), **info}
+        if to is not None:
+            body["to"] = to
+        tmp = os.path.join(self.dir, f".{self.REQUEST}.tmp")
         with open(tmp, "w") as f:
-            f.write(body)
+            f.write(json.dumps(body))
         os.chmod(tmp, 0o666)                              # the host user must be able to delete it
-        os.replace(tmp, os.path.join(self.dir, REQUEST))  # one atomic event for the host's path unit
+        os.replace(tmp, os.path.join(self.dir, self.REQUEST))  # one atomic event for the host's path unit

@@ -224,6 +224,28 @@ button { font: inherit; color: inherit; }
 .tariff-when-row { display: grid; gap: 8px; grid-template-columns: 1fr; }
 .tariff-form .btn { justify-self: start; }
 .update-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.backup-card .setting-hint + .setting-hint { margin-top: 6px; }
+.backup-list-title { margin: 16px 0 6px; font-size: 0.95rem; font-weight: 600; }
+.backup-list { list-style: none; margin: 0; padding: 0; }
+.backup-list li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--c-border); font-size: 0.92rem; }
+.backup-list li:last-child { border-bottom: 1px solid var(--c-border); }
+.backup-list .backup-when { flex: 1; }
+.backup-list .btn-small { padding: 4px 10px; font-size: 0.85rem; text-decoration: none; }
+.backup-folder { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.92rem; }
+.backup-folder code { font-size: 0.9rem; }
+.backup-folder .btn-small { padding: 4px 10px; font-size: 0.85rem; }
+.backup-folder-edit { align-items: flex-start; row-gap: 10px; }
+.backup-folder-edit .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.backup-folder-edit .field:first-child { flex: 1 1 320px; }
+.backup-folder-edit .field input { width: 100%; box-sizing: border-box; flex: 0 0 auto; height: 2.3rem; }
+.backup-folder-edit .field-short input { max-width: 120px; }
+.backup-folder-edit .setting-hint, .backup-folder-edit .confirm-actions, .backup-folder-edit .field-error { flex-basis: 100%; }
+.backup-elsewhere { font-size: 0.85rem; }
+.backup-list .btn-quiet { color: var(--c-muted); background: transparent; border-color: transparent; }
+.backup-list .btn-quiet:hover { color: var(--c-danger); }
+.backup-list .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
+.backup-confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.88rem; }
+.backup-list li.removing { background: var(--c-surface2); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
 .update-line { margin-top: 10px; font-size: 0.92rem; }
 .update-line a { color: var(--c-warn); }
 .inv-form { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) 96px 80px; align-items: end; margin: 14px 0 6px; }

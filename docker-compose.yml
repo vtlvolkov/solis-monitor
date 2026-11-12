@@ -95,10 +95,12 @@ services:
       SOLIS_REPO: ${SOLIS_REPO:-}
       UPDATE_DIR: /control
       UPDATE_CHECK_HOURS: ${UPDATE_CHECK_HOURS:-6}
+      BACKUP_DIR: /backups
       TZ: ${TZ:-Europe/Kyiv}
     volumes:
       - web-data:/data        # tariff changes saved from the Settings page
-      - ./control:/control    # requests to and progress from the host's updater; no Docker access for this container
+      - ./control:/control    # requests to and progress from the host's updater and backup helper; no Docker access for this container
+      - ./backups:/backups:ro # the archives `solis-monitor backup` writes, so the Settings page can list and download them
 
 volumes:
   influxdb-data:

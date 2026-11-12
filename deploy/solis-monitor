@@ -6,10 +6,12 @@
 #   solis-monitor update [--version vX]  install the latest release (or the one named); rolls back on failure
 #   solis-monitor auto-update on|off     check for a new release every night (off by default)
 #   solis-monitor logs [-f] [service]    recent log lines (poller, web or influxdb); -f keeps following
-#   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update this install (off by default for source builds)
+#   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update and back up this install (off by default for source builds)
 #   solis-monitor reset-login            forgot the dashboard password you set? go back to the one in .env
 #   solis-monitor secure-tokens          give the dashboard a read-only database token and its own poller secret (installs do this)
 #   solis-monitor backup [FILE|DIR]      one .tar.gz with the history, the saved settings and .env (default: backups/ here)
+#                                        (default: the folder set on the Settings page, else backups/ here; --from-dashboard: asked
+#                                        for on the Settings page, which also keeps only the newest N there)
 #   solis-monitor restore FILE [--yes]   put a backup back, on this or a fresh install (replaces the history and .env)
 #   solis-monitor edit                   open .env in your editor, then apply the changes
 #   solis-monitor apply [--force]        apply a .env you edited by hand (restarts only what changed)
@@ -106,8 +108,8 @@ cmd_status() {
   fi
   poller_health
   local last
-  last="$(ls -1t "$DIR"/backups/solis-monitor-*.tar.gz 2>/dev/null | sed -n 1p || true)"
-  if [[ -n "$last" ]]; then echo "Backup:    $(date -r "$last" +%Y-%m-%d\ %H:%M)  $last"; else echo "Backup:    none yet (solis-monitor backup)"; fi
+  last="$(ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | sed -n 1p || true)"
+  if [[ -n "$last" ]]; then echo "Backup:    $(date -r "$last" +%Y-%m-%d\ %H:%M)  $last"; else echo "Backup:    none yet in $(backup_dir) (solis-monitor backup)"; fi
   compose ps --format 'table {{.Name}}\t{{.Status}}'
   echo "--- poller, last lines ---"
   compose logs --tail 5 poller 2>&1 || true
@@ -162,14 +164,84 @@ cmd_secure_tokens() {
 # One archive with everything that makes this site: the database (influx backup, taken online), the files saved from
 # the dashboard (logger address, battery capacity, events in progress; tariff versions, a changed password), .env and
 # the compose file. Keep it somewhere else than this machine: a dead SD card is the reason to have it.
+# Where the archives go: a folder set on the dashboard's Backup tab (kept by us in control/backup-config.json, after the
+# checks below), else backups/ here. The dashboard lists the folder from the index we write after each backup, because
+# the web container only sees backups/ here.
+backup_dir() { local d; d="$(sed -n 's/.*"dir":"\([^"]*\)".*/\1/p' "$CTL/backup-config.json" 2>/dev/null | sed -n 1p || true)"; printf '%s' "${d:-$DIR/backups}"; }
+backup_keep() { local k; k="$(sed -n 's/.*"keep":\([0-9]*\).*/\1/p' "$CTL/backup-config.json" 2>/dev/null | sed -n 1p || true)"; printf '%s' "${k:-${SOLIS_BACKUP_KEEP:-5}}"; }
+write_backup_config() {   # write_backup_config DIR KEEP
+  ensure_ctl
+  printf '{"dir":"%s","default_dir":"%s","keep":%s}\n' "$(json_text "$1")" "$(json_text "$DIR/backups")" "$2" > "$CTL/backup-config.json.tmp" 2>/dev/null \
+    && mv "$CTL/backup-config.json.tmp" "$CTL/backup-config.json" 2>/dev/null || true
+}
+write_backup_index() {    # write_backup_index DIR: what is in the backup folder, for the dashboard's list
+  local d="$1" f sep=""
+  ensure_ctl
+  { printf '{"dir":"%s","files":[' "$(json_text "$d")"
+    ls -1t "$d"/solis-monitor-*.tar.gz 2>/dev/null | while read -r f; do
+      printf '%s{"name":"%s","size":%s,"created":"%s"}' "$sep" "$(json_text "$(basename "$f")")" "$(stat -c %s "$f")" "$(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)"
+      sep=","
+    done
+    printf ']}\n'; } > "$CTL/backups.json.tmp" 2>/dev/null && mv "$CTL/backups.json.tmp" "$CTL/backups.json" 2>/dev/null || true
+}
+# A folder the dashboard asks for is only accepted when it looks like a place for backups (a mount, a home, /opt ...),
+# exists and is writable: the request comes from a browser, and this runs with the install folder's rights.
+valid_backup_dir() {      # valid_backup_dir PATH: prints why not, and fails, when it is not acceptable
+  local root ok="" extra
+  extra="$(env_value SOLIS_BACKUP_ROOTS)"                  # more allowed roots, colon-separated, for other mount points
+  for root in ${extra//:/ }; do [[ "$1" == "$root" || "$1" == "$root/"* ]] && ok=1; done
+  case "$1" in
+    *..*|*" "*) echo "That folder name is not allowed."; return 1 ;;
+    "$DIR/backups"|"$DIR/backups/"*|/mnt/?*|/media/?*|/srv/?*|/home/?*|/opt/?*|/var/backups|/var/backups/?*|/backup|/backup/?*|/backups|/backups/?*|/data|/data/?*) ;;
+    *) [[ -n "$ok" ]] || { echo "That folder is not allowed. Use one under /mnt, /media, /srv, /home, /opt, /var/backups, /backup, /backups or /data (or add its root to SOLIS_BACKUP_ROOTS in .env)."; return 1; } ;;
+  esac
+  [[ -d "$1" ]] || { echo "That folder does not exist on the server. Create it, or mount the drive, first."; return 1; }
+  local probe="$1/.solis-monitor-write-test.$$"
+  if ! { : > "$probe"; } 2>/dev/null; then echo "That folder is not writable for the backup helper."; return 1; fi
+  rm -f "$probe"
+}
+
+BREPORT=""; BREPORT_DONE=""; BREPORT_STARTED=""
+breport() {          # breport STATE MESSAGE [FILE]: progress for the dashboard's Backup tab (only when it asked for this backup)
+  [[ -n "$BREPORT" ]] || return 0
+  local finished=""
+  [[ "$1" == running ]] || { finished="$(now_iso)"; BREPORT_DONE=1; }
+  printf '{"state":"%s","message":"%s","file":"%s","started":"%s","finished":"%s"}\n' \
+    "$1" "$(json_text "$2")" "$(json_text "${3:-}")" "$BREPORT_STARTED" "$finished" \
+    > "$CTL/backup-status.json.tmp" 2>/dev/null && mv "$CTL/backup-status.json.tmp" "$CTL/backup-status.json" 2>/dev/null || true
+}
+finish_breport() { [[ -n "$BREPORT" && -z "$BREPORT_DONE" ]] && breport failed "The backup stopped before it finished. See: solis-monitor logs" || true; }
+
 cmd_backup() {
-  local target="${1:-$DIR/backups}" site stamp file tmp
+  local target="" site stamp file tmp
+  while (($#)); do
+    case "$1" in
+      --from-dashboard) BREPORT=1; shift ;;   # started by the dashboard's request file; report progress back
+      -*) die "unknown option $1" ;;
+      *) target="$1"; shift ;;
+    esac
+  done
+  tmp=""; trap 'rm -rf "${tmp:-}"; finish_breport' EXIT
+  if [[ -n "$BREPORT" ]]; then
+    [[ -e "$CTL/backup-request" ]] || { BREPORT=""; return 0; }          # the path unit also fires when the request is removed
+    local request action
+    request="$(head -c 2000 "$CTL/backup-request" 2>/dev/null || true)"
+    rm -f "$CTL/backup-request" || die "cannot remove $CTL/backup-request (is the folder owned by the user running this?)"
+    BREPORT_STARTED="$(now_iso)"
+    exec 8>/tmp/solis-monitor-backup.lock
+    flock -n 8 || { echo "another backup is running"; BREPORT=""; exit 0; }
+    action="$(printf '%s' "$request" | sed -n 's/.*"action":"\([a-z-]*\)".*/\1/p' | sed -n 1p)"
+    if [[ "$action" == set-folder ]]; then set_backup_folder "$request"; return $?; fi
+    if [[ "$action" == remove ]]; then remove_backup "$request"; return $?; fi
+  fi
+  target="${target:-$(backup_dir)}"
   site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
   stamp="$(date +%Y%m%d-%H%M%S)"
   if [[ "$target" == *.tar.gz ]]; then file="$target"; else file="$target/solis-monitor${site:+-$site}-$stamp.tar.gz"; fi
   mkdir -p "$(dirname "$file")" || die "cannot create $(dirname "$file")"
-  tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"' EXIT
+  tmp="$(mktemp -d)"
   echo "Backing up the database ..."
+  breport running "Backing up the database"
   # influx backup writes a folder inside the container; it is streamed out as a tar so nothing is left behind there.
   compose exec -T influxdb sh -c 'rm -rf /tmp/solis-backup && influx backup /tmp/solis-backup >&2 && tar -C /tmp/solis-backup -c . && rm -rf /tmp/solis-backup' \
     > "$tmp/influxdb.tar" || die "the database backup failed (is the stack running? solis-monitor status)"
@@ -178,10 +250,46 @@ cmd_backup() {
   compose exec -T web tar -C /data -c . > "$tmp/web-data.tar" 2>/dev/null || : > "$tmp/web-data.tar"
   cp .env "$tmp/env"; cp docker-compose.yml "$tmp/docker-compose.yml"
   printf '{"format":1,"created":"%s","version":"%s","site":"%s"}\n' "$(now_iso)" "$(json_text "$(env_value SOLIS_VERSION)")" "$(json_text "$(env_value SITE_NAME)")" > "$tmp/manifest.json"
+  breport running "Packing the archive"
   tar -czf "$file" -C "$tmp" manifest.json env docker-compose.yml influxdb.tar poller-data.tar web-data.tar
   chmod 600 "$file"                      # it holds .env, with every password and token
   echo "Backup written: $file ($(du -h "$file" | cut -f1))"
   echo "It contains your passwords and tokens: keep it private, and copy it off this machine."
+  if [[ "$(dirname "$file")" == "$(backup_dir)" ]]; then
+    if [[ -n "$BREPORT" ]]; then
+      # Asked for from the dashboard: keep only the newest N in the backup folder, so clicking cannot fill the disk.
+      # Archives made by hand elsewhere, and the ones you downloaded, are not touched.
+      local keep old; keep="$(backup_keep)"
+      ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
+    fi
+    write_backup_index "$(backup_dir)"
+  fi
+  [[ -z "$BREPORT" ]] || breport ok "Backup written" "$(basename "$file")"
+}
+
+remove_backup() {         # the dashboard asked to delete one archive from the backup folder
+  local name
+  name="$(printf '%s' "$1" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | sed -n 1p)"
+  if [[ ! "$name" =~ ^solis-monitor(-[A-Za-z0-9][A-Za-z0-9-]{0,60})?-[0-9]{8}-[0-9]{6}\.tar\.gz$ ]]; then
+    breport failed "That is not the name of a backup."; echo "solis-monitor: refused to remove '$name'" >&2; return 1
+  fi
+  if [[ ! -f "$(backup_dir)/$name" ]]; then breport failed "No such backup."; return 1; fi
+  rm -f "$(backup_dir)/$name"
+  write_backup_index "$(backup_dir)"
+  echo "Removed $(backup_dir)/$name"
+  breport ok "Removed $name"
+}
+
+set_backup_folder() {     # the dashboard asked for another folder (and how many archives to keep there)
+  local d keep reason
+  d="$(printf '%s' "$1" | sed -n 's/.*"dir":"\([^"]*\)".*/\1/p' | sed -n 1p)"
+  keep="$(printf '%s' "$1" | sed -n 's/.*"keep":\([0-9]*\).*/\1/p' | sed -n 1p)"
+  [[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 && "$keep" -le 50 ]] || keep=5
+  if ! reason="$(valid_backup_dir "$d")"; then breport failed "$reason"; echo "solis-monitor: $reason" >&2; return 1; fi
+  write_backup_config "$d" "$keep"
+  write_backup_index "$d"
+  echo "Backups go to $d (keeping the newest $keep made from the dashboard)."
+  breport ok "Folder set to $d"
 }
 
 # The opposite: the database is replaced in full (influx restore --full, so the tokens in the restored .env match it),
@@ -422,14 +530,37 @@ Unit=solis-monitor-dashboard-update.service
 [Install]
 WantedBy=multi-user.target
 UNIT
+      as_root install -d -o "$owner" -m 755 "$DIR/backups"
+      [[ -s "$CTL/backup-config.json" ]] || { write_backup_config "$DIR/backups" 5; write_backup_index "$DIR/backups"; }
+      as_root tee "$unit_dir/solis-monitor-dashboard-backup.service" >/dev/null <<UNIT
+[Unit]
+Description=Back up Solis Monitor (asked for on the dashboard)
+After=docker.service
+
+[Service]
+Type=oneshot
+$user_line
+ExecStart=$SELF backup --from-dashboard
+UNIT
+      as_root tee "$unit_dir/solis-monitor-dashboard-backup.path" >/dev/null <<UNIT
+[Unit]
+Description=Watch for backup requests from the Solis Monitor dashboard
+
+[Path]
+PathChanged=$CTL/backup-request
+Unit=solis-monitor-dashboard-backup.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
       printf '{"enabled":true,"version":"%s","updated":"%s"}\n' "$(json_text "$(env_value SOLIS_VERSION)")" "$(now_iso)" | as_root -u "$owner" tee "$CTL/bridge.json" >/dev/null
       as_root systemctl daemon-reload
-      as_root systemctl enable --now solis-monitor-dashboard-update.path
-      echo "Updating from the dashboard is on: Settings -> System -> Software." ;;
+      as_root systemctl enable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path
+      echo "Updating and backing up from the dashboard are on: Settings -> System -> Software, Settings -> Backup." ;;
     off)
-      as_root systemctl disable --now solis-monitor-dashboard-update.path 2>/dev/null || true
-      rm -f "$CTL/bridge.json" "$CTL/update-request"
-      echo "Updating from the dashboard is off." ;;
+      as_root systemctl disable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path 2>/dev/null || true
+      rm -f "$CTL/bridge.json" "$CTL/update-request" "$CTL/backup-request"
+      echo "Updating and backing up from the dashboard are off." ;;
     *) die "usage: solis-monitor dashboard-updates on|off" ;;
   esac
 }
@@ -491,10 +622,10 @@ case "${1:-}" in
   dashboard-updates) shift; cmd_dashboard_updates "${1:-}" ;;
   reset-login) cmd_reset_login ;;
   secure-tokens) cmd_secure_tokens ;;
-  backup) shift; cmd_backup "${1:-}" ;;
+  backup) shift; cmd_backup "$@" ;;
   restore) shift; cmd_restore "$@" ;;
   edit) cmd_edit ;;
   version) env_value SOLIS_VERSION ;;
-  ""|-h|--help|help) sed -n '2,15p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  ""|-h|--help|help) sed -n '2,17p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$1' (try: solis-monitor help)" ;;
 esac

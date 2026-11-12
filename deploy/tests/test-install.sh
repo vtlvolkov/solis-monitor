@@ -102,7 +102,7 @@ rm -rf "$T/other"
 
 out=$(install --yes --user bob --password 'Secret-pw1' --inverter 127.0.0.1 --site-name Test --port 18088 --version v9.9.9 2>&1); rc=$?
 check "install succeeds" '[[ $rc -eq 0 ]] || { echo "$out"; false; }'
-check "the shared control folder exists" '[[ -d "$T/inst/control" ]]'
+check "the shared control and backups folders exist" '[[ -d "$T/inst/control" && -d "$T/inst/backups" ]]'
 check "background update checks default to every 6 hours" '[[ "$(env_of UPDATE_CHECK_HOURS)" == 6 ]]'
 check ".env is private" '[[ "$(stat -c %a "$T/inst/.env")" == 600 ]]'
 check "login written" '[[ "$(env_of WEB_BASIC_AUTH)" == "bob:Secret-pw1" ]]'
@@ -231,7 +231,56 @@ printf '#!/bin/sh\n[ "$1" = -u ] && shift 2\nexec "$@"\n' > "$T/bin/sudo"; chmod
 SOLIS_UNIT_DIR="$T/units" upd dashboard-updates on > /dev/null 2>&1
 check "dashboard-updates on: path unit watches the request file" 'grep -q "^PathChanged=$T/inst/control/update-request" "$T/units/solis-monitor-dashboard-update.path"'
 check "dashboard-updates on: the service runs as the folder owner and passes --from-dashboard" 'grep -q "^User=$(id -un)$" "$T/units/solis-monitor-dashboard-update.service" && grep -q "^ExecStart=$T/inst/solis-monitor update --from-dashboard$" "$T/units/solis-monitor-dashboard-update.service"'
-check "dashboard-updates on: bridge file written and unit enabled" 'grep -q "\"enabled\":true" "$T/inst/control/bridge.json" && grep -q "enable --now solis-monitor-dashboard-update.path" "$T/systemctl.log"'
+check "dashboard-updates on: bridge file written and both units enabled" 'grep -q "\"enabled\":true" "$T/inst/control/bridge.json" && grep -q "enable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path" "$T/systemctl.log"'
+check "dashboard-updates on: the backup path unit watches its request file" 'grep -q "^PathChanged=$T/inst/control/backup-request" "$T/units/solis-monitor-dashboard-backup.path" && grep -q "^ExecStart=$T/inst/solis-monitor backup --from-dashboard$" "$T/units/solis-monitor-dashboard-backup.service"'
+
+echo "backups asked for by the dashboard"
+bstatus_of() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/backup-status.json"; }
+rm -f "$T/inst/control/backup-status.json"; : > "$T/docker.log"
+upd backup --from-dashboard >/dev/null 2>&1
+check "no request file: nothing happens and nothing is reported" '[[ ! -e "$T/inst/control/backup-status.json" ]] && ! grep -q "influx backup" "$T/docker.log"'
+echo '{"requested_at":"now"}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "a request makes an archive in backups/ and reports ok with its name" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && "$(bstatus_of file)" == solis-monitor-*.tar.gz && -s "$T/inst/backups/$(bstatus_of file)" && ! -e "$T/inst/control/backup-request" ]]'
+check "the status has a start and a finish time" '[[ -n "$(bstatus_of started)" && -n "$(bstatus_of finished)" ]]'
+for i in 1 2 3 4 5 6; do : > "$T/inst/backups/solis-monitor-2026010$i-000000.tar.gz"; touch -d "2026-01-0$i" "$T/inst/backups/solis-monitor-2026010$i-000000.tar.gz"; done
+echo '{}' > "$T/inst/control/backup-request"; upd backup --from-dashboard >/dev/null 2>&1
+check "the dashboard's backups folder keeps the newest 5" '[[ "$(ls "$T"/inst/backups/solis-monitor-*.tar.gz | wc -l)" == 5 && ! -e "$T/inst/backups/solis-monitor-20260101-000000.tar.gz" && ! -e "$T/inst/backups/solis-monitor-20260102-000000.tar.gz" ]]'
+echo '{}' > "$T/inst/control/backup-request"; mv "$T/bin/docker" "$T/bin/docker.off"; printf '#!/bin/sh\nexit 1\n' > "$T/bin/docker"; chmod +x "$T/bin/docker"
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+mv "$T/bin/docker.off" "$T/bin/docker"
+check "a failure is reported, never left as running" '[[ $rc -ne 0 && "$(bstatus_of state)" == failed ]]'
+check "the dashboard gets an index of the backup folder" '[[ "$(sed -n "s/.*\"dir\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/backups.json")" == "$T/inst/backups" ]] && grep -q "\"name\":\"solis-monitor-20260106-000000.tar.gz\",\"size\":0" "$T/inst/control/backups.json"'
+
+echo "backup folder set from the dashboard"
+mkdir -p "$T/mnt/usb/solis" "$T/mnt/ro"; chmod 500 "$T/mnt/ro"
+set_env_test SOLIS_BACKUP_ROOTS "$T/mnt:/nonexistent/other"     # the test folders are not under /mnt or /media themselves
+cfg_of() { sed -n "s/.*\"$1\":\"\?\([^\",}]*\)\"\?.*/\1/p" "$T/inst/control/backup-config.json"; }
+echo '{"action":"set-folder","dir":"/etc","keep":5}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a folder outside the allowed places is refused" '[[ $? -ne 0 && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not allowed"* && "$(cfg_of dir)" == "$T/inst/backups" ]]'
+echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/nowhere\",\"keep\":5}" > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a folder that does not exist is refused" '[[ "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"does not exist"* ]]'
+echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/ro\",\"keep\":5}" > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a folder that cannot be written is refused" '[[ "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not writable"* ]] || [[ $EUID -eq 0 ]]'
+echo "{\"action\":\"set-folder\",\"dir\":\"$T/mnt/usb/solis\",\"keep\":3}" > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "an existing folder under an allowed root is accepted and saved" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Folder set to $T/mnt/usb/solis" && "$(cfg_of dir)" == "$T/mnt/usb/solis" && "$(cfg_of keep)" == 3 ]]'
+echo '{}' > "$T/inst/control/backup-request"; upd backup --from-dashboard >/dev/null 2>&1
+check "backups then go to that folder, with the index and its own keep count" '[[ "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == 1 && "$(sed -n "s/.*\"dir\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/backups.json")" == "$T/mnt/usb/solis" ]]'
+for i in 1 2 3; do echo '{}' > "$T/inst/control/backup-request"; sleep 1; upd backup --from-dashboard >/dev/null 2>&1; done
+check "the folder keeps only the newest 3 asked for from the dashboard" '[[ "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == 3 ]]'
+sleep 1; out=$(upd backup 2>&1); check "a backup by hand also goes to the set folder" '[[ "$out" == *"Backup written: $T/mnt/usb/solis/"* && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == 4 ]]'
+out=$(upd status 2>&1); check "status shows the latest backup in the set folder" '[[ "$out" == *"Backup:    20"* && "$out" == *"$T/mnt/usb/solis/"* ]]'
+
+echo "backup removed from the dashboard"
+victim="$(ls -1t "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | sed -n 2p | xargs -n1 basename)"
+echo "{\"action\":\"remove\",\"name\":\"$victim\"}" > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "a listed archive is removed, the index follows, and the page is told" '[[ $rc -eq 0 && ! -e "$T/mnt/usb/solis/$victim" && "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" == 3 && "$(bstatus_of state)" == ok && "$(bstatus_of message)" == "Removed $victim" ]] && ! grep -q "$victim" "$T/inst/control/backups.json"'
+: > "$T/inst/.env.keep"; echo '{"action":"remove","name":"../../.env.keep"}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a name that is not an archive is refused" '[[ $? -ne 0 && -e "$T/inst/.env.keep" && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"not the name of a backup"* ]]'
+echo '{"action":"remove","name":"solis-monitor-19990101-000000.tar.gz"}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "a missing archive is reported" '[[ $? -ne 0 && "$(bstatus_of message)" == "No such backup." ]]'
 
 status_of() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/update-status.json"; }
 : > "$T/docker.log"; rm -f "$T/inst/control/update-status.json"
@@ -261,7 +310,7 @@ upd update --from-dashboard > /dev/null 2>&1; rc=$?
 check "a failure before anything changes is still reported (never stuck on running)" '[[ $rc -ne 0 && "$(status_of state)" == failed && "$(env_of SOLIS_VERSION)" == v9.9.20 ]]'
 
 SOLIS_UNIT_DIR="$T/units" upd dashboard-updates off > /dev/null 2>&1
-check "dashboard-updates off removes the bridge and disables the unit" '[[ ! -e "$T/inst/control/bridge.json" ]] && grep -q "disable --now solis-monitor-dashboard-update.path" "$T/systemctl.log"'
+check "dashboard-updates off removes the bridge and disables both units" '[[ ! -e "$T/inst/control/bridge.json" ]] && grep -q "disable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path" "$T/systemctl.log"'
 printf '#!/bin/sh\necho "sudo $*" >> "%s/sudo.log"\n' "$T" > "$T/bin/sudo"      # back to the logging stand-in
 
 echo "solis-monitor apply and edit"

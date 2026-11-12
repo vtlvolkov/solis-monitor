@@ -324,7 +324,8 @@ step "Writing the configuration"
 install -d -m 755 "$DIR"
 install -m 644 "$stage/docker-compose.yml" "$DIR/docker-compose.yml"
 install -m 755 "$stage/solis-monitor" "$DIR/solis-monitor"
-install -d -m 755 "$DIR/control"          # shared with the dashboard for updates; created here so Docker does not make it root-only
+install -d -m 755 "$DIR/control"          # shared with the dashboard for updates and backups; created here so Docker does not make it root-only
+install -d -m 755 "$DIR/backups"          # where `solis-monitor backup` (and the dashboard's Backup tab) put the archives
 install -m 600 "$stage/.env.example" "$DIR/.env"
 set_var() {    # set_var NAME VALUE: replace the first NAME= line of .env, or add it
   if grep -qE "^$1=" "$DIR/.env"; then sed -i "s|^$1=.*|$1=$2|" "$DIR/.env"; else echo "$1=$2" >> "$DIR/.env"; fi
