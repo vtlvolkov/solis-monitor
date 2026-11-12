@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.3.2"
+version: "0.3.3"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  poller healthcheck, and the dashboard reads the database with a read-only token
+  outages survive a poller restart, and a warning when the inverter's clock is off
 
-  - The poller container reports its health (the poll loop keeps turning; an unplugged inverter does not count as unhealthy), and updates wait for it before calling a release good
-  - The dashboard no longer holds the database admin token: new installs get a read-only token and a separate secret for the poller's API. On an older install run `solis-monitor secure-tokens` once; `solis-monitor status` says when that is still to do
-  - `solis-monitor status` shows whether the poller is reading the inverter, and why not
+  - An outage or alarm in progress is remembered across a poller restart (an update, a reboot): it is not announced twice, and one that ended while the poller was down is closed instead of staying open on the Events page forever. "Power is back" still reports the real start and duration
+  - Telegram: a message when the inverter's clock is 5 minutes or more off (ALERT_CLOCK_DRIFT_MIN, 0 = off), with how to set it (Settings → General → Inverter clock → Sync). The inverter's daily energy totals reset at its own midnight, so a wrong clock bends them
+  - Internal: the web API is split into routers and the poller's HTTP handler moved out of control.py; no change in behaviour
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
