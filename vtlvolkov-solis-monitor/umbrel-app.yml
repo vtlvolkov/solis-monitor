@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.7.1"
+version: "0.7.2"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  Grid quality at 30 days fixed, and a day picker for it
+  removing, restoring and moving backups from the dashboard work
 
-  - Grid quality at 30 days failed with "InfluxDB unavailable": a single stray frequency reading (59.5 Hz, a measurement glitch) made the database refuse the distribution query. Such readings no longer break the page; they still count as outside the band
-  - Grid quality has the day picker from Charts and Events: pick one day to see its tiles, distributions and voltage by hour
-  - When the database refuses a query, the message now says why instead of only "InfluxDB unavailable"
+  - Settings → Backup: Remove, Restore… and changing the folder made a new backup instead of doing what was asked. They now do what they say; a request the server does not recognise is refused instead
+  - The Backup and Software tabs no longer wait forever ("Waiting for the server to start…") when the server never takes the request: after two minutes they say so and point at `solis-monitor dashboard-updates on`
+  - Installs that turned on dashboard updates before v0.4.0 have no backup helper on the server: the Backup tab now says to run `solis-monitor dashboard-updates on` instead of offering a button that cannot work
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
