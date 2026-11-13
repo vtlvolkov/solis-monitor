@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.9.1"
+version: "0.9.2"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,8 +36,9 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  show or hide the Planned outages card
+  planned outages for Kyiv Oblast, Dnipro and Odesa, and on the TV
 
-  - Settings → General → Outage schedule: "Show the Planned outages card on the Overview". It hides the card on every screen; the schedule and the Telegram messages carry on. It also hides the "Set up" prompt on a site Yasno does not cover
+  - Settings → General → Outage schedule: DTEK Kyiv Oblast, Dnipro and Oblast, and Odesa and Oblast, from community data that copies DTEK's sites every few minutes. Pick your group from the list; a link opens DTEK's own address search to find it. Half-hour outages show at their real times
+  - The TV page shows the planned outages between the gauges and the chart; the chart gets the rest of the height, and all of it when the card is hidden
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
