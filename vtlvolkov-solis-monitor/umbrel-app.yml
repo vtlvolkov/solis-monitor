@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.10.2"
+version: "0.11.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,8 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  correct day/night split and daily kWh around midnight
+  MQTT and Home Assistant
 
-  - When the inverter's clock is a little behind, a reading just after midnight still held the previous day's total: the night zone counted that day's import again and the new day's import was partly missed. Every 15 minutes now count only what the counter added, so the electricity cost, the day/night split, daily kWh on Charts, the month and year sums and the daily CSV are right however late the inverter resets its counters. Past months are recalculated too
+  - Settings → System → MQTT · Home Assistant: send the readings to your MQTT broker every 10, 30 or 60 seconds, and outages and alarms the moment they start and end. Test connection, live status and the last message sent are on the card
+  - Home Assistant finds the inverter by itself: one device with its sensors (battery, PV, grid, load, voltages, temperatures, backup runtime, next planned outage, grid and alarm), and the daily kWh for the Energy dashboard
+  - Publishing only: nothing sent over MQTT can change the inverter. Guide: docs/mqtt.md
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
