@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.10.1"
+version: "0.10.2"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,8 +36,8 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  Overview cards keep their own height
+  correct day/night split and daily kWh around midnight
 
-  - Cards on the Overview are as tall as their content; the page no longer stretches them so both columns end on the same line
+  - When the inverter's clock is a little behind, a reading just after midnight still held the previous day's total: the night zone counted that day's import again and the new day's import was partly missed. Every 15 minutes now count only what the counter added, so the electricity cost, the day/night split, daily kWh on Charts, the month and year sums and the daily CSV are right however late the inverter resets its counters. Past months are recalculated too
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
