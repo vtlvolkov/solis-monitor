@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.10.0"
+version: "0.10.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,8 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  arrange the Overview yourself, and five new cards
+  Overview cards keep their own height
 
-  - Customize (in the Overview's header): drag cards between and within the two columns, remove them, add them back. The layout is saved on the server, so every screen shows the same page. Changing it needs the Settings login
-  - New cards to add: Power today, Self-sufficiency (how much of the energy came from your PV), Recent events, Battery health (state of health, full cycles, round trip, temperature) and Load by hour (a 7-day heatmap)
-  - The "Show the Planned outages card" setting now applies to the TV page; on the Overview, use Customize
+  - Cards on the Overview are as tall as their content; the page no longer stretches them so both columns end on the same line
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
