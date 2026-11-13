@@ -52,18 +52,43 @@ def daily_start(now: datetime, days: int, tz: str) -> datetime:
     return datetime.combine(first, datetime.min.time(), zone).astimezone(timezone.utc)
 
 
-def aggregate_dates(rows, fields, dates: list[date], tz: str) -> list[dict]:
-    """rows: (window_start_utc, field, max_value) for sub-day windows.
-    Groups by local calendar day and keeps the max of each *_today counter.
-    Every given date is returned; days without data have null values."""
+# The inverter's *_today counters go back to 0 at the inverter's own midnight, which can be seconds or minutes after
+# ours. A reading taken in between still holds yesterday's total, so the day boundary must not be taken as the reset:
+# a reset is the counter falling (to under half, or at all across a day change), and every window counts only what
+# was added since the window before it. Queries start BASELINE before the first day so its first window has a value
+# to count from (the baseline rows fall on the day before, which callers leave out).
+BASELINE = timedelta(hours=1)
+RESET_GAP = timedelta(hours=2)       # no readings that long across midnight: the counter was reset in between
+
+
+def counter_increments(rows, tz: str):
+    """rows: (window_start_utc, field, max of the counter in the window), any order.
+    Yields (window_start_utc, local date, field, kWh added in that window)."""
     zone = ZoneInfo(tz)
-    acc: dict[date, dict[str, float]] = {d: {} for d in dates}
-    for t, field, v in rows:
+    last: dict[str, tuple[float, date, datetime]] = {}
+    for t, field, v in sorted((r for r in rows if r[2] is not None), key=lambda r: (r[1], r[0])):
         d = t.astimezone(zone).date()
-        if d in acc and field in fields and v is not None:
-            cur = acc[d].get(field)
-            acc[d][field] = v if cur is None else max(cur, v)
-    return [{"date": d.isoformat(), **{f: _num(acc[d].get(f)) for f in fields}} for d in dates]
+        prev = last.get(field)
+        if prev is None:
+            inc, keep = v, v                                  # nothing before it: what it holds since its reset
+        elif (v < prev[0] and (v < prev[0] / 2 or d != prev[1])) or (d != prev[1] and t - prev[2] > RESET_GAP):
+            inc, keep = v, v                                  # reset (or no readings around midnight): all of it is new
+        else:
+            inc, keep = max(0.0, v - prev[0]), max(prev[0], v)   # a small step back is a glitch, not a reset
+        last[field] = (keep, d, t)
+        yield t, d, field, inc
+
+
+def aggregate_dates(rows, fields, dates: list[date], tz: str) -> list[dict]:
+    """rows: (window_start_utc, field, max_value) for sub-day windows of the *_today counters.
+    Each local day gets what its windows added (see counter_increments), so a late counter reset neither repeats
+    yesterday's total nor hides today's. Every given date is returned; days without data have null values."""
+    acc: dict[date, dict[str, float]] = {d: {} for d in dates}
+    for _t, d, field, inc in counter_increments((r for r in rows if r[1] in fields), tz):
+        if d in acc:
+            acc[d][field] = acc[d].get(field, 0.0) + inc
+    return [{"date": d.isoformat(), **{f: _num(None if acc[d].get(f) is None else round(acc[d][f], 3)) for f in fields}}
+            for d in dates]
 
 
 def aggregate_daily(rows, fields, days: int, now: datetime, tz: str) -> list[dict]:
@@ -138,20 +163,14 @@ def in_window(minute: int, start: str, end: str) -> bool:
 
 def import_costs(rows, tz: str, tariff_at) -> dict[date, dict]:
     """rows: (window_start_utc, max of grid_import_today in that window), any order.
-    The counter resets at local midnight, so each window's increment is its value minus the
-    previous window's value on the same day. Each increment is priced with the tariff that was in
-    force when its window started (`tariff_at(utc) -> Tariff | None`), split into day/night zone by
-    that tariff's hours, so a later price change never alters the cost of earlier windows."""
+    Each window's import is what the counter added since the window before (counter_increments: the inverter resets
+    it at its own midnight, not ours). Each increment is priced with the tariff that was in force when its window
+    started (`tariff_at(utc) -> Tariff | None`), split into day/night zone by that tariff's hours, so a later price
+    change never alters the cost of earlier windows."""
     zone = ZoneInfo(tz)
     out: dict[date, dict] = {}
-    prev_day, prev = None, 0.0
-    for t, v in sorted(rows):
+    for t, d, _field, inc in counter_increments(((t, "grid_import_today", v) for t, v in rows), tz):
         local = t.astimezone(zone)
-        d = local.date()
-        if d != prev_day:
-            prev_day, prev = d, 0.0
-        inc = max(0.0, v - prev)
-        prev = max(prev, v)
         tf = tariff_at(t)
         night = bool(tf and tf.night is not None and tf.night_start and tf.night_end
                      and in_window(local.hour * 60 + local.minute, tf.night_start, tf.night_end))

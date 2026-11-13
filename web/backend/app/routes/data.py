@@ -64,7 +64,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
     async def api_energy_daily(days: int = Query(30)):
         n = parse_days(days)
         t = now()
-        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz), "15m")
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz) - shaping.BASELINE, "15m")
         return {"tz": s.tz, "unit": "kWh", "days": shaping.aggregate_daily(rows, ENERGY_FIELDS, n, t, s.tz)}
 
     # ------------------------------------------------------------------ one exact day (Charts and Events tabs)
@@ -94,7 +94,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
     @r.get("/api/day/energy")
     async def api_day_energy(date: str = Query(...)):
         d, start, stop = local_day(date, now())
-        rows = await call(repo.window_max, list(ENERGY_FIELDS), start, "15m", stop)
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), start - shaping.BASELINE, "15m", stop)
         return {"tz": s.tz, "unit": "kWh", **shaping.aggregate_dates(rows, ENERGY_FIELDS, [d], s.tz)[0]}
 
     @r.get("/api/day/events")
@@ -147,7 +147,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
         zone = ZoneInfo(s.tz)
         today = t.astimezone(zone).date()
         n = (today - today.replace(month=1, day=1)).days + 1
-        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz), "1h")
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), shaping.daily_start(t, n, s.tz) - shaping.BASELINE, "1h")
         days = shaping.aggregate_daily(rows, ENERGY_FIELDS, n, t, s.tz)
         body = {"tz": s.tz, "unit": "kWh", **shaping.period_sums(days, ENERGY_FIELDS, today)}
         summary_cache.update(at=t, body=body)
@@ -178,7 +178,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
         if cache.get("at") and (t - cache["at"]).total_seconds() < 300:
             return with_rate(cache["body"])
         today = t.astimezone(ZoneInfo(s.tz)).date()
-        rows = await call(repo.window_max, ["grid_import_today"], shaping.daily_start(t, today.day, s.tz), "15m")
+        rows = await call(repo.window_max, ["grid_import_today"], shaping.daily_start(t, today.day, s.tz) - shaping.BASELINE, "15m")
         zones = shaping.import_costs([(r[0], r[2]) for r in rows], s.tz, tariffs.at)
         body = {"configured": True, **shaping.cost_summary(zones, today)}
         cache.update(at=t, body=body)
@@ -203,7 +203,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
             return hit["body"]
         dates = shaping.month_dates(ym[0], ym[1], today)
         start, stop = shaping.local_range(dates[0], dates[-1], s.tz)
-        rows = await call(repo.window_max, list(ENERGY_FIELDS), start, "15m", stop)
+        rows = await call(repo.window_max, list(ENERGY_FIELDS), start - shaping.BASELINE, "15m", stop)
         zones = shaping.import_costs([(r[0], r[2]) for r in rows if r[1] == "grid_import_today"], s.tz, tariffs.at)
         energy = shaping.aggregate_dates(rows, list(ENERGY_FIELDS), dates, s.tz)
         body = {"configured": True, "tariff": ctx.tariff_view(tariffs.at(t)), "month": key,

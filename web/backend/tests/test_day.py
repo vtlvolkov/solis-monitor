@@ -99,14 +99,14 @@ def test_history_between_flux_uses_only_canonical_values():
 
 # ---------------------------------------------------------------- energy
 
-def test_day_energy_keeps_the_days_highest_counter():
+def test_day_energy_counts_what_the_counters_added_that_day():
     rows = [(utc(2026, 10, 24, 8), "pv_energy_today", 5.0), (utc(2026, 10, 24, 15), "pv_energy_today", 17.6),
             (utc(2026, 10, 24, 15), "grid_import_today", 2.5)]
     repo = Repo(rows=rows)
     b = client(repo).get("/api/day/energy?date=2026-10-24").json()
     assert b["date"] == "2026-10-24" and b["pv_energy_today"] == 17.6 and b["grid_import_today"] == 2.5
     assert b["load_consumption_today"] is None
-    assert repo.calls == [("window_max", utc(2026, 10, 23, 21), utc(2026, 10, 24, 21))]
+    assert repo.calls == [("window_max", utc(2026, 10, 23, 20), utc(2026, 10, 24, 21))]     # from an hour before: the baseline
 
 
 # ---------------------------------------------------------------- events

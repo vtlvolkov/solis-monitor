@@ -75,7 +75,7 @@ def test_days_are_local_and_one_row_per_day_at_1d():
     assert lines[1].startswith("2026-11-10,7.5,") and lines[2].startswith("2026-11-11,")     # the counter's daily maximum
     kinds = [k[0] for k in repo.calls]
     assert kinds == ["max", "between"]                                       # counters by window maxima, the rest by hourly means
-    assert repo.calls[0][1] == datetime(2026, 11, 9, 22, 0, tzinfo=timezone.utc)   # local midnight in Kyiv (UTC+2 in November)
+    assert repo.calls[0][1] == datetime(2026, 11, 9, 21, 0, tzinfo=timezone.utc)   # an hour before local midnight in Kyiv (UTC+2 in November)
 
 
 def test_every_column_may_be_exported_at_once():

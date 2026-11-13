@@ -114,7 +114,7 @@ def test_cost_endpoint():
     assert body["today"]["day_cost"] == 12.96 and body["today"]["night_cost"] == 4.32 and body["today"]["cost"] == 17.28
     assert body["now"] == {"zone": "day", "price": 4.32, "until": "23:00"}            # 15:00 in Kyiv
     fields, start, every = repo.calls[0]
-    assert fields == ["grid_import_today"] and every == "15m" and start == kyiv(2026, 10, 1, 0)
+    assert fields == ["grid_import_today"] and every == "15m" and start == kyiv(2026, 10, 1, 0) - shaping.BASELINE
     c.get("/api/cost")
     assert len(repo.calls) == 1                     # cached
 
@@ -187,7 +187,7 @@ def test_cost_history_endpoint():
     body = c.get("/api/cost/history").json()                    # current month = October 2026
     assert body["configured"] and body["month"] == body["current_month"] == "2026-10" and body["first_day"] == "2026-10-17"
     fields, start, every, stop = repo.calls[0]
-    assert every == "15m" and start == kyiv(2026, 10, 1, 0) and "grid_import_today" in fields and "load_consumption_today" in fields
+    assert every == "15m" and start == kyiv(2026, 10, 1, 0) - shaping.BASELINE and "grid_import_today" in fields and "load_consumption_today" in fields
     assert stop == kyiv(2026, 10, 19, 0)                         # end of today (the 18th)
     days = {d["date"]: d for d in body["days"]}
     assert len(body["days"]) == 18 and days["2026-10-05"] == {"date": "2026-10-05", "has_data": False}
@@ -203,7 +203,7 @@ def test_cost_history_past_month_and_validation():
     body = c.get("/api/cost/history?month=2026-09").json()
     assert body["month"] == "2026-09" and body["current_month"] == "2026-10" and len(body["days"]) == 30 and body["total"]["days"] == 0
     _, start, _, stop = repo.calls[0]
-    assert start == kyiv(2026, 9, 1, 0) and stop == kyiv(2026, 10, 1, 0)
+    assert start == kyiv(2026, 9, 1, 0) - shaping.BASELINE and stop == kyiv(2026, 10, 1, 0)
     for bad in ("2026-11", "2027-01", "garbage", "2026-00", "2026-10-05"):
         assert c.get(f"/api/cost/history?month={bad}").status_code == 400, bad
     assert len(repo.calls) == 1                                  # rejected requests never reach InfluxDB
@@ -236,3 +236,42 @@ def test_cost_now_is_not_cached_with_the_rest():
 def test_cost_single_rate_has_no_zone():
     c, _ = client(tariff_day=4.32)
     assert c.get("/api/cost").json()["now"] is None
+
+
+# The inverter resets its counter at its own midnight. Here its clock is 3 minutes slow: the 00:00 window still holds
+# yesterday's 10.5 kWh, and the reset shows in the 00:15 window.
+LATE_RESET = [
+    (kyiv(2026, 10, 17, 22, 0), 9.0),
+    (kyiv(2026, 10, 17, 23, 45), 10.5),
+    (kyiv(2026, 10, 18, 0, 0), 10.6),     # +0.1 before the reset (still night)
+    (kyiv(2026, 10, 18, 0, 15), 0.3),     # reset: 0.3 since
+    (kyiv(2026, 10, 18, 6, 45), 2.0),     # night +1.7
+    (kyiv(2026, 10, 18, 12, 0), 4.0),     # day +2.0
+]
+
+
+def test_a_late_counter_reset_neither_repeats_yesterday_nor_hides_today():
+    z = shaping.import_costs(LATE_RESET, KYIV, lambda t: TWO)
+    d18 = z[date(2026, 10, 18)]
+    assert d18["night_kwh"] == pytest.approx(0.1 + 0.3 + 1.7)       # not 10.6 (yesterday again) and the rest lost
+    assert d18["day_kwh"] == pytest.approx(2.0)
+    assert z[date(2026, 10, 17)]["day_kwh"] + z[date(2026, 10, 17)]["night_kwh"] == pytest.approx(10.5)
+
+
+def test_an_early_reset_and_a_gap_over_midnight_count_once():
+    rows = [(kyiv(2026, 10, 17, 23, 30), 6.0), (kyiv(2026, 10, 17, 23, 45), 0.1),      # inverter 15 min fast
+            (kyiv(2026, 10, 18, 0, 0), 0.2), (kyiv(2026, 10, 18, 9, 0), 0.9),
+            (kyiv(2026, 10, 19, 8, 0), 1.5)]                                          # poller down overnight, across midnight
+    z = shaping.import_costs(rows, KYIV, lambda t: ONE)
+    assert z[date(2026, 10, 17)]["day_kwh"] == pytest.approx(6.0 + 0.1)
+    assert z[date(2026, 10, 18)]["day_kwh"] == pytest.approx(0.1 + 0.7)
+    assert z[date(2026, 10, 19)]["day_kwh"] == pytest.approx(1.5)                    # no drop to see, but the reset was in the gap
+
+
+def test_daily_energy_follows_the_same_rules():
+    rows = [(t, "grid_import_today", v) for t, v in LATE_RESET] + [(kyiv(2026, 10, 18, 0, 0), "pv_energy_today", 0.0),
+                                                                  (kyiv(2026, 10, 18, 12, 0), "pv_energy_today", 7.5)]
+    out = shaping.aggregate_dates(rows, ["grid_import_today", "pv_energy_today", "load_consumption_today"],
+                                  [date(2026, 10, 18)], KYIV)[0]
+    assert out["grid_import_today"] == pytest.approx(4.1)       # was max(10.6, 4.0) = 10.6
+    assert out["pv_energy_today"] == pytest.approx(7.5) and out["load_consumption_today"] is None

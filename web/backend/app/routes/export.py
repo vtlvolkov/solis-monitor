@@ -118,7 +118,7 @@ def build(ctx: Context, api: dict) -> APIRouter:
         others = [f for f in fields if f not in ENERGY_FIELDS]
         per_day: dict = {d.isoformat(): {} for d in dates}
         if energy:
-            rows = await call(repo.window_max, energy, start, "1h", stop)
+            rows = await call(repo.window_max, energy, start - shaping.BASELINE, "1h", stop)
             for d in shaping.aggregate_dates(rows, energy, dates, s.tz):
                 per_day[d["date"]].update({f: d[f] for f in energy})
         if others:

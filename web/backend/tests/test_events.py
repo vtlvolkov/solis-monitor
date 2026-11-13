@@ -87,7 +87,7 @@ def test_energy_summary_endpoint_and_cache():
     body = c.get("/api/energy/summary").json()
     assert body["month"]["grid_import_today"] == 10.0 and body["year"]["grid_import_today"] == 10.0
     _, start, every = repo.calls[0]
-    assert every == "1h" and start == datetime(2025, 12, 31, 22, tzinfo=timezone.utc)   # Jan 1 00:00 Kyiv
+    assert every == "1h" and start == datetime(2025, 12, 31, 21, tzinfo=timezone.utc)   # an hour before Jan 1 00:00 Kyiv
     c.get("/api/energy/summary")
     assert len(repo.calls) == 1                         # cached for 5 minutes
 

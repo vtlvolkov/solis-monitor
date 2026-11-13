@@ -218,7 +218,7 @@ def test_daily_endpoint():
     assert body["days"][-1] == {"date": "2026-10-18", "grid_import_today": 2.25,
                                 **{f: None for f in validation.ENERGY_FIELDS if f != "grid_import_today"}}
     _, fields, start, every = repo.calls[0]
-    assert start == utc(2026, 10, 11, 21) and every == "15m"
+    assert start == utc(2026, 10, 11, 20) and every == "15m"            # an hour before local midnight: the baseline
 
 
 @pytest.mark.parametrize("days", ["0", "367", "-1", "abc"])
