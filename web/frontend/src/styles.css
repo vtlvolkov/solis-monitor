@@ -70,8 +70,6 @@ button { font: inherit; color: inherit; }
 .ov-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ov-card { position: relative; min-width: 0; display: flex; flex-direction: column; flex: 0 0 auto; }
 .ov-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.ov-body > * { flex: 1; }
-.ov-body > .diagram-wrap { flex: 0 0 auto; }
 .diagram-wrap { min-width: 0; }
 .gbars { display: grid; gap: 14px; width: 100%; padding: 14px 16px;
          background: linear-gradient(180deg, #212226 0%, var(--c-surface) 100%); border: 1px solid var(--c-border); border-radius: var(--radius); }
@@ -560,11 +558,10 @@ a.link { text-decoration: none; }
   .settings-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-row.settings-general { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }     /* prices wider, clock and storage mode narrower */
   .stat-row { grid-template-columns: repeat(6, 1fr); }
-  .overview-grid { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); align-items: stretch; gap: 28px; }   /* both columns end on the same line */
+  .overview-grid { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); align-items: start; gap: 28px; }   /* each card keeps its own height; the columns may end at different lines */
   .chips-row { justify-content: flex-start; }
   .today { grid-template-columns: repeat(3, 1fr); }
   .diagram-wrap { margin: 0; }
-  .ov-col > .ov-card:last-child { flex: 1 0 auto; }   /* the shorter column's last card reaches down, so both columns end on the same line */
 }
 
 /* ---------------------------------------------------------------- cost history */
