@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.7.2"
+version: "0.8.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,10 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  removing, restoring and moving backups from the dashboard work
+  a smaller database for good, and you choose how much detail to keep
 
-  - Settings → Backup: Remove, Restore… and changing the folder made a new backup instead of doing what was asked. They now do what they say; a request the server does not recognise is refused instead
-  - The Backup and Software tabs no longer wait forever ("Waiting for the server to start…") when the server never takes the request: after two minutes they say so and point at `solis-monitor dashboard-updates on`
-  - Installs that turned on dashboard updates before v0.4.0 have no backup helper on the server: the Backup tab now says to run `solis-monitor dashboard-updates on` instead of offering a button that cannot work
+  - 10-second readings are now kept for 90 days by default; older ones are deleted once a day. The 1-minute averages, the outage history and the settings log are kept for good, so charts, daily energy, cost history and exports at 1 minute or coarser still cover everything. A year takes about 50 MB instead of 1–2 GB. Only Grid quality and the 10 s export need the 10-second readings, so they reach back as far as those are kept
+  - Settings → System → Stored history: change how many days of 10-second readings to keep, or keep everything. Lowering it asks first and names the date before which readings will go
+  - Fix: filling in the 1-minute averages for older history could fail on some installs ("cannot query an empty range") or leave one minute's average computed from part of its readings
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
