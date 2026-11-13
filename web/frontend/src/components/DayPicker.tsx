@@ -21,7 +21,8 @@ export function useDayParam(): [string | null, (day: string | null) => void] {
 const WEEK = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11'];   // a Monday to Sunday
 
 /** ‹ Sat, 24 Oct 2026 ▾ › with a month calendar that marks the days with outages and alarms. */
-export function DayPicker({ day, onChange }: { day: string | null; onChange: (day: string) => void }) {
+/** `min`: the oldest day this page can show (Grid quality: the 10-second readings kept), on top of the oldest reading. */
+export function DayPicker({ day, onChange, min }: { day: string | null; onChange: (day: string) => void; min?: string | null }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState<string | null>(day && monthOfDay(day));      // null = the server's current month
   const { data } = usePoll<CalendarPayload>(`/api/events/calendar${month ? `?month=${month}` : ''}`, 300_000);
@@ -38,7 +39,7 @@ export function DayPicker({ day, onChange }: { day: string | null; onChange: (da
   }, [open]);
 
   const today = data?.today ?? null;
-  const first = data?.first_day;
+  const first = min && (!data?.first_day || min > data.first_day) ? min : data?.first_day;
   const prev = today && (day ? shiftDay(day, -1) : shiftDay(today, -1));
   const next = today && day ? shiftDay(day, 1) : null;
   const shown = month ?? data?.month ?? null;

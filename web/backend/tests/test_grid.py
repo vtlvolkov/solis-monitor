@@ -173,3 +173,16 @@ def test_one_exact_local_day():
     assert c.get("/api/grid/quality?date=2026-11-13").status_code == 400         # tomorrow
     assert c.get("/api/grid/quality?date=11-11-2026").status_code == 400
     n = len(repo.calls); c.get("/api/grid/quality?date=2026-11-11"); assert len(repo.calls) == n   # a past day is cached for hours
+
+
+def test_days_older_than_the_raw_readings_are_refused_and_the_picker_is_told():
+    repo = Repo()
+    app = create_app(repo=repo, control=object(), now=lambda: NOW,
+                     settings=Settings(static_dir="/nonexistent", tz=KYIV, raw_retention_days=40))
+    c = TestClient(app)
+    assert c.get("/api/grid/quality?range=7d").json()["raw_from"] == "2026-10-04"       # 39 days back: one day of margin
+    r = c.get("/api/grid/quality?date=2026-10-03")
+    assert r.status_code == 400 and "kept for the last 40 days" in r.json()["detail"]
+    assert c.get("/api/grid/quality?date=2026-10-04").status_code == 200
+    everything = TestClient(create_app(repo=Repo(), control=object(), now=lambda: NOW, settings=Settings(static_dir="/nonexistent", tz=KYIV, raw_retention_days=0)))
+    assert everything.get("/api/grid/quality?date=2025-01-01").status_code == 200 and everything.get("/api/grid/quality").json()["raw_from"] is None

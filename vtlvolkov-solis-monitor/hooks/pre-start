@@ -32,6 +32,10 @@ ALERT_OFFLINE_MIN=5
 # A message when the inverter's clock is this many minutes off (its daily totals depend on it). 0 = never.
 ALERT_CLOCK_DRIFT_MIN=5
 
+# Days of 10-second readings to keep (at least 35). Older ones are deleted; the 1-minute averages, the outage history
+# and the settings log are kept for good, so the long charts and the cost history lose nothing. 0 = keep everything.
+RAW_RETENTION_DAYS=90
+
 # Electricity prices per kWh (the cost card shows once TARIFF_DAY is set; later changes are made on the Settings page).
 TARIFF_CURRENCY=UAH
 TARIFF_DAY=

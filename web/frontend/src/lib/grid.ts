@@ -48,6 +48,7 @@ export interface DayRow {
 }
 export interface GridQualityPayload {
   range: string; date: string | null; start: number; stop: number; step_s: number; tz: string; limits: Limits;
+  raw_from: string | null;      // the oldest day with 10-second readings (null = all kept): the day picker stops there
   voltage: { mean: number | null; min: number | null; max: number | null; p05: number | null; p95: number | null; bins: Bin[]; bin_width: number };
   frequency: { mean: number | null; min: number | null; max: number | null; bins: Bin[]; bin_width: number };
   out: { v_pct: number; hz_pct: number; v_min: number; hz_min: number; sags: number; surges: number };   // minutes outside, and counts of excursions

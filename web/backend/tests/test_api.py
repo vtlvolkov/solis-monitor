@@ -257,5 +257,5 @@ def test_basic_auth_enforced():
 
 
 def test_site_name():
-    assert client(FakeRepo(latest=None)).get("/api/site").json() == {"name": ""}
-    assert client(FakeRepo(latest=None), site_name="Cottage").get("/api/site").json() == {"name": "Cottage"}
+    assert client(FakeRepo(latest=None)).get("/api/site").json()["name"] == ""
+    assert client(FakeRepo(latest=None), site_name="Cottage").get("/api/site").json()["name"] == "Cottage"

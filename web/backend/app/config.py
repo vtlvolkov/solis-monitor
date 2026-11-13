@@ -10,6 +10,15 @@ def _float(v):
         return None
 
 
+def _retention(v) -> int:
+    """The same reading of RAW_RETENTION_DAYS as the poller's (downsample.parse_retention): 90 by default, 0 = all, at least 35."""
+    try:
+        days = int(str(v).strip()) if v not in (None, "") else 90
+    except ValueError:
+        return 90
+    return 0 if days <= 0 else max(days, 35)
+
+
 @dataclass(frozen=True)
 class Settings:
     influx_url: str = field(default_factory=lambda: os.getenv("INFLUX_URL", "http://influxdb:8086"))
@@ -18,6 +27,9 @@ class Settings:
     influx_bucket: str = field(default_factory=lambda: os.getenv("INFLUX_BUCKET", "solis"))
     # 1-minute aggregates (mean/min/max per field), kept by an InfluxDB task the poller sets up; read for a day or longer
     influx_bucket_1m: str = field(default_factory=lambda: os.getenv("INFLUX_BUCKET_1M") or f'{os.getenv("INFLUX_BUCKET", "solis")}_1m')
+    # Days of 10-second readings the poller keeps (0 = all; see poller/downsample.py). Grid quality and the 10 s export
+    # need them, so they refuse older periods instead of showing nothing.
+    raw_retention_days: int = field(default_factory=lambda: _retention(os.getenv("RAW_RETENTION_DAYS")))
     tz: str = field(default_factory=lambda: os.getenv("TZ", "Europe/Kyiv") or "Europe/Kyiv")
     basic_auth: str = field(default_factory=lambda: os.getenv("WEB_BASIC_AUTH", ""))
     auth_file: str = field(default_factory=lambda: os.getenv("AUTH_FILE", "/data/auth.json"))     # a password changed on the Settings page ("" = cannot be changed)

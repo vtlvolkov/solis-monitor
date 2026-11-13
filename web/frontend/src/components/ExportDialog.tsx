@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Range } from '../lib/api';
 import { t } from '../lib/i18n';
+import { useRawRetention } from '../lib/site';
 import {
   COLUMN_GROUPS, RESOLUTIONS, allowedResolutions, describePeriod, estimateRows, exportUrl, formatRows, periodSeconds, savedSeparator,
   type ExportRequest, type Resolution, type Separator,
@@ -24,7 +25,11 @@ export function ExportDialog({ range, day, onClose }: { range: Range; day: strin
 
   const period: ExportRequest['period'] = mode === 'range' ? { range } : { from, to };
   const seconds = periodSeconds(period);
-  const allowed = useMemo(() => allowedResolutions(seconds), [seconds]);
+  const rawDays = useRawRetention();
+  // 10 s is the raw reading: only as far back as the server keeps them (the 1-minute aggregates answer everything else)
+  const rawFrom = rawDays ? new Date(Date.now() - (rawDays - 1) * 86_400_000).toISOString().slice(0, 10) : null;
+  const tooOld = mode === 'days' && !!rawFrom && from < rawFrom;
+  const allowed = useMemo(() => allowedResolutions(seconds).filter((r) => !(r === '10s' && tooOld)), [seconds, tooOld]);
   useEffect(() => { if (!allowed.includes(resolution)) setResolution(allowed[0] ?? '1h'); }, [allowed, resolution]);
   useEffect(() => { try { localStorage.setItem(SEP_KEY, separator); } catch { /* storage blocked */ } }, [separator]);
   useEffect(() => {
@@ -68,7 +73,8 @@ export function ExportDialog({ range, day, onClose }: { range: Range; day: strin
           </div>
           <div class="setting-hint">{resolution === '1d'
             ? t('One row per day with the daily energy totals (kWh); power and voltage columns are the daily averages.')
-            : t('Averages over each step. 10 s is the raw reading and is offered up to one day; 1 min up to a week.')}</div>
+            : t('Averages over each step. 10 s is the raw reading and is offered up to one day; 1 min up to a week.')}
+            {tooOld && rawDays ? ` ${t('10 s readings are kept for the last {n} days.', { n: rawDays })}` : ''}</div>
         </div>
 
         <div class="export-section">

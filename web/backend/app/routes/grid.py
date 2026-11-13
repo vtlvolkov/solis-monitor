@@ -26,6 +26,14 @@ RANGES = {"24h", "7d", "30d"}
 CACHE_S = 300
 
 
+def raw_from(days: int, now: datetime, tz: str):
+    """The oldest local day whose 10-second readings are all still kept (None = everything is kept). The poller deletes
+    whole UTC days older than `days`; one day of margin covers the zone and the time of the daily run."""
+    if not days:
+        return None
+    return (now - timedelta(days=days - 1)).astimezone(ZoneInfo(tz)).date()
+
+
 def parse_limits(v_min, v_max, hz_min, hz_max) -> dict:
     out = {}
     for key, raw in (("v_min", v_min), ("v_max", v_max), ("hz_min", hz_min), ("hz_max", hz_max)):
@@ -150,6 +158,9 @@ def build(ctx: Context) -> APIRouter:
             d = shaping.parse_day(date)
             if d is None or d > t.astimezone(ZoneInfo(s.tz)).date():
                 raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD, not in the future")
+            first_raw = raw_from(s.raw_retention_days, t, s.tz)
+            if first_raw and d < first_raw:
+                raise HTTPException(status_code=400, detail=f"Grid quality needs the 10-second readings, which are kept for the last {s.raw_retention_days} days.")
             start, stop = shaping.local_range(d, d, s.tz)
             stop = min(stop, t)
             rng, day = d.isoformat(), d.isoformat()
@@ -177,6 +188,8 @@ def build(ctx: Context) -> APIRouter:
         rows = dict(zip(jobs, results, strict=True))
         events = rows.pop("events")
         body = shape(rows, limits, start, stop, t, s.tz, events, rng, day)
+        first_raw = raw_from(s.raw_retention_days, t, s.tz)
+        body["raw_from"] = first_raw.isoformat() if first_raw else None      # the day picker offers nothing older
         cache[key] = {"at": t, "body": body}
         return body
 

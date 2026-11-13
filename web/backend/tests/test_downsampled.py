@@ -69,6 +69,22 @@ def test_reads_the_aggregates_when_ready_and_raw_otherwise():
         assert 'from(bucket: "solis")' in r.api.queries[-1] and '_measurement == "solis"' in r.api.queries[-1]
 
 
+def test_oldest_reading_is_the_older_of_the_two_buckets():
+    class Api:
+        def __init__(self): self.queries = []
+        def query(self, q):
+            self.queries.append(q)
+            t = NOW - timedelta(days=90) if 'bucket: "solis"' in q else NOW - timedelta(days=400)
+            class R:
+                def get_time(self): return t
+            class T:
+                records = [R()]
+            return [T()]
+    r = InfluxRepo.__new__(InfluxRepo)
+    r.bucket, r.bucket_1m, r.api = "solis", "solis_1m", Api()
+    assert r.first_time() == NOW - timedelta(days=400)          # the raw bucket was pruned; the aggregates go back further
+
+
 def test_settings_default_the_aggregate_bucket_name(monkeypatch):
     monkeypatch.setenv("INFLUX_BUCKET", "solis"); monkeypatch.delenv("INFLUX_BUCKET_1M", raising=False)
     assert Settings().influx_bucket_1m == "solis_1m"

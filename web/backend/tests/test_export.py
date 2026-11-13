@@ -120,3 +120,17 @@ def test_cost_csv_uses_the_cost_history_days():
     assert lines[1].startswith("2026-11-") and lines[1].endswith(",UAH")
     c2, _ = client()
     assert c2.get("/api/export/cost.csv").status_code == 400                 # no tariff
+
+
+def test_raw_10_second_export_only_within_the_kept_readings():
+    repo = Repo()
+    c = TestClient(create_app(repo=repo, control=object(), now=lambda: NOW, settings=Settings(static_dir="/nonexistent", tz=KYIV, raw_retention_days=40)))
+    r = c.get("/api/export.csv?fields=grid_power&from=2026-09-01&to=2026-09-01&every=10s")
+    assert r.status_code == 400 and "kept for the last 40 days" in r.json()["detail"]
+    assert c.get("/api/export.csv?fields=grid_power&from=2026-09-01&to=2026-09-01&every=1m").status_code == 200   # the aggregates answer
+    assert c.get("/api/export.csv?fields=grid_power&from=2026-11-11&to=2026-11-11&every=10s").status_code == 200
+
+
+def test_site_tells_the_page_how_long_raw_readings_are_kept():
+    c, _ = client()
+    assert c.get("/api/site").json()["raw_retention_days"] == 90

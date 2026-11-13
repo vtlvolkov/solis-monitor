@@ -50,6 +50,7 @@ services:
       INFLUX_ORG: home
       INFLUX_BUCKET: solis
       INFLUX_BUCKET_1M: solis_1m
+      RAW_RETENTION_DAYS: ${APP_VTLVOLKOV_SOLIS_MONITOR_RAW_RETENTION_DAYS:-90}
       # Changing battery settings from the dashboard: off unless settings.env says otherwise
       CONTROL_TOKEN: ${APP_VTLVOLKOV_SOLIS_MONITOR_CONTROL_TOKEN}
       CONTROL_ENABLED: ${APP_VTLVOLKOV_SOLIS_MONITOR_CONTROL_ENABLED:-false}
@@ -83,6 +84,7 @@ services:
       INFLUX_ORG: home
       INFLUX_BUCKET: solis
       INFLUX_BUCKET_1M: solis_1m
+      RAW_RETENTION_DAYS: ${APP_VTLVOLKOV_SOLIS_MONITOR_RAW_RETENTION_DAYS:-90}
       # The login shown in umbrelOS (user admin) protects the Settings page only; the rest is open on the home network.
       WEB_BASIC_AUTH: admin:${APP_PASSWORD}
       WEB_AUTH_SETTINGS_ONLY: "true"

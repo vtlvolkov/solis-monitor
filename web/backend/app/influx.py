@@ -219,7 +219,12 @@ class InfluxRepo:
                 for r in table.records if r.get_value() is not None]
 
     def first_time(self):
+        """The oldest reading in either bucket: after the retention split the raw bucket starts later than the history."""
         times = [r.get_time() for table in self.api.query(first_time_flux(self.bucket)) for r in table.records]
+        try:
+            times += [r.get_time() for table in self.api.query(first_time_flux(self.bucket_1m)) for r in table.records]
+        except Exception:
+            pass                                            # no aggregate bucket yet, or an older token that cannot read it
         return min(times) if times else None
 
     def control_log(self, limit):

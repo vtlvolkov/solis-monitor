@@ -66,7 +66,7 @@ export function GridQuality({ live, now }: { live: LiveState; now: number }) {
               <button type="button" key={r} class={r === range && !day ? 'on' : ''} aria-pressed={r === range && !day} onClick={() => { pick(r); setDay(null); }} data-testid={`grid-range-${r}`}>{t(RANGE_LABELS[r])}</button>
             ))}
           </div>
-          <DayPicker day={day} onChange={setDay} />
+          <DayPicker day={day} onChange={setDay} min={d?.raw_from} />
         </div>
         <div class="controls-group">
           {day && <button type="button" class="link" onClick={() => setDay(null)} data-testid="day-back">{t('Back to {range}', { range: t(RANGE_LABELS[range]) })}</button>}

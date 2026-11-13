@@ -533,6 +533,7 @@ export const UK: Record<string, string> = {
   "A sag or surge is one excursion below {lo} V or above {hi} V lasting at least one reading. Readings during an outage are left out; the standard allows 10 % deviation for 95 % of the time.":
     "Просідання чи стрибок — одне відхилення нижче {lo} В або вище {hi} В тривалістю щонайменше одне показання. Показання під час відключення не враховуються; стандарт допускає відхилення 10 % протягом 95 % часу.",
   "Back to {range}": "Назад до {range}",
+  "10 s readings are kept for the last {n} days.": "Показання з кроком 10 с зберігаються за останні {n} днів.",
   "Band: lowest to highest reading of each hour · line: average · dots: hours often outside the standard": "Смуга: від найнижчого до найвищого показання кожної години · лінія: середнє · точки: години, часто поза стандартом",
   "Limits": "Межі", "Lowest voltage": "Найнижча напруга", "Highest voltage": "Найвища напруга", "Lowest frequency": "Найнижча частота", "Highest frequency": "Найвища частота",
   "{name} must be between {lo} and {hi}": "{name} має бути між {lo} і {hi}",
@@ -611,6 +612,7 @@ export const UK_PATTERNS: [RegExp, string][] = [
   [/^Updates are handled by (.+)\.$/, "Оновлення виконує $1."],
   [/^Backups are handled by (.+)\.$/, "Резервне копіювання виконує $1."],
   [/^Folder set to (.+)$/, "Теку змінено на $1"],
+  [/^Grid quality needs the 10-second readings, which are kept for the last (\d+) days\.$/, "Для якості мережі потрібні показання з кроком 10 с, а вони зберігаються за останні $1 днів."],
   [/^Removed (solis-monitor\S+\.tar\.gz)$/, "Видалено $1"],
   [/^Restored from (solis-monitor\S+\.tar\.gz)$/, "Відновлено з $1"],
   [/^That folder is not allowed\. Use one under (.+) \(or add its root to SOLIS_BACKUP_ROOTS in \.env\)\.$/, "Ця тека не дозволена. Виберіть теку в $1 (або додайте її корінь до SOLIS_BACKUP_ROOTS у .env)."],

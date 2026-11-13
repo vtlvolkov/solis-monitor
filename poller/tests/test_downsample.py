@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import downsample
 from downsample import Downsampler, aggregation_flux, task_flux
 
 T0 = datetime(2026, 11, 12, 18, 0, tzinfo=timezone.utc)
@@ -52,17 +53,22 @@ class FakeClient:
                     return [Table([first])] if first else []
                 return []
 
-        self._b, self._t, self._o, self._q = Buckets(), Tasks(), Orgs(), Query()
+        class Delete:
+            def delete(self, start, stop, predicate, bucket, org): outer.deleted.append((start, stop, predicate, bucket))
+
+        self.deleted = []
+        self._b, self._t, self._o, self._q, self._d = Buckets(), Tasks(), Orgs(), Query(), Delete()
 
     def buckets_api(self): return self._b
     def tasks_api(self): return self._t
     def organizations_api(self): return self._o
     def query_api(self): return self._q
+    def delete_api(self): return self._d
 
 
-def make(**kw):
+def make(raw_days=0, **kw):
     c = FakeClient(**kw)
-    return c, Downsampler(c, "home", "solis", "solis_1m", clock=lambda: T0.timestamp(), sleep=lambda s: None)
+    return c, Downsampler(c, "home", "solis", "solis_1m", clock=lambda: T0.timestamp(), sleep=lambda s: None, raw_days=raw_days)
 
 
 def test_task_script_aggregates_mean_min_and_max_into_the_second_bucket():
@@ -116,3 +122,48 @@ def test_setup_failure_is_logged_not_raised():
     c, d = make()
     c._o.find_organizations = lambda org: []
     assert d.ensure() is False
+
+
+def test_retention_setting():
+    assert downsample.parse_retention(None) == 90 and downsample.parse_retention("") == 90
+    assert downsample.parse_retention("0") == 0 and downsample.parse_retention("-5") == 0
+    assert downsample.parse_retention("120") == 120
+    assert downsample.parse_retention("7") == downsample.MIN_RAW_DAYS          # grid quality needs a month of raw readings
+    assert downsample.parse_retention("lots") == 90
+
+
+def test_prune_deletes_only_10_second_readings_older_than_the_cutoff_oldest_day_first():
+    c, d = make(raw_days=90, raw_first=T0 - timedelta(days=93))
+    assert d.prune() == 3                                                         # 11, 12 and 13 Aug lie before the 14 Aug cutoff
+    cutoff = datetime(2026, 8, 14, tzinfo=timezone.utc)                           # 90 days before 12 Nov, at midnight
+    assert [x[0] for x in c.deleted] == [cutoff - timedelta(days=3), cutoff - timedelta(days=2), cutoff - timedelta(days=1)]
+    assert c.deleted[-1][1] == cutoff
+    assert all(p == '_measurement="solis"' and b == "solis" for _, _, p, b in c.deleted)   # events and the audit are kept
+    aggregated = [q for q in c.queries if 'to(bucket: "solis_1m"' in q]
+    assert len(aggregated) == 3 and "2026-08-11T00:00:00Z" in aggregated[0]      # each day aggregated before it goes
+
+
+def test_prune_does_nothing_when_off_or_nothing_is_old():
+    c, d = make(raw_days=0, raw_first=T0 - timedelta(days=400))
+    assert d.prune() == 0 and c.deleted == []
+    c, d = make(raw_days=90, raw_first=T0 - timedelta(days=30))
+    assert d.prune() == 0 and c.deleted == []
+    c, d = make(raw_days=90, raw_first=None)
+    assert d.prune() == 0
+
+
+def test_backfill_edges_are_whole_minutes_and_never_empty():
+    c, d = make()
+    start = datetime(2026, 11, 10, 11, 34, 41, tzinfo=timezone.utc)
+    stop = datetime(2026, 11, 12, 11, 34, 41, 905424, tzinfo=timezone.utc)      # a sliver under a second past two days
+    n = d.backfill(start, stop)
+    ranges = [q.split("range(")[1].split(")")[0] for q in c.queries]
+    assert n == 3 and ranges == ["start: 2026-11-11T11:35:00Z, stop: 2026-11-12T11:35:00Z",
+                                 "start: 2026-11-10T11:35:00Z, stop: 2026-11-11T11:35:00Z",
+                                 "start: 2026-11-10T11:34:00Z, stop: 2026-11-10T11:35:00Z"]
+    c.queries.clear()
+    on_the_minute = datetime(2026, 11, 12, 11, 35, tzinfo=timezone.utc)
+    d.aggregate(on_the_minute, on_the_minute)                                     # an empty range: no query at all
+    assert c.queries == []
+    d.aggregate(stop, stop)                                                       # inside a minute: that whole minute
+    assert "start: 2026-11-12T11:34:00Z, stop: 2026-11-12T11:35:00Z" in c.queries[-1]
