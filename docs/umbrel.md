@@ -12,7 +12,7 @@ This repository is also an [Umbrel community app store](https://github.com/getum
 
 The dashboard login for the Settings page is shown on the app's page in umbrelOS (user `admin`). You can change it in the dashboard (Settings → System → Dashboard login); umbrelOS keeps showing the original, which then stops working. To go back to the original, use the card's "Use the original password again", or if you forgot yours: `docker exec vtlvolkov-solis-monitor_web_1 rm -f /data/auth.json`. The rest of the dashboard is open on your home network on `http://umbrel.local:8188`, so the [Android TV app](tv-app.md) can show it (host `umbrel.local`, port `8188`). umbrelOS's own sign-in is switched off for this app for the same reason.
 
-**Only one program may talk to the logger.** Stop anything else that reads it (Home Assistant, another monitor, the installer-based stack on the same box) before you start the app.
+**Only one program may talk to the logger.** Stop anything else that reads it (Home Assistant, another monitor, the installer-based stack on the same box) before you start the app. To have the inverter in Home Assistant as well, let Solis Monitor pass it on: **Settings → System → MQTT · Home Assistant** with your broker's address (see [MQTT and Home Assistant](mqtt.md)).
 
 ## Updating
 

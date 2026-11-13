@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .context import Context, InfluxUnavailable
 from .control import ControlClient
-from .routes import backups, data, export, grid, layout, outages, updates
+from .routes import backups, data, export, grid, layout, mqtt, outages, updates
 from .routes import settings as settings_routes
 
 log = logging.getLogger("solis-web")
@@ -100,6 +100,7 @@ def create_app(repo=None, settings: Settings | None = None, now=_now, control=No
     app.include_router(grid.build(ctx))
     app.include_router(outages.build(ctx))
     app.include_router(layout.build(ctx))
+    app.include_router(mqtt.build(ctx))
 
     # ------------------------------------------------------------------ MCP (read-only, for agents)
     if s.mcp_token:

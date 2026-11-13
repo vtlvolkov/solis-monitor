@@ -808,3 +808,20 @@ i.ok { background: var(--c-ok); }
 .heat-axis { fill: var(--c-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .heat-card .setting-hint { margin-top: 8px; }
 .outage-show .setting-hint { display: block; margin-top: 2px; }
+
+/* MQTT (components/MqttCard.tsx) */
+.mqtt-form { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.mqtt-host, .mqtt-prefix { grid-column: span 4; }
+.mqtt-port, .mqtt-interval { grid-column: span 2; }
+.mqtt-user, .mqtt-pass { grid-column: span 3; }
+@media (max-width: 480px) { .mqtt-form { grid-template-columns: repeat(6, minmax(0, 1fr)); } .mqtt-user, .mqtt-pass { grid-column: 1 / -1; } }
+.mqtt-form select { min-height: 44px; padding: 0 10px; font: inherit; font-size: 1rem; color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 10px; width: 100%; }
+.mqtt-form .mqtt-checks, .mqtt-form .inv-actions { grid-column: 1 / -1; }
+.mqtt-checks { display: grid; gap: 6px; margin-top: 4px; }
+.mqtt-checks .setting-hint { display: block; margin-top: 1px; }
+.mqtt-topics { margin-top: 14px; }
+.mqtt-topics code { font: 0.82rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.mqtt-message { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--c-bg); border: 1px solid var(--c-border); font: 0.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-height: 260px; overflow: auto; color: #c9cbd1; }
+.mqtt-form label.check { display: flex; color: var(--c-text); font-size: 0.95rem; }
+.mqtt-topics .kv div { flex-direction: column; gap: 2px; }
+.mqtt-topics .kv dd { text-align: left; font-weight: 500; }

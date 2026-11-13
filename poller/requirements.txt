@@ -1,3 +1,4 @@
 pymodbus>=3.6,<4
 influxdb-client>=1.40
 tzdata
+paho-mqtt>=2.1,<3

@@ -17,6 +17,7 @@
 - **Outage and alarm history**: when the grid dropped, for how long, and how far the battery fell. **Grid quality**: how often the voltage and frequency left the standard's band, when in the day, and day by day.
 - **Electricity cost** with day and night rates, per day and per month. Changing a price never rewrites past days.
 - **Telegram alerts** for outages, low battery during an outage, alarms and a lost inverter connection.
+- **MQTT and Home Assistant**: the inverter shows up in Home Assistant as a device with its sensors and the Energy dashboard counters, for automations such as turning the water heater on with solar surplus or shedding loads in an outage. Publishing only.
 - **Works on phones and TVs**: a responsive layout, a wall-display mode and an Android TV app. English and Ukrainian.
 - **Read-only unless you say otherwise.** Changing battery settings from the dashboard is off by default.
 - **Your data stays with you** in a local InfluxDB database. Nothing is sent to any cloud. Long ranges read 1-minute aggregates the database keeps itself, so charts stay quick as the history grows.
@@ -128,6 +129,7 @@ The same pages, rearranged for a narrow screen.
 | | |
 |---|---|
 | **Telegram alerts** and **AI agent access** (read-only MCP) | [Alerts and AI agents](docs/alerts-and-agents.md) |
+| **MQTT** for Home Assistant, Node-RED and smart relays | [MQTT and Home Assistant](docs/mqtt.md) |
 | **Changing battery settings** from the dashboard: work mode, charge limits, time-of-use schedule. Off by default | [Changing inverter settings](docs/settings.md) |
 | **Android TV app** and wall display | [TV display](docs/tv-app.md) |
 | What every page and number means, environment variables, API | [Dashboard guide](docs/dashboard.md) |

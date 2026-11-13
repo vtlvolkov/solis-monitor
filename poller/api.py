@@ -70,7 +70,7 @@ def make_handler(ctl: Controller):
                 return self._send(200 if h["alive"] else 503, h)
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
                       "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity, "/retention": ctl.retention,
-                      "/inverter": ctl.inverter_address,
+                      "/inverter": ctl.inverter_address, "/mqtt": ctl.mqtt_config,
                       "/outages": ctl.outage_schedule, "/outages/config": ctl.outage_config,
                       "/outages/groups": lambda: ctl.outage_groups(q.get("source")),
                       "/outages/streets": lambda: ctl.outage_streets(q.get("source"), q.get("q")),
@@ -113,6 +113,15 @@ def make_handler(ctl: Controller):
                     raise ControlError(400, "body must be {network}")
                 return ctl.scan_network(body["network"])
 
+            def mqtt_change():
+                body = self._body()
+                if set(body) - {"enabled", "host", "port", "username", "password", "tls", "prefix", "interval_s", "discovery"}:
+                    raise ControlError(400, "body must be {enabled, host, port, username, password, tls, prefix, interval_s, discovery}")
+                return ctl.set_mqtt(body)
+
+            def mqtt_test():
+                return ctl.test_mqtt(self._body())
+
             def debug_read():
                 body = self._body()
                 if set(body) != {"function", "address", "count"}:
@@ -120,7 +129,8 @@ def make_handler(ctl: Controller):
                 return ctl.debug_read(body["function"], body["address"], body["count"])
 
             self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/outages/config": outage_config, "/inverter": inverter,
-                       "/inverter/scan": scan_for_logger, "/debug/read": debug_read}.get(self.path))
+                       "/inverter/scan": scan_for_logger, "/debug/read": debug_read,
+                       "/mqtt": mqtt_change, "/mqtt/test": mqtt_test}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet
             pass

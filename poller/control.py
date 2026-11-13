@@ -27,6 +27,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import downsample
+import mqtt
 import outages
 import rawread
 import scan
@@ -157,6 +158,7 @@ class Controller:
         self.devices = None                          # device.DeviceReader, set by poller.main
         self.retention_store = None                  # downsample.RetentionStore, set by poller.main
         self.outages = None                          # outages.OutageWatcher, set by poller.main
+        self.mqtt = None                             # mqtt.MqttPublisher, set by poller.main
         self.downsampler = None                      # downsample.Downsampler, for the oldest readings
         self.addresses = None                        # address.AddressStore, set by poller.main
         self.poll_status = None                      # address.PollStatus, set by poller.main
@@ -260,6 +262,33 @@ class Controller:
 
     def outage_schedule(self) -> dict:
         return self._watcher().payload()
+
+    # ------------------------------------------------------------------ MQTT (publishing only)
+    def _mqtt(self):
+        if self.mqtt is None:
+            raise ControlError(503, "The poller is still starting.")
+        return self.mqtt
+
+    def mqtt_config(self) -> dict:
+        return self._mqtt().view()
+
+    def set_mqtt(self, body: dict) -> dict:
+        """Where to publish (the app's own setting: nothing reaches the inverter, so CONTROL_ENABLED does not apply).
+        The password is kept by the store and never returned."""
+        m = self._mqtt()
+        before = m.store.config()
+        try:
+            after = m.store.set(body)
+        except mqtt.MqttError as exc:
+            raise ControlError(400, str(exc)) from exc
+        def name(c):
+            return f"{c['host']}:{c['port']} {c['prefix']}" if c["enabled"] else "off"
+        self.audit("mqtt", before=name(before), written=name(after), verified=True, summary=f"MQTT: {name(before)} → {name(after)}")
+        m.reconfigure()
+        return m.view()
+
+    def test_mqtt(self, body: dict) -> dict:
+        return self._mqtt().test(body)
 
     def outage_config(self) -> dict:
         w = self._watcher()

@@ -26,6 +26,7 @@ import control
 import device
 import downsample
 import faults
+import mqtt
 import notify
 import outages
 
@@ -351,6 +352,23 @@ def main():
                                     state=lambda: (latest.get("battery_soc"), latest.get("battery_power_signed"), latest.get("total_load_power")))
     ctl.outages = watcher
     watcher.run_in_background(stop)
+
+    # MQTT (Home Assistant, Node-RED, relays): publishing only, off until a broker is set on the Settings page or in .env
+    publisher = mqtt.MqttPublisher(mqtt.MqttStore(os.getenv("MQTT_FILE", "/data/mqtt.json"), site=os.getenv("SITE_NAME", "")),
+                                   site=os.getenv("SITE_NAME", ""), device=ctl.devices.cached)
+    ctl.mqtt = publisher
+    publisher.run_in_background(stop)
+    next_cache = {"at": -1e9, "v": None}
+
+    def next_outage():                            # the next planned outage's start, from the watcher (once a minute)
+        if time.monotonic() - next_cache["at"] > 60:
+            try:
+                n = watcher.payload().get("next") if watcher.store.configured() else None
+                next_cache["v"] = n["start"] if n else None
+            except Exception as exc:
+                log.debug("next outage for MQTT failed: %s", exc)
+            next_cache["at"] = time.monotonic()
+        return next_cache["v"]
     if tracker.active_events():                     # still going on when we last stopped: no new start, no new alert
         alerts.restore(tracker.active_events())
         log.info("Resuming with active events: %s", ", ".join(e["name"] for e in tracker.active_events()))
@@ -395,6 +413,14 @@ def main():
                     p = p.field(k, ev[k])
             records.append(p)
         alerts.events(events, vals)                   # Telegram, independent of InfluxDB
+        try:                                          # MQTT, independent of both; never in the way of the next poll
+            for ev in events:
+                publisher.publish_event(ev)
+            if publisher.cfg["enabled"]:
+                publisher.publish_state(vals, tracker.active_events(), alerts._runtime(vals.get("battery_soc"), vals.get("total_load_power")),
+                                        next_outage(), force=bool(events))
+        except Exception as exc:
+            log.debug("MQTT publish failed: %s", exc)
         alerts.snapshot(vals)
         latest.clear()                                # for the outage watcher's battery verdict
         latest.update(vals)

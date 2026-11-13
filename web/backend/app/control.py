@@ -70,6 +70,15 @@ class ControlClient:
     def set_battery_capacity(self, kwh: float | None) -> tuple[int, dict]:
         return self._call("POST", "/battery-capacity", {"kwh": kwh})
 
+    def mqtt(self) -> tuple[int, dict]:
+        return self._call("GET", "/mqtt")
+
+    def set_mqtt(self, body: dict) -> tuple[int, dict]:
+        return self._call("POST", "/mqtt", body)
+
+    def test_mqtt(self, body: dict) -> tuple[int, dict]:
+        return self._call("POST", "/mqtt/test", body, timeout=15)        # the poller waits up to 5 s for the broker
+
     def inverter_address(self) -> tuple[int, dict]:
         return self._call("GET", "/inverter")
 

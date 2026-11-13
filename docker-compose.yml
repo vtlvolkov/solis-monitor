@@ -54,6 +54,16 @@ services:
       BATTERY_CAPACITY_KWH: ${BATTERY_CAPACITY_KWH:-}   # the Settings page can override it (saved in poller-data)
       CAPACITY_FILE: /data/battery-capacity.json
       EVENTS_FILE: /data/events.json                    # outages/alarms in progress, so a restart does not lose or repeat them
+      MQTT_FILE: /data/mqtt.json                        # the broker set on Settings -> System (wins over MQTT_*)
+      MQTT_HOST: ${MQTT_HOST:-}
+      MQTT_PORT: ${MQTT_PORT:-}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TLS: ${MQTT_TLS:-}
+      MQTT_PREFIX: ${MQTT_PREFIX:-}
+      MQTT_INTERVAL: ${MQTT_INTERVAL:-}
+      MQTT_DISCOVERY: ${MQTT_DISCOVERY:-}
+      MQTT_DISCOVERY_PREFIX: ${MQTT_DISCOVERY_PREFIX:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       ALERT_SOC_LEVELS: ${ALERT_SOC_LEVELS:-50,30,20}
