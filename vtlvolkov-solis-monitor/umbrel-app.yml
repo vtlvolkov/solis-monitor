@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.9.0"
+version: "0.9.1"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,11 +36,8 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  planned outages for your address, and whether the battery will last
+  show or hide the Planned outages card
 
-  - Settings → General → Outage schedule: find your outage group from your address (Yasno: Kyiv, and Dnipro DnEM / CEK), or type it. Only the group is kept
-  - Overview → Planned outages: the next outage and how long it lasts, whether the battery will carry the house through it (at your usual load for those hours), and today and tomorrow at a glance
-  - Telegram: 30 minutes before a planned outage, when the battery will not last through the next one, and when tomorrow's schedule is published or a schedule changes (each can be turned off)
-  - While it is on, the server asks Yasno for your group's schedule every 15 minutes; nothing else is sent
+  - Settings → General → Outage schedule: "Show the Planned outages card on the Overview". It hides the card on every screen; the schedule and the Telegram messages carry on. It also hides the "Set up" prompt on a site Yasno does not cover
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
