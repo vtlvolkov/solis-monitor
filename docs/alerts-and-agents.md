@@ -7,6 +7,7 @@ The poller sends Telegram messages for:
 - the battery crossing `ALERT_SOC_LEVELS` (default 50/30/20 %) during an outage
 - inverter and BMS alarms starting and clearing
 - the inverter being unreachable for `ALERT_OFFLINE_MIN` minutes (default 5), and coming back
+- planned outages, once you set your group on **Settings → General → Outage schedule**: 30 minutes before one (battery level and runtime), when the battery will not last through the next one, and when tomorrow's schedule is published or a schedule changes (each can be turned off there)
 - the inverter's clock being `ALERT_CLOCK_DRIFT_MIN` minutes (default 5) off the real time, and being right again. The inverter resets its daily energy counters at its own midnight, so a wrong clock bends the daily totals; **Settings → General → Inverter clock → Sync** sets it (with `CONTROL_ENABLED=true`). `0` turns this alert off.
 
 `solis-monitor update` also reports each update and each failed update.

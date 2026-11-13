@@ -416,3 +416,35 @@ def test_retention_over_the_internal_api(tmp_path):
         assert call(url, token="wrong")[0] == 401
     finally:
         srv.shutdown()
+
+
+def test_outage_schedule_over_the_internal_api(tmp_path):
+    import outages
+    ctl, *_ = make()
+    ctl.audit = lambda action, **f: None
+    class Y:
+        def planned(self, source): return {"3.1": {"today": {"slots": [], "date": "2026-11-13T00:00:00+02:00", "status": "ScheduleApplies"}}}
+        def streets(self, source, q): return [{"id": 911, "value": "вул. Хрещатик"}]
+        def houses(self, source, street, q): return [{"id": 39986, "value": "22"}]
+        def group(self, source, street, house): return "20.1" if house == 39986 else None
+    ctl.outages = outages.OutageWatcher(outages.OutageStore(str(tmp_path)), Y(), "Europe/Kyiv")
+    ctl.outages.reconfigured = lambda: None
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        assert call(base + "/outages")[1]["configured"] is False
+        cfg = call(base + "/outages/config")[1]
+        assert cfg["source"] is None and [s["key"] for s in cfg["sources"]] == ["yasno-kyiv", "yasno-dnipro-dnem", "yasno-dnipro-cek"]
+        assert call(base + "/outages/streets?source=yasno-kyiv&q=%D0%A5%D1%80%D0%B5%D1%89")[1] == [{"id": 911, "value": "вул. Хрещатик"}]
+        assert call(base + "/outages/houses?source=yasno-kyiv&street=911&q=22")[1] == [{"id": 39986, "value": "22"}]
+        assert call(base + "/outages/group?source=yasno-kyiv&street=911&house=39986")[1] == {"group": "20.1"}
+        assert call(base + "/outages/group?source=yasno-kyiv&street=911&house=1")[0] == 404
+        assert call(base + "/outages/streets?source=other&q=x")[0] == 400 and call(base + "/outages/houses?source=yasno-kyiv&street=abc&q=1")[0] == 400
+        status, body = call(base + "/outages/config", "POST", {"source": "yasno-kyiv", "group": "20.1", "alerts": {"before": True, "short": False, "changes": True}})
+        assert status == 200 and body["group"] == "20.1" and body["alerts"]["short"] is False
+        assert call(base + "/outages/config", "POST", {"source": "yasno-kyiv", "group": "x", "alerts": {}})[0] == 400
+        assert call(base + "/outages/config", "POST", {"source": None, "group": None, "alerts": {}})[1]["source"] is None
+        assert call(base + "/outages", token="wrong")[0] == 401
+    finally:
+        srv.shutdown()

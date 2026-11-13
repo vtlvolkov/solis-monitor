@@ -287,6 +287,29 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .band-note { color: var(--c-muted); font-size: 0.78rem; text-align: right; }
 .grid-limits { margin-bottom: 14px; }
 .retention-warning { color: var(--c-warn); }
+/* Planned outages (Overview) and their source (Settings) */
+.now-row.warn .now-dot { background: var(--c-warn); box-shadow: 0 0 8px rgba(243, 156, 50, 0.5); }
+.outage-group { font-size: 0.85rem; }
+.outage-verdict { margin: 2px 0 10px; }
+.outage-day { margin-top: 10px; }
+.outage-day-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.88rem; margin-bottom: 4px; }
+.outage-bar { position: relative; height: 16px; border-radius: 6px; background: rgba(111, 207, 70, 0.18); overflow: hidden; }
+.outage-bar.waiting { background: repeating-linear-gradient(135deg, var(--c-surface2) 0 6px, transparent 6px 12px); }
+.outage-slot { position: absolute; top: 0; bottom: 0; background: var(--c-danger); opacity: 0.85; }
+.outage-slot.possible { background: repeating-linear-gradient(135deg, var(--c-warn) 0 5px, transparent 5px 10px); opacity: 1; }
+.outage-now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--c-text); box-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
+.outage-times { font-size: 0.8rem; color: var(--c-muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.outage-foot { margin-top: 10px; }
+.outage-form { grid-template-columns: 1fr 1fr; }
+.outage-street { position: relative; }
+.outage-suggest { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--c-surface2); border: 1px solid var(--c-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.outage-suggest button { width: 100%; text-align: left; padding: 8px 10px; border: 0; background: transparent; color: var(--c-text); font: inherit; border-radius: 6px; cursor: pointer; }
+.outage-suggest button:hover { background: rgba(255, 255, 255, 0.06); }
+.outage-found { margin-top: 10px; }
+.outage-alerts { display: grid; gap: 4px; margin: 12px 0; }
+.outage-manual-toggle { align-self: end; padding-bottom: 10px; }
+.outage-source .tariff-now { margin: 10px 0 4px; }
+@media (max-width: 640px) { .outage-form { grid-template-columns: 1fr; } .outage-manual-toggle { padding-bottom: 0; } }
 .tariff-form label.retention-all { display: flex; align-items: center; gap: 10px; align-self: center; color: var(--c-text); font-size: 0.9rem; }
 .tariff-form label.retention-all input { width: 18px; height: 18px; min-height: 0; flex: none; accent-color: var(--c-inverter); }
 .confirm-actions .btn-danger, .btn.btn-danger { color: var(--c-danger); border-color: var(--c-danger); }

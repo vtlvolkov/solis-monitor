@@ -12,6 +12,7 @@ import logging
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 from control import ControlError, Controller
 
@@ -62,13 +63,19 @@ def make_handler(ctl: Controller):
             return body
 
         def do_GET(self):
-            if self.path == "/health":                    # the container healthcheck: no secret, nothing beyond liveness
+            url = urlsplit(self.path)
+            q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            if url.path == "/health":                     # the container healthcheck: no secret, nothing beyond liveness
                 h = ctl.health()
                 return self._send(200 if h["alive"] else 503, h)
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
                       "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity, "/retention": ctl.retention,
-                      "/inverter": ctl.inverter_address}
-            self._run(routes.get(self.path))
+                      "/inverter": ctl.inverter_address,
+                      "/outages": ctl.outage_schedule, "/outages/config": ctl.outage_config,
+                      "/outages/streets": lambda: ctl.outage_streets(q.get("source"), q.get("q")),
+                      "/outages/houses": lambda: ctl.outage_houses(q.get("source"), q.get("street"), q.get("q")),
+                      "/outages/group": lambda: ctl.outage_group(q.get("source"), q.get("street"), q.get("house"))}
+            self._run(routes.get(url.path))
 
         def do_POST(self):
             def apply():
@@ -86,6 +93,12 @@ def make_handler(ctl: Controller):
                 if set(body) != {"days"}:
                     raise ControlError(400, "body must be {days}")
                 return ctl.set_retention(body["days"])
+
+            def outage_config():
+                body = self._body()
+                if set(body) != {"source", "group", "alerts"}:
+                    raise ControlError(400, "body must be {source, group, alerts}")
+                return ctl.set_outage_config(body["source"], body["group"], body["alerts"])
 
             def inverter():
                 body = self._body()
@@ -105,7 +118,7 @@ def make_handler(ctl: Controller):
                     raise ControlError(400, "body must be {function, address, count}")
                 return ctl.debug_read(body["function"], body["address"], body["count"])
 
-            self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/inverter": inverter,
+            self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/outages/config": outage_config, "/inverter": inverter,
                        "/inverter/scan": scan_for_logger, "/debug/read": debug_read}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet

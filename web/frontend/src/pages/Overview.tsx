@@ -1,5 +1,7 @@
 import { BatteryCard, Card, ErrorBanner, Header, Skeleton, TodayRow } from '../components/common';
 import { CostCard, GridCard, ScheduleCard, StatusChips, type CostPayload } from '../components/OverviewCards';
+import { OutageCard } from '../components/OutageCard';
+import type { OutagePayload } from '../lib/outages';
 import type { SettingsPayload } from '../lib/settings';
 import { GaugeBars } from '../components/GaugeBars';
 import { Runtime, useAvgLoad, useFullCharge } from '../components/Runtime';
@@ -22,6 +24,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
   const vmax = usePoll<HistoryPayload>('/api/history?fields=grid_voltage&range=24h&every=1h&agg=max', 300_000).data;
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);
   const cost = usePoll<CostPayload>('/api/cost', 300_000).data;
+  const planned = usePoll<OutagePayload>('/api/outage-schedule', 300_000);
   const fullIn = useFullCharge(fields, info);
   const outage = hasPoint && (gridLost(fields) || !!events?.outage_now);
   const since = events?.outage_now?.start;
@@ -58,6 +61,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
         </div>
         <div class="overview-side">
           <GridCard f={fields} events={events} vmin={vmin} vmax={vmax} />
+          <OutageCard o={planned.data} error={planned.error} now={now} />
           <ScheduleCard s={sched.data} error={sched.error} />
           {fields ? <TodayRow fields={fields} /> : <Card title="Today"><Skeleton h={96} /></Card>}
           <CostCard c={cost} />

@@ -6,6 +6,7 @@ import { CapacityCard } from '../components/CapacityCard';
 import { DebugCard } from '../components/DebugCard';
 import { InverterCard } from '../components/InverterCard';
 import { LoginCard } from '../components/LoginCard';
+import { OutageSourceCard } from '../components/OutageSourceCard';
 import { RetentionCard } from '../components/RetentionCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
@@ -476,6 +477,9 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
           <div class="settings-row settings-general">
             <TariffCard />
             {storageCard}
+          </div>
+          <div class="settings-row">
+            <OutageSourceCard />
           </div>
         </>
       )}

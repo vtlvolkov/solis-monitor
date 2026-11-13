@@ -1,6 +1,7 @@
 """Client for the poller's internal API (settings, device details). The web app never talks to the inverter."""
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -42,6 +43,20 @@ class ControlClient:
 
     def battery_capacity(self) -> tuple[int, dict]:
         return self._call("GET", "/battery-capacity")
+
+    def outages(self) -> tuple[int, dict]:
+        return self._call("GET", "/outages", timeout=10)
+
+    def outage_config(self) -> tuple[int, dict]:
+        return self._call("GET", "/outages/config")
+
+    def set_outage_config(self, source, group, alerts) -> tuple[int, dict]:
+        return self._call("POST", "/outages/config", {"source": source, "group": group, "alerts": alerts})
+
+    def outage_lookup(self, kind: str, **params) -> tuple[int, dict]:
+        """streets / houses / group at Yasno, through the poller (it fetches; the browser never talks to Yasno)."""
+        assert kind in ("streets", "houses", "group")
+        return self._call("GET", f"/outages/{kind}?{urllib.parse.urlencode(params)}", timeout=25)
 
     def retention(self) -> tuple[int, dict]:
         return self._call("GET", "/retention", timeout=10)

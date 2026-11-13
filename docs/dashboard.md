@@ -45,6 +45,16 @@ Ranges: `1h 3h 6h 12h 24h 2d 7d 30d`. `every=auto` keeps each series at 500 poin
 
 Code: `web/backend` (FastAPI) and `web/frontend` (Vite + Preact + uPlot). `web/Dockerfile` builds both into one image.
 
+## Planned outages (графік відключень)
+
+**Settings → General → Outage schedule** finds your outage group from your address: pick the source (Yasno for Kyiv, or Dnipro DnEM / CEK), start typing the street, pick it, type the house number and pick it; Yasno answers with the group (for example 20.1). Only the group is saved, never the address. If you know your group, **I know my group** lets you type it instead. While this is on, the poller asks Yasno (app.yasno.ua, DTEK's own service for those cities) for the group's schedule every 15 minutes; nothing else is sent, and the last good copy is kept, so a Yasno hiccup does not empty the card.
+
+The **Planned outages** card on the Overview shows the next outage and how long it lasts, whether the battery will carry the house through it, and today and tomorrow as 24-hour bars (red: outage, striped: possible outage, white line: now). The battery verdict starts from the charge expected at the start of the outage (the current charging or discharging carried on until then, up to the maximum charge SOC), takes the energy above the backup floor, and spends it minute by minute at your usual load for those hours (the average of the last two weeks), so a heavy evening counts.
+
+In Telegram (each can be turned off on the same card): 30 minutes before a planned outage, with the battery level and the runtime; once, up to three hours ahead, when the battery will not last through the next outage; and when tomorrow's schedule is published or a schedule changes.
+
+Yasno has no documented API: this uses the JSON its website loads, as the Home Assistant integrations do. If Yasno changes it, the card says it cannot reach the schedule and keeps the last one.
+
 ## Grid quality
 
 **Events → Grid quality** judges the supply against the standard (EN 50160 / ДСТУ: 230 V ±10 %, so 207–253 V, and 50 Hz ±0.2 Hz) over the last 24 hours, 7 or 30 days, or one exact day from the day picker (the same one as on Charts and Events; the URL carries `?day=`): the share of time outside the band and the minutes it adds up to, the number of sags (below the band) and surges (above it), the frequency's excursions, and the outages of the period. The voltage and frequency distributions show where the readings sit, the **voltage by hour of day** chart shows when the grid is weak (a Kyiv evening is usually visible), and the day-by-day table has the worst days highlighted. Readings taken during an outage (0 V) are left out; outages are counted from the event log instead. Everything is computed in the database from the 10-second readings, so a month is a few seconds on a Raspberry Pi the first time and cached for five minutes after that.

@@ -27,6 +27,7 @@ import device
 import downsample
 import faults
 import notify
+import outages
 
 INVERTER_HOST = os.getenv("INVERTER_HOST", "")
 INVERTER_PORT = int(os.getenv("INVERTER_PORT", "502"))
@@ -323,6 +324,33 @@ def main():
             return d["battery"]["capacity_kwh"], d["backup"]["eps_dod_pct"]
         return None
     alerts = notify.from_env(battery_for_runtime)
+
+    # The planned outage schedule (Yasno): fetched every 15 min while a source is set; Telegram warnings from it
+    latest: dict = {}
+    profile_cache = {"at": -1e9, "p": {}}
+
+    def load_profile():                           # the usual load by local hour, from the last two weeks (once an hour)
+        if time.monotonic() - profile_cache["at"] > 3600:
+            try:
+                rows = [(r.get_time(), r.get_value()) for t in influx.query_api().query(outages.load_profile_flux(INFLUX_BUCKET)) for r in t.records]
+                profile_cache["p"] = outages.load_profile(rows, os.getenv("TZ") or "Europe/Kyiv")
+            except Exception as exc:
+                log.debug("load profile failed: %s", exc)
+            profile_cache["at"] = time.monotonic()
+        return profile_cache["p"]
+
+    def battery_for_outage():                     # (capacity kWh, backup floor SOC, max charge SOC)
+        d = ctl.devices.cached()
+        if not (d and d["battery"]["capacity_kwh"]):
+            return None
+        max_soc = (ctl._settings_cache or {}).get("battery", {}).get("max_charge_soc")
+        return d["battery"]["capacity_kwh"], d["backup"]["eps_dod_pct"], max_soc
+
+    watcher = outages.OutageWatcher(outages.OutageStore(os.getenv("OUTAGES_DIR", "/data")), outages.Yasno(), os.getenv("TZ") or "Europe/Kyiv",
+                                    send=alerts.send, battery=battery_for_outage, profile=load_profile,
+                                    state=lambda: (latest.get("battery_soc"), latest.get("battery_power_signed"), latest.get("total_load_power")))
+    ctl.outages = watcher
+    watcher.run_in_background(stop)
     if tracker.active_events():                     # still going on when we last stopped: no new start, no new alert
         alerts.restore(tracker.active_events())
         log.info("Resuming with active events: %s", ", ".join(e["name"] for e in tracker.active_events()))
@@ -368,6 +396,8 @@ def main():
             records.append(p)
         alerts.events(events, vals)                   # Telegram, independent of InfluxDB
         alerts.snapshot(vals)
+        latest.clear()                                # for the outage watcher's battery verdict
+        latest.update(vals)
         d = ctl.devices.cached()                      # the inverter's clock, from the device read (every 60 s)
         if d:
             alerts.clock_drift(device.clock_drift_s(d["inverter"]["clock"], d["read_at"], ctl.cfg.tz), d["read_at"])

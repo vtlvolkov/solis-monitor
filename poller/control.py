@@ -27,6 +27,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import downsample
+import outages
 import rawread
 import scan
 
@@ -155,6 +156,7 @@ class Controller:
         self.lock = threading.Lock()                 # one change at a time
         self.devices = None                          # device.DeviceReader, set by poller.main
         self.retention_store = None                  # downsample.RetentionStore, set by poller.main
+        self.outages = None                          # outages.OutageWatcher, set by poller.main
         self.downsampler = None                      # downsample.Downsampler, for the oldest readings
         self.addresses = None                        # address.AddressStore, set by poller.main
         self.poll_status = None                      # address.PollStatus, set by poller.main
@@ -249,6 +251,77 @@ class Controller:
         summary = f"10-second readings kept: {name(before['days'])} → {name(after['days'])}" + ("" if after["source"] == "saved" else f" (from {after['source']})")
         self.audit("raw_retention", before=str(before["days"]), written=str(days), verified=True, summary=summary)
         return {**after, "applied": summary}
+
+    # ------------------------------------------------------------------ the planned outage schedule (the app's own setting)
+    def _watcher(self):
+        if self.outages is None:
+            raise ControlError(503, "The outage schedule is not ready yet.")
+        return self.outages
+
+    def outage_schedule(self) -> dict:
+        return self._watcher().payload()
+
+    def outage_config(self) -> dict:
+        w = self._watcher()
+        return {"source": w.store.source, "group": w.store.group, "alerts": w.store.alerts, "error": w.last_error,
+                "fetched_at": (w.store.schedule or {}).get("fetched_at"),
+                "sources": [{"key": k, "label": v["label"], "region": v["region"], "provider": v["provider"]} for k, v in outages.SOURCES.items()]}
+
+    def set_outage_config(self, source, group, alerts) -> dict:
+        """Source and group (the address is never kept), and which Telegram messages to send. Nothing is written to the
+        inverter, so CONTROL_ENABLED does not apply. source None = off."""
+        w = self._watcher()
+        before = f"{w.store.source or 'off'} {w.store.group or ''}".strip()
+        try:
+            w.store.set_config(source, group, alerts)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
+        after = f"{w.store.source or 'off'} {w.store.group or ''}".strip()
+        self.audit("outage_schedule", before=before, written=after, verified=True, summary=f"Outage schedule: {before} → {after}")
+        if w.store.configured():
+            w.reconfigured()
+        return self.outage_config()
+
+    def _lookup(self, fn, *args):
+        try:
+            return fn(*args)
+        except outages.OutageError as exc:
+            raise ControlError(502, str(exc)) from exc
+
+    @staticmethod
+    def _source(source) -> str:
+        if source not in outages.SOURCES:
+            raise ControlError(400, "Unknown source.")
+        return source
+
+    @staticmethod
+    def _query(q) -> str:
+        q = (q or "").strip()
+        if not 1 <= len(q) <= 60:
+            raise ControlError(400, "Type at least one character.")
+        return q
+
+    @staticmethod
+    def _id(v, name) -> int:
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            raise ControlError(400, f"{name} must be a number.") from None
+        if not 0 < n < 10**9:
+            raise ControlError(400, f"{name} must be a number.")
+        return n
+
+    def outage_streets(self, source, q) -> list:
+        return self._lookup(self._watcher().yasno.streets, self._source(source), self._query(q))
+
+    def outage_houses(self, source, street, q) -> list:
+        return self._lookup(self._watcher().yasno.houses, self._source(source), self._id(street, "street"), self._query(q))
+
+    def outage_group(self, source, street, house) -> dict:
+        g = self._lookup(self._watcher().yasno.group, self._source(source), self._id(street, "street"), self._id(house, "house"))
+        if g is None:
+            raise ControlError(404, "Yasno does not know a group for this address.")
+        return {"group": g}
 
     # ------------------------------------------------------------------ where the logger is (the app's own setting)
     def health(self) -> dict:
