@@ -445,6 +445,9 @@ def test_outage_schedule_over_the_internal_api(tmp_path):
         assert status == 200 and body["group"] == "20.1" and body["alerts"]["short"] is False
         assert call(base + "/outages/config", "POST", {"source": "yasno-kyiv", "group": "x", "alerts": {}})[0] == 400
         assert call(base + "/outages/config", "POST", {"source": None, "group": None, "alerts": {}})[1]["source"] is None
+        status, body = call(base + "/outages/config", "POST", {"source": None, "group": None, "alerts": {}, "overview": False})
+        assert status == 200 and body["overview"] is False and call(base + "/outages")[1]["show"] is False
+        assert call(base + "/outages/config", "POST", {"source": None, "group": None, "alerts": {}, "other": 1})[0] == 400
         assert call(base + "/outages", token="wrong")[0] == 401
     finally:
         srv.shutdown()

@@ -29,16 +29,17 @@ def build(ctx: Context) -> APIRouter:
 
     @r.post("/api/settings/outage-schedule")
     async def api_outage_config_change(request: Request):
-        """{source, group, alerts}: source null = off. Only the group is kept, never the address."""
+        """{source, group, alerts, overview?}: source null = off; overview = show the card on the Overview.
+        Only the group is kept, never the address."""
         if (refused := ctx.refuse_write(request)) is not None:
             return refused
         body, bad = await ctx.json_body(request)
         if bad is not None:
             return bad
-        if not isinstance(body, dict) or set(body) != {"source", "group", "alerts"}:
-            return JSONResponse({"detail": "body must be {source, group, alerts}"}, status_code=400)
+        if not isinstance(body, dict) or not {"source", "group", "alerts"} <= set(body) <= {"source", "group", "alerts", "overview"}:
+            return JSONResponse({"detail": "body must be {source, group, alerts, overview?}"}, status_code=400)
         log.warning("outage schedule change requested: %s %s", body.get("source"), body.get("group"))
-        status, result = await poller(control.set_outage_config, body["source"], body["group"], body["alerts"])
+        status, result = await poller(control.set_outage_config, body["source"], body["group"], body["alerts"], body.get("overview"))
         if status == 200:
             result["web"] = ctx.web_can_change()
         return JSONResponse(result, status_code=status)

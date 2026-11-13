@@ -40,6 +40,7 @@ export function OutageSourceCard() {
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const houseInput = useRef<HTMLInputElement>(null);
+  const [showing, setShowing] = useState<'saving' | 'saved' | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +79,16 @@ export function OutageSourceCard() {
       setError(t(e instanceof ApiError ? e.message : 'Change failed'));
     } finally { setBusy(false); }
   };
+  // Saved at once, with what is saved now (not with an address or Telegram choices still being edited)
+  const toggleCard = async (on: boolean) => {
+    setShowing('saving'); setError(null);
+    try {
+      const c = await postJson<OutageConfig>('/api/settings/outage-schedule', { source: cfg.source, group: cfg.group, alerts: cfg.alerts, overview: on });
+      setCfg({ ...cfg, ...c }); setShowing('saved');
+    } catch (e) {
+      setShowing(null); setError(t(e instanceof ApiError ? e.message : 'Change failed'));
+    }
+  };
   const alertsChanged = cfg.source && JSON.stringify(alerts) !== JSON.stringify(cfg.alerts);
   const canSave = editable && ((!!group && isGroup(group)) || (!!cfg.source && !!alertsChanged && !group));
 
@@ -92,6 +103,12 @@ export function OutageSourceCard() {
         </div>
       ) : <div class="tariff-now muted" data-testid="outage-current">{t('Off')}</div>}
       {cfg.error && <div class="field-error" role="status">{t(cfg.error)}</div>}
+      <label class="check outage-show">
+        <input type="checkbox" checked={cfg.overview} disabled={!cfg.web.can_change || showing === 'saving'} data-testid="outage-show"
+               onChange={(e) => toggleCard((e.target as HTMLInputElement).checked)} />
+        <span>{t('Show the Planned outages card on the Overview')}
+          {showing === 'saved' && <span class="muted"> · {cfg.overview ? t('shown') : t('hidden')}</span>}</span>
+      </label>
       {!cfg.web.can_change && <div class="setting-hint">{cfg.web.reason ? t(cfg.web.reason) : ''}</div>}
 
       <form class="tariff-form outage-form" onSubmit={(e) => { e.preventDefault(); if (canSave) save(); }}>

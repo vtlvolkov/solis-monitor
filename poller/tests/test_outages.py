@@ -168,3 +168,20 @@ def test_load_profile_by_local_hour():
             (datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc), None)]
     assert outages.load_profile(rows, "Europe/Kyiv") == {16: 500}          # 14:00 UTC is 16:00 in Kyiv
     assert NOW + timedelta(0) == NOW
+
+
+def test_the_overview_card_can_be_hidden_with_or_without_a_source(tmp_path):
+    st = OutageStore(str(tmp_path))
+    assert st.show_card is True                                            # shown by default, even before setup ("Set up" prompt)
+    st.set_config(None, None, {}, overview=False)
+    assert OutageStore(str(tmp_path)).show_card is False                   # kept, also while off
+    st.set_config("yasno-kyiv", "3.1", {})
+    assert st.show_card is False                                           # saving the group keeps the choice
+    st.set_config("yasno-kyiv", "3.1", {}, overview=True)
+    assert st.show_card is True
+    with pytest.raises(ValueError):
+        st.set_config("yasno-kyiv", "3.1", {}, overview="no")
+    w = OutageWatcher(st, FakeYasno(), "Europe/Kyiv")
+    assert w.payload()["show"] is True
+    st.set_config("yasno-kyiv", "3.1", {}, overview=False)
+    assert w.payload()["show"] is False

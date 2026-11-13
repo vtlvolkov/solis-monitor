@@ -232,16 +232,24 @@ class OutageStore:
     def configured(self) -> bool:
         return bool(self.source and self.group)
 
-    def set_config(self, source: str | None, group: str | None, alerts: dict) -> None:
+    @property
+    def show_card(self) -> bool:
+        """Whether the Overview shows the Planned outages card (also its "Set up" prompt while off)."""
+        return self.config.get("overview") is not False
+
+    def set_config(self, source: str | None, group: str | None, alerts: dict, overview: bool | None = None) -> None:
         if source is not None and source not in SOURCES:
             raise ValueError("unknown source")
         if source is not None and (not isinstance(group, str) or not GROUP.fullmatch(group)):
             raise ValueError("a group like 20.1 is needed")
         if not isinstance(alerts, dict) or set(alerts) - set(DEFAULT_ALERTS) or not all(isinstance(v, bool) for v in alerts.values()):
             raise ValueError("alerts must be {before, short, changes} as true or false")
+        if overview is not None and not isinstance(overview, bool):
+            raise ValueError("overview must be true or false")
         with self.lock:
             changed = (source, group) != (self.source, self.group)
-            self.config = {"source": source, "group": group if source else None, "alerts": {**DEFAULT_ALERTS, **alerts}}
+            self.config = {"source": source, "group": group if source else None, "alerts": {**DEFAULT_ALERTS, **alerts},
+                           "overview": self.show_card if overview is None else overview}
             self._write("outages.json", self.config)
             if changed:
                 self.schedule = None                             # another group: what we had says nothing about it
@@ -312,7 +320,7 @@ class OutageWatcher:
     # -- what the dashboard shows
     def payload(self) -> dict:
         s = SOURCES.get(self.store.source or "", {})
-        base = {"configured": self.store.configured(), "source": "Yasno" if s else None, "region": s.get("region"), "provider": s.get("provider"),
+        base = {"configured": self.store.configured(), "show": self.store.show_card, "source": "Yasno" if s else None, "region": s.get("region"), "provider": s.get("provider"),
                 "group": self.store.group, "updated_on": None, "fetched_at": None, "stale": False, "error": self.last_error,
                 "days": [], "next": None, "battery": None}
         sch = self.store.schedule

@@ -528,6 +528,9 @@ export const UK: Record<string, string> = {
   "The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.":
     "Тека даних застосунку (історія та налаштування, збережені на цій панелі) входить до власних резервних копій застосунків платформи. Тут нічого не треба налаштовувати, і з цієї сторінки нічого завантажувати.",
   // Planned outages
+  "Show the Planned outages card on the Overview": "Показувати картку «Планові відключення» на Огляді",
+  "shown": "показано",
+  "hidden": "приховано",
   "possible": "можливе",
   "fetched {time}": "отримано {time}",
   "Find the group by address": "Знайти чергу за адресою",

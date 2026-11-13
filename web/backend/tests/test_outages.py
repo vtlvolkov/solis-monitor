@@ -22,9 +22,9 @@ class Control:
     def outage_config(self):
         return 200, {"source": "yasno-kyiv", "group": "3.1", "alerts": {"before": True, "short": True, "changes": True}, "sources": []}
 
-    def set_outage_config(self, source, group, alerts):
-        self.calls.append(("set", source, group, alerts))
-        return 200, {"source": source, "group": group, "alerts": alerts, "sources": []}
+    def set_outage_config(self, source, group, alerts, overview=None):
+        self.calls.append(("set", source, group, alerts, overview))
+        return 200, {"source": source, "group": group, "alerts": alerts, "overview": overview is not False, "sources": []}
 
     def outage_lookup(self, kind, **params):
         self.calls.append((kind, params))
@@ -56,7 +56,10 @@ def test_settings_and_the_address_lookup_go_through_the_poller_behind_the_login(
     assert ("houses", {"source": "yasno-kyiv", "street": 911, "q": "22"}) in ctl.calls
     assert c.get("/api/settings/outage-schedule/houses?source=yasno-kyiv&street=abc&q=22", auth=AUTH).status_code == 422
     r = c.post("/api/settings/outage-schedule", json={"source": "yasno-kyiv", "group": "20.1", "alerts": {"before": True}}, headers=JSON, auth=AUTH)
-    assert r.status_code == 200 and ctl.calls[-1] == ("set", "yasno-kyiv", "20.1", {"before": True})
+    assert r.status_code == 200 and ctl.calls[-1] == ("set", "yasno-kyiv", "20.1", {"before": True}, None)
+    r = c.post("/api/settings/outage-schedule", json={"source": None, "group": None, "alerts": {}, "overview": False}, headers=JSON, auth=AUTH)
+    assert r.status_code == 200 and ctl.calls[-1][-1] is False and r.json()["overview"] is False
+    assert c.post("/api/settings/outage-schedule", json={"source": None, "group": None, "alerts": {}, "x": 1}, headers=JSON, auth=AUTH).status_code == 400
     assert c.post("/api/settings/outage-schedule", json={"source": "x"}, headers=JSON, auth=AUTH).status_code == 400
     assert c.post("/api/settings/outage-schedule", json={"source": None, "group": None, "alerts": {}},
                   headers={**JSON, "Origin": "http://evil.example"}, auth=AUTH).status_code == 403

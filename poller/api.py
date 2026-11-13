@@ -96,9 +96,9 @@ def make_handler(ctl: Controller):
 
             def outage_config():
                 body = self._body()
-                if set(body) != {"source", "group", "alerts"}:
-                    raise ControlError(400, "body must be {source, group, alerts}")
-                return ctl.set_outage_config(body["source"], body["group"], body["alerts"])
+                if not {"source", "group", "alerts"} <= set(body) <= {"source", "group", "alerts", "overview"}:
+                    raise ControlError(400, "body must be {source, group, alerts, overview?}")
+                return ctl.set_outage_config(body["source"], body["group"], body["alerts"], body.get("overview"))
 
             def inverter():
                 body = self._body()

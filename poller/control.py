@@ -263,23 +263,24 @@ class Controller:
 
     def outage_config(self) -> dict:
         w = self._watcher()
-        return {"source": w.store.source, "group": w.store.group, "alerts": w.store.alerts, "error": w.last_error,
+        return {"source": w.store.source, "group": w.store.group, "alerts": w.store.alerts, "overview": w.store.show_card, "error": w.last_error,
                 "fetched_at": (w.store.schedule or {}).get("fetched_at"),
                 "sources": [{"key": k, "label": v["label"], "region": v["region"], "provider": v["provider"]} for k, v in outages.SOURCES.items()]}
 
-    def set_outage_config(self, source, group, alerts) -> dict:
+    def set_outage_config(self, source, group, alerts, overview=None) -> dict:
         """Source and group (the address is never kept), and which Telegram messages to send. Nothing is written to the
         inverter, so CONTROL_ENABLED does not apply. source None = off."""
         w = self._watcher()
         before = f"{w.store.source or 'off'} {w.store.group or ''}".strip()
         try:
-            w.store.set_config(source, group, alerts)
+            w.store.set_config(source, group, alerts, overview)
         except ValueError as exc:
             raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
         after = f"{w.store.source or 'off'} {w.store.group or ''}".strip()
-        self.audit("outage_schedule", before=before, written=after, verified=True, summary=f"Outage schedule: {before} → {after}")
-        if w.store.configured():
-            w.reconfigured()
+        if after != before:
+            self.audit("outage_schedule", before=before, written=after, verified=True, summary=f"Outage schedule: {before} → {after}")
+            if w.store.configured():
+                w.reconfigured()
         return self.outage_config()
 
     def _lookup(self, fn, *args):

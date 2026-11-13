@@ -50,8 +50,11 @@ class ControlClient:
     def outage_config(self) -> tuple[int, dict]:
         return self._call("GET", "/outages/config")
 
-    def set_outage_config(self, source, group, alerts) -> tuple[int, dict]:
-        return self._call("POST", "/outages/config", {"source": source, "group": group, "alerts": alerts})
+    def set_outage_config(self, source, group, alerts, overview=None) -> tuple[int, dict]:
+        body = {"source": source, "group": group, "alerts": alerts}
+        if overview is not None:
+            body["overview"] = overview
+        return self._call("POST", "/outages/config", body)
 
     def outage_lookup(self, kind: str, **params) -> tuple[int, dict]:
         """streets / houses / group at Yasno, through the poller (it fetches; the browser never talks to Yasno)."""

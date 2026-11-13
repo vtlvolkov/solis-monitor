@@ -309,6 +309,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .outage-alerts { display: grid; gap: 4px; margin: 12px 0; }
 .outage-manual-toggle { align-self: end; padding-bottom: 10px; }
 .outage-source .tariff-now { margin: 10px 0 4px; }
+.outage-show { margin: 4px 0 6px; }
 @media (max-width: 640px) { .outage-form { grid-template-columns: 1fr; } .outage-manual-toggle { padding-bottom: 0; } }
 .tariff-form label.retention-all { display: flex; align-items: center; gap: 10px; align-self: center; color: var(--c-text); font-size: 0.9rem; }
 .tariff-form label.retention-all input { width: 18px; height: 18px; min-height: 0; flex: none; accent-color: var(--c-inverter); }

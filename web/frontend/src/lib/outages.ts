@@ -19,6 +19,7 @@ export interface BatteryVerdict {
 export interface OutageAlerts { before: boolean; short: boolean; changes: boolean }
 export interface OutageConfig {
   source: string | null; group: string | null; alerts: OutageAlerts; error: string | null; fetched_at: string | null;
+  overview: boolean;            // show the Planned outages card on the Overview
   sources: { key: string; label: string; region: string; provider: string }[];
   web: { can_change: boolean; reason: string | null };
 }
@@ -27,6 +28,7 @@ export const isGroup = (g: string): boolean => /^\d{1,3}\.\d{1,2}$/.test(g);
 
 export interface OutagePayload {
   configured: boolean;
+  show: boolean;                // the Overview shows the card (a setting on the Outage schedule card)
   error: string | null;         // the last fetch's problem, if it failed
   source: string | null; region: string | null; provider: string | null; group: string | null;
   updated_on: string | null;    // when the operator last changed the schedule

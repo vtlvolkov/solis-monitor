@@ -61,7 +61,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
         </div>
         <div class="overview-side">
           <GridCard f={fields} events={events} vmin={vmin} vmax={vmax} />
-          <OutageCard o={planned.data} error={planned.error} now={now} />
+          {planned.data?.show && <OutageCard o={planned.data} error={planned.error} now={now} />}
           <ScheduleCard s={sched.data} error={sched.error} />
           {fields ? <TodayRow fields={fields} /> : <Card title="Today"><Skeleton h={96} /></Card>}
           <CostCard c={cost} />
