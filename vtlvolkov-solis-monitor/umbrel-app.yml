@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.8.0"
+version: "0.9.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,10 +36,11 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  a smaller database for good, and you choose how much detail to keep
+  planned outages for your address, and whether the battery will last
 
-  - 10-second readings are now kept for 90 days by default; older ones are deleted once a day. The 1-minute averages, the outage history and the settings log are kept for good, so charts, daily energy, cost history and exports at 1 minute or coarser still cover everything. A year takes about 50 MB instead of 1–2 GB. Only Grid quality and the 10 s export need the 10-second readings, so they reach back as far as those are kept
-  - Settings → System → Stored history: change how many days of 10-second readings to keep, or keep everything. Lowering it asks first and names the date before which readings will go
-  - Fix: filling in the 1-minute averages for older history could fail on some installs ("cannot query an empty range") or leave one minute's average computed from part of its readings
+  - Settings → General → Outage schedule: find your outage group from your address (Yasno: Kyiv, and Dnipro DnEM / CEK), or type it. Only the group is kept
+  - Overview → Planned outages: the next outage and how long it lasts, whether the battery will carry the house through it (at your usual load for those hours), and today and tomorrow at a glance
+  - Telegram: 30 minutes before a planned outage, when the battery will not last through the next one, and when tomorrow's schedule is published or a schedule changes (each can be turned off)
+  - While it is on, the server asks Yasno for your group's schedule every 15 minutes; nothing else is sent
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
