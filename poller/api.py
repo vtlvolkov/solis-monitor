@@ -72,6 +72,7 @@ def make_handler(ctl: Controller):
                       "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity, "/retention": ctl.retention,
                       "/inverter": ctl.inverter_address,
                       "/outages": ctl.outage_schedule, "/outages/config": ctl.outage_config,
+                      "/outages/groups": lambda: ctl.outage_groups(q.get("source")),
                       "/outages/streets": lambda: ctl.outage_streets(q.get("source"), q.get("q")),
                       "/outages/houses": lambda: ctl.outage_houses(q.get("source"), q.get("street"), q.get("q")),
                       "/outages/group": lambda: ctl.outage_group(q.get("source"), q.get("street"), q.get("house"))}

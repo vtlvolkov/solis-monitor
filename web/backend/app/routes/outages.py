@@ -46,6 +46,12 @@ def build(ctx: Context) -> APIRouter:
 
     # The address lookup goes through the server (and the poller), so the browser never talks to Yasno and the
     # address is never stored: it is used for these three questions only.
+    @r.get("/api/settings/outage-schedule/groups")
+    async def api_outage_groups(source: str = Query(...)):
+        """The groups of a community-data source (DTEK regions), to pick from: they have no address lookup."""
+        status, body = await poller(lambda: control.outage_lookup("groups", source=source))
+        return JSONResponse(body, status_code=status)
+
     @r.get("/api/settings/outage-schedule/streets")
     async def api_outage_streets(source: str = Query(...), q: str = Query(...)):
         status, body = await poller(lambda: control.outage_lookup("streets", source=source, q=q))

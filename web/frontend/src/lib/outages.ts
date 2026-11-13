@@ -20,7 +20,7 @@ export interface OutageAlerts { before: boolean; short: boolean; changes: boolea
 export interface OutageConfig {
   source: string | null; group: string | null; alerts: OutageAlerts; error: string | null; fetched_at: string | null;
   overview: boolean;            // show the Planned outages card on the Overview
-  sources: { key: string; label: string; region: string; provider: string }[];
+  sources: { key: string; label: string; kind: 'yasno' | 'mirror'; region: string; provider: string; find: string | null }[];
   web: { can_change: boolean; reason: string | null };
 }
 
@@ -30,6 +30,8 @@ export interface OutagePayload {
   configured: boolean;
   show: boolean;                // the Overview shows the card (a setting on the Outage schedule card)
   error: string | null;         // the last fetch's problem, if it failed
+  warning: string | null;       // the source answers but its data may be old (the community mirror)
+  kind: 'yasno' | 'mirror' | null;
   source: string | null; region: string | null; provider: string | null; group: string | null;
   updated_on: string | null;    // when the operator last changed the schedule
   fetched_at: string | null;    // when the server last got it
@@ -43,6 +45,9 @@ export const SOURCES: { key: string; label: string; region: string; provider: st
   { key: 'yasno-kyiv', label: tx('Yasno: Kyiv'), region: 'Київ', provider: 'ДТЕК Київські електромережі' },
   { key: 'yasno-dnipro-dnem', label: tx('Yasno: Dnipro (DnEM)'), region: 'Дніпро', provider: 'ДнЕМ' },
   { key: 'yasno-dnipro-cek', label: tx('Yasno: Dnipro (CEK)'), region: 'Дніпро', provider: 'ЦЕК' },
+  { key: 'dtek-kyiv-region', label: tx('DTEK: Kyiv Oblast'), region: 'Київська обл.', provider: 'ДТЕК КРЕМ' },
+  { key: 'dtek-dnipro', label: tx('DTEK: Dnipro and Oblast'), region: 'Дніпро та обл.', provider: 'ДТЕК ДнЕМ' },
+  { key: 'dtek-odesa', label: tx('DTEK: Odesa and Oblast'), region: 'Одеса та обл.', provider: 'ДТЕК ОЕМ' },
 ];
 
 export const hhmm = (min: number): string => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;

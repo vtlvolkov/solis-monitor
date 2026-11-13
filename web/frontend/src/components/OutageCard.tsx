@@ -7,6 +7,9 @@ import { Card, Skeleton } from './common';
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 const dur = (s: number) => formatHours(s / 3600);
+/** A time today, or a short date and time otherwise (DTEK often publishes the evening before). */
+const stamp = (iso: string) => (new Date(iso).toDateString() === new Date().toDateString() ? time(iso)
+  : new Date(iso).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
 
 /** One day as a 24-hour bar: outages in red (possible ones striped), the current time as a line. */
 function DayBar({ label, day, nowMin }: { label: string; day: ScheduleDay; nowMin: number | null }) {
@@ -25,6 +28,33 @@ function DayBar({ label, day, nowMin }: { label: string; day: ScheduleDay; nowMi
       </div>
       {slots.length > 0 && <div class="outage-times">{slots.map(slotText).join(' · ')}</div>}
     </div>
+  );
+}
+
+/** The TV page: one line for the next outage and the verdict, today and tomorrow side by side (a 1080-pixel stage). */
+export function OutageStrip({ o, now }: { o: OutagePayload; now: number }) {
+  const d = new Date(now);
+  const nowMin = d.getHours() * 60 + d.getMinutes();
+  const n = o.next;
+  const v = o.battery && n ? verdictText(o.battery, dur) : null;
+  return (
+    <Card title="Planned outages" aside={<span class="muted outage-group">{t('Group {g}', { g: o.group ?? '--' })}</span>} class="outage-card outage-strip">
+      <div class="outage-strip-head">
+        <div class={`now-row ${n?.ongoing ? 'bad' : n ? 'warn' : 'ok'}`} data-testid="tv-outage-next">
+          <span class="now-dot" />
+          <div class="now-title">
+            {n?.ongoing ? t('Planned outage now, until {end}', { end: time(n.end) })
+              : n ? `${t('Next: {start}–{end} ({d})', { start: time(n.start), end: time(n.end), d: dur(n.duration_s) })} · ${t('in {d}', { d: dur(n.in_s) })}`
+                : t('No outages planned today or tomorrow')}
+          </div>
+        </div>
+        {v && <div class={`update-result tone-${v.tone} outage-verdict`} data-testid="tv-outage-verdict">{v.text}</div>}
+      </div>
+      <div class="outage-strip-days">
+        {o.days[0] && <DayBar label={t('Today')} day={o.days[0]} nowMin={nowMin} />}
+        {o.days[1] && <DayBar label={t('Tomorrow')} day={o.days[1]} nowMin={null} />}
+      </div>
+    </Card>
   );
 }
 
@@ -61,9 +91,11 @@ export function OutageCard({ o, error, now }: { o: OutagePayload | null; error: 
       {o.days[0] && <DayBar label={t('Today')} day={o.days[0]} nowMin={nowMin} />}
       {o.days[1] && <DayBar label={t('Tomorrow')} day={o.days[1]} nowMin={null} />}
       <div class="setting-hint outage-foot">
+        {o.warning && <div class="outage-warning" data-testid="outage-warning">{t(o.warning)}</div>}
         {!o.fetched_at ? (o.error ? t(o.error) : t('Fetching the schedule…'))
           : o.stale ? t('Could not reach {source}; showing the schedule from {time}.', { source: o.source ?? 'Yasno', time: time(o.fetched_at) })
-          : t('{source} · changed by the operator {time}', { source: o.source ?? '', time: o.updated_on ? time(o.updated_on) : '--' })}
+          : t(o.kind === 'mirror' ? '{source} · community data · changed by DTEK {time}' : '{source} · changed by the operator {time}',
+              { source: o.source ? t(o.source) : '', time: o.updated_on ? stamp(o.updated_on) : '--' })}
       </div>
     </Card>
   );

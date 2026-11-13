@@ -265,7 +265,8 @@ class Controller:
         w = self._watcher()
         return {"source": w.store.source, "group": w.store.group, "alerts": w.store.alerts, "overview": w.store.show_card, "error": w.last_error,
                 "fetched_at": (w.store.schedule or {}).get("fetched_at"),
-                "sources": [{"key": k, "label": v["label"], "region": v["region"], "provider": v["provider"]} for k, v in outages.SOURCES.items()]}
+                "sources": [{"key": k, "label": v["label"], "kind": v["kind"], "region": v["region"], "provider": v["provider"], "find": v.get("find")}
+                            for k, v in outages.SOURCES.items()]}
 
     def set_outage_config(self, source, group, alerts, overview=None) -> dict:
         """Source and group (the address is never kept), and which Telegram messages to send. Nothing is written to the
@@ -290,8 +291,8 @@ class Controller:
             raise ControlError(502, str(exc)) from exc
 
     @staticmethod
-    def _source(source) -> str:
-        if source not in outages.SOURCES:
+    def _source(source, kind=None) -> str:
+        if source not in outages.SOURCES or (kind and outages.SOURCES[source]["kind"] != kind):
             raise ControlError(400, "Unknown source.")
         return source
 
@@ -312,14 +313,21 @@ class Controller:
             raise ControlError(400, f"{name} must be a number.")
         return n
 
+    def outage_groups(self, source) -> list:
+        """The groups a community-data source has (the address lookup is Yasno's only)."""
+        source = self._source(source)
+        if outages.SOURCES[source]["kind"] != "mirror":
+            raise ControlError(400, "This source finds the group by address.")
+        return self._lookup(self._watcher().mirror.groups, source)
+
     def outage_streets(self, source, q) -> list:
-        return self._lookup(self._watcher().yasno.streets, self._source(source), self._query(q))
+        return self._lookup(self._watcher().yasno.streets, self._source(source, "yasno"), self._query(q))
 
     def outage_houses(self, source, street, q) -> list:
-        return self._lookup(self._watcher().yasno.houses, self._source(source), self._id(street, "street"), self._query(q))
+        return self._lookup(self._watcher().yasno.houses, self._source(source, "yasno"), self._id(street, "street"), self._query(q))
 
     def outage_group(self, source, street, house) -> dict:
-        g = self._lookup(self._watcher().yasno.group, self._source(source), self._id(street, "street"), self._id(house, "house"))
+        g = self._lookup(self._watcher().yasno.group, self._source(source, "yasno"), self._id(street, "street"), self._id(house, "house"))
         if g is None:
             raise ControlError(404, "Yasno does not know a group for this address.")
         return {"group": g}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'preact/hooks';
 import { BatteryCard, Card, ErrorBanner, LangSwitch, Skeleton, StatusPill, TodayRow } from '../components/common';
 import { GaugeBars } from '../components/GaugeBars';
+import { OutageStrip } from '../components/OutageCard';
+import type { OutagePayload } from '../lib/outages';
 import { PowerFlow } from '../components/PowerFlow';
 import { Runtime, useAvgLoad, useFullCharge } from '../components/Runtime';
 import { TimeChart } from '../charts/TimeChart';
@@ -54,6 +56,7 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
   const events = usePoll<EventsPayload>('/api/events?days=7', 60_000).data;
   const avgLoad = useAvgLoad();
   const sched = usePoll<SettingsPayload>('/api/schedule', 120_000);   // the current limits, for the battery gauges
+  const planned = usePoll<OutagePayload>('/api/outage-schedule', 300_000).data;
   const hist = useFetch<HistoryPayload>(`/api/history?fields=${FIELDS}&range=${range}&every=auto&agg=mean`, REFRESH_MS[range]);
   const h = hist.data;
   const fullIn = useFullCharge(fields, info);
@@ -105,7 +108,8 @@ export function Tv({ live, now }: { live: LiveState; now: number }) {
         )}
         <div class="tv-grid">
           <div class="tv-col">{diagram}{battery}</div>
-          <div class="tv-col">{bars}{power_}{today}</div>
+          {/* the planned outages (when set up and not hidden on Settings) take room from the chart, which fills what is left */}
+          <div class="tv-col">{bars}{planned?.show && planned.configured && <OutageStrip o={planned} now={now} />}{power_}{today}</div>
         </div>
       </div>
     </div>

@@ -58,7 +58,7 @@ class ControlClient:
 
     def outage_lookup(self, kind: str, **params) -> tuple[int, dict]:
         """streets / houses / group at Yasno, through the poller (it fetches; the browser never talks to Yasno)."""
-        assert kind in ("streets", "houses", "group")
+        assert kind in ("streets", "houses", "group", "groups")
         return self._call("GET", f"/outages/{kind}?{urllib.parse.urlencode(params)}", timeout=25)
 
     def retention(self) -> tuple[int, dict]:

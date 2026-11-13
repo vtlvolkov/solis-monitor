@@ -185,3 +185,58 @@ def test_the_overview_card_can_be_hidden_with_or_without_a_source(tmp_path):
     assert w.payload()["show"] is True
     st.set_config("yasno-kyiv", "3.1", {}, overview=False)
     assert w.payload()["show"] is False
+
+
+# ---------------------------------------------------------------- the community mirror (DTEK regions)
+MIRROR = {"regionId": "kyiv-region", "lastUpdated": "2026-11-13T12:51:11.641Z", "lastUpdateStatus": {"status": "parsed", "ok": True},
+          "fact": {"today": 1794520800, "update": "12.11.2026 20:47",
+                   "data": {"1794520800": {"GPV3.1": {**{str(h): "yes" for h in range(1, 25)}, "2": "no", "3": "no", "4": "no", "5": "first",
+                                                      "11": "second", "12": "no", "13": "no", "14": "no", "15": "no", "16": "maybe", "22": "mfirst"},
+                                           "GPV1.2": {str(h): "yes" for h in range(1, 25)}, "GPV1.1": {str(h): "yes" for h in range(1, 25)}}}},
+          "preset": {"sch_names": {"GPV3.1": "Черга 3.1", "GPV1.1": "Черга 1.1", "GPV1.2": "Черга 1.2"}}}
+
+
+class FakeMirror:
+    def __init__(self, data=MIRROR): self.data = data
+    def fetch(self, source, max_age_s=0):
+        if isinstance(self.data, Exception):
+            raise self.data
+        return json.loads(json.dumps(self.data))
+    def groups(self, source): return outages.Mirror.groups(self, source)
+
+
+def test_mirror_hours_become_slots_with_half_hours_and_possible_ones():
+    days, updated, warning = outages.parse_mirror(MIRROR, "3.1", "Europe/Kyiv", NOW)
+    assert days[0]["date"].startswith("2026-11-13T00:00:00") and days[0]["status"] == "ScheduleApplies"
+    assert days[0]["slots"] == [{"start": 60, "end": 270, "type": "Definite"},      # hours 2-4 and the first half of 5: 01:00-04:30
+                                {"start": 630, "end": 900, "type": "Definite"},     # the second half of 11, then 12-15: 10:30-15:00
+                                {"start": 900, "end": 960, "type": "Possible"},     # 16 "maybe": 15:00-16:00
+                                {"start": 1260, "end": 1290, "type": "Possible"}]   # 22 "mfirst": 21:00-21:30
+    assert days[1]["status"] == "WaitingForSchedule" and days[1]["slots"] == []
+    assert updated == "2026-11-12T20:47:00+02:00" and warning is None
+    with pytest.raises(outages.OutageError):
+        outages.parse_mirror(MIRROR, "9.9", "Europe/Kyiv", NOW)
+
+
+def test_mirror_staleness_is_said_but_the_schedule_still_shows():
+    old = {**MIRROR, "lastUpdated": "2026-11-13T05:00:00Z"}
+    assert "since 13.11 07:00" in outages.parse_mirror(old, "3.1", "Europe/Kyiv", NOW)[2]
+    failing = {**MIRROR, "lastUpdateStatus": {"ok": False}}
+    assert outages.parse_mirror(failing, "3.1", "Europe/Kyiv", NOW)[2]
+
+
+def test_mirror_groups_in_order_with_names():
+    assert FakeMirror().groups("dtek-kyiv-region") == [{"value": "1.1", "label": "Черга 1.1"}, {"value": "1.2", "label": "Черга 1.2"},
+                                                        {"value": "3.1", "label": "Черга 3.1"}]
+
+
+def test_the_watcher_reads_a_dtek_region_from_the_mirror(tmp_path):
+    st = OutageStore(str(tmp_path))
+    st.set_config("dtek-kyiv-region", "3.1", {})
+    w = OutageWatcher(st, FakeYasno(), "Europe/Kyiv", clock=lambda: NOW.replace(hour=9).timestamp(), mirror=FakeMirror(),
+                      state=lambda: (80, 0, 500), battery=lambda: (10, 20, 100), profile=lambda: {h: 500 for h in range(24)})
+    assert w.refresh() and w.yasno.calls == []                                # never asks Yasno for a DTEK region
+    p = w.payload()
+    assert p["source"] == "DTEK: Kyiv Oblast" and p["kind"] == "mirror" and p["region"] == "Київська обл."
+    assert p["next"]["start"].startswith("2026-11-13T10:30") and p["next"]["end"].startswith("2026-11-13T15:00")   # possible ones never count as next
+    assert p["updated_on"] == "2026-11-12T20:47:00+02:00" and p["warning"] is None

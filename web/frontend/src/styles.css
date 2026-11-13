@@ -310,6 +310,20 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .outage-manual-toggle { align-self: end; padding-bottom: 10px; }
 .outage-source .tariff-now { margin: 10px 0 4px; }
 .outage-show { margin: 4px 0 6px; }
+.outage-find { margin-top: 10px; display: grid; gap: 4px; }
+.outage-find a { color: var(--c-warn); }
+.outage-warning { color: var(--c-warn); margin-bottom: 4px; }
+/* the TV page's compact version */
+.outage-strip-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.outage-strip-head .now-row { padding: 0; border: 0; align-items: center; }
+.outage-strip-head .now-dot { margin-top: 0; }
+.outage-strip-head .outage-verdict { margin: 0; padding: 6px 14px; white-space: nowrap; }
+.outage-strip-days { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.tv-stage .outage-strip { padding: 12px 18px; }
+.tv-stage .outage-strip .card-head { margin-bottom: 8px; }
+.tv-stage .outage-strip .outage-day { margin-top: 8px; }
+.tv-stage .outage-strip .outage-bar { height: 18px; }
+.tv-stage .outage-strip .outage-times { font-size: 0.8rem; }
 @media (max-width: 640px) { .outage-form { grid-template-columns: 1fr; } .outage-manual-toggle { padding-bottom: 0; } }
 .tariff-form label.retention-all { display: flex; align-items: center; gap: 10px; align-self: center; color: var(--c-text); font-size: 0.9rem; }
 .tariff-form label.retention-all input { width: 18px; height: 18px; min-height: 0; flex: none; accent-color: var(--c-inverter); }

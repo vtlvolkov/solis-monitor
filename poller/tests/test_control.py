@@ -435,12 +435,14 @@ def test_outage_schedule_over_the_internal_api(tmp_path):
     try:
         assert call(base + "/outages")[1]["configured"] is False
         cfg = call(base + "/outages/config")[1]
-        assert cfg["source"] is None and [s["key"] for s in cfg["sources"]] == ["yasno-kyiv", "yasno-dnipro-dnem", "yasno-dnipro-cek"]
+        assert cfg["source"] is None and [s["key"] for s in cfg["sources"]] == ["yasno-kyiv", "yasno-dnipro-dnem", "yasno-dnipro-cek", "dtek-kyiv-region", "dtek-dnipro", "dtek-odesa"]
         assert call(base + "/outages/streets?source=yasno-kyiv&q=%D0%A5%D1%80%D0%B5%D1%89")[1] == [{"id": 911, "value": "вул. Хрещатик"}]
         assert call(base + "/outages/houses?source=yasno-kyiv&street=911&q=22")[1] == [{"id": 39986, "value": "22"}]
         assert call(base + "/outages/group?source=yasno-kyiv&street=911&house=39986")[1] == {"group": "20.1"}
         assert call(base + "/outages/group?source=yasno-kyiv&street=911&house=1")[0] == 404
-        assert call(base + "/outages/streets?source=other&q=x")[0] == 400 and call(base + "/outages/houses?source=yasno-kyiv&street=abc&q=1")[0] == 400
+        assert call(base + "/outages/streets?source=other&q=x")[0] == 400
+        assert call(base + "/outages/streets?source=dtek-kyiv-region&q=x")[0] == 400      # no address lookup for community data
+        assert call(base + "/outages/groups?source=yasno-kyiv")[0] == 400 and call(base + "/outages/houses?source=yasno-kyiv&street=abc&q=1")[0] == 400
         status, body = call(base + "/outages/config", "POST", {"source": "yasno-kyiv", "group": "20.1", "alerts": {"before": True, "short": False, "changes": True}})
         assert status == 200 and body["group"] == "20.1" and body["alerts"]["short"] is False
         assert call(base + "/outages/config", "POST", {"source": "yasno-kyiv", "group": "x", "alerts": {}})[0] == 400

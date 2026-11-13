@@ -40,6 +40,7 @@ export function OutageSourceCard() {
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const houseInput = useRef<HTMLInputElement>(null);
+  const [groups, setGroups] = useState<{ value: string; label: string }[] | null>(null);
   const [showing, setShowing] = useState<'saving' | 'saved' | null>(null);
 
   const load = useCallback(async () => {
@@ -57,6 +58,14 @@ export function OutageSourceCard() {
   const streets = useSuggest(!manual && !pickedStreet && street.trim().length >= 3 ? `/api/settings/outage-schedule/streets?source=${source}&q=${q(street)}` : null);
   const houses = useSuggest(!manual && pickedStreet && !pickedHouse && house.trim() ? `/api/settings/outage-schedule/houses?source=${source}&street=${pickedStreet.id}&q=${q(house)}` : null);
 
+  const kind = cfg?.sources.find((s) => s.key === source)?.kind ?? 'yasno';
+  useEffect(() => {                                      // a DTEK region: its groups, to pick from
+    if (kind !== 'mirror') { setGroups(null); return; }
+    setGroups(null); setLookupError(null);
+    getJson<{ value: string; label: string }[]>(`/api/settings/outage-schedule/groups?source=${source}`)
+      .then((g) => { setGroups(g); if (cfg && source === cfg.source && cfg.group) setGroup(cfg.group); })     // the saved one shows as picked
+      .catch((e) => setLookupError(t(e instanceof ApiError ? e.message : 'Request failed')));
+  }, [source, kind, cfg?.source, cfg?.group]);
   useEffect(() => {
     if (!pickedStreet || !pickedHouse) return;
     setLookupError(null);
@@ -72,7 +81,8 @@ export function OutageSourceCard() {
   const save = async (off = false) => {
     setBusy(true); setError(null); setSaved(null);
     try {
-      const c = await postJson<OutageConfig>('/api/settings/outage-schedule', off ? { source: null, group: null, alerts } : { source, group, alerts });
+      const c = await postJson<OutageConfig>('/api/settings/outage-schedule', off ? { source: null, group: null, alerts }
+        : newGroup ? { source, group, alerts } : { source: cfg.source, group: cfg.group, alerts });
       setCfg({ ...cfg, ...c }); resetAddress(); setManual(false);
       setSaved(off ? t('The outage schedule is off.') : t('Saved. The schedule of group {g} shows on the Overview in a moment.', { g: c.group ?? '' }));
     } catch (e) {
@@ -90,12 +100,13 @@ export function OutageSourceCard() {
     }
   };
   const alertsChanged = cfg.source && JSON.stringify(alerts) !== JSON.stringify(cfg.alerts);
-  const canSave = editable && ((!!group && isGroup(group)) || (!!cfg.source && !!alertsChanged && !group));
+  const newGroup = !!group && isGroup(group) && (group !== cfg.group || source !== cfg.source);
+  const canSave = editable && (newGroup || (!!cfg.source && !!alertsChanged));
 
   return (
     <Card title="Outage schedule" class="outage-source">
       <div class="setting-hint">
-        {t('Planned outages for your address, on the Overview and in Telegram. The schedule comes from Yasno, DTEK’s own service for Kyiv and Dnipro.')}
+        {t('Planned outages for your address, on the Overview and in Telegram. Kyiv and Dnipro: from Yasno, DTEK’s own service. Kyiv Oblast, Dnipro Oblast and Odesa: from community data that copies DTEK’s regional sites.')}
       </div>
       {cfg.source && cfg.group ? (
         <div class="tariff-now" data-testid="outage-current">
@@ -113,16 +124,30 @@ export function OutageSourceCard() {
 
       <form class="tariff-form outage-form" onSubmit={(e) => { e.preventDefault(); if (canSave) save(); }}>
         <label><span>{t('Source')}</span>
-          <select value={source} disabled={!editable} onChange={(e) => { setSource((e.target as HTMLSelectElement).value); resetAddress(); }} data-testid="outage-source">
-            {cfg.sources.map((s) => <option key={s.key} value={s.key}>{label(s.key)}</option>)}
+          <select value={source} disabled={!editable} onChange={(e) => { setSource((e.target as HTMLSelectElement).value); resetAddress(); setManual(false); }} data-testid="outage-source">
+            <optgroup label={t('Yasno: finds the group by address')}>
+              {cfg.sources.filter((s) => s.kind === 'yasno').map((s) => <option key={s.key} value={s.key}>{label(s.key)}</option>)}
+            </optgroup>
+            <optgroup label={t('DTEK regions: community data, pick the group')}>
+              {cfg.sources.filter((s) => s.kind === 'mirror').map((s) => <option key={s.key} value={s.key}>{label(s.key)}</option>)}
+            </optgroup>
           </select>
         </label>
-        <span class="outage-manual-toggle">
-          <button type="button" class="link" onClick={() => { setManual(!manual); resetAddress(); }} data-testid="outage-manual-toggle">
-            {manual ? t('Find the group by address') : t('I know my group')}
-          </button>
-        </span>
-        {manual ? (
+        {kind === 'yasno' ? (
+          <span class="outage-manual-toggle">
+            <button type="button" class="link" onClick={() => { setManual(!manual); resetAddress(); }} data-testid="outage-manual-toggle">
+              {manual ? t('Find the group by address') : t('I know my group')}
+            </button>
+          </span>
+        ) : <span />}
+        {kind === 'mirror' ? (
+          <label><span>{t('Group')}</span>
+            <select value={group ?? ''} disabled={!editable || !groups} onChange={(e) => setGroup((e.target as HTMLSelectElement).value || null)} data-testid="outage-group-select">
+              <option value="">{groups ? t('Choose…') : t('Loading…')}</option>
+              {(groups ?? []).map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </label>
+        ) : manual ? (
           <label><span>{t('Group')} <span class="muted">{t('(for example 3.1)')}</span></span>
             <input type="text" inputMode="decimal" value={group ?? ''} disabled={!editable} data-testid="outage-group-input"
                    onInput={(e) => setGroup((e.target as HTMLInputElement).value.trim() || null)} />
@@ -151,7 +176,17 @@ export function OutageSourceCard() {
           </>
         )}
       </form>
-      {group && !manual && (
+      {kind === 'mirror' && (() => {
+        const s = cfg.sources.find((x) => x.key === source);
+        return (
+          <div class="setting-hint outage-find" data-testid="outage-find">
+            {t('This region has no address lookup here. Find your group by address on DTEK’s own site, then pick it above:')}{' '}
+            {s?.find && <a href={s.find} target="_blank" rel="noreferrer noopener" data-testid="outage-find-link">{t('DTEK outage schedule')} ↗</a>}
+            <div>{t('The schedule comes from outage-data-ua, a community project on GitHub that copies it from DTEK every few minutes; it can lag a little.')}</div>
+          </div>
+        );
+      })()}
+      {group && !manual && kind === 'yasno' && (
         <div class="update-result tone-ok outage-found" data-testid="outage-group">
           {t('Your group: {g}', { g: group })} <span class="muted">· {t('the address itself is not kept, only the group')}</span>
         </div>
@@ -176,7 +211,9 @@ export function OutageSourceCard() {
       </div>
       {error && <div class="field-error" role="alert">{error}</div>}
       {saved && <div class="tariff-saved" role="status" data-testid="outage-saved">{saved}</div>}
-      <div class="setting-hint">{t('While this is on, the server asks app.yasno.ua for your group’s schedule every 15 minutes. Nothing else is sent.')}</div>
+      <div class="setting-hint">{kind === 'mirror'
+        ? t('While this is on, the server downloads the region’s schedule from raw.githubusercontent.com every 15 minutes. Nothing is sent.')
+        : t('While this is on, the server asks app.yasno.ua for your group’s schedule every 15 minutes. Nothing else is sent.')}</div>
     </Card>
   );
 }

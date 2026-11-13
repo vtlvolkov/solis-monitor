@@ -28,7 +28,8 @@ class Control:
 
     def outage_lookup(self, kind, **params):
         self.calls.append((kind, params))
-        return 200, {"streets": [{"id": 911, "value": "вул. Хрещатик"}], "houses": [{"id": 39986, "value": "22"}], "group": {"group": "20.1"}}[kind]
+        return 200, {"streets": [{"id": 911, "value": "вул. Хрещатик"}], "houses": [{"id": 39986, "value": "22"}], "group": {"group": "20.1"},
+                     "groups": [{"value": "3.1", "label": "Черга 3.1"}]}[kind]
 
 
 def client(control, auth="me:pw", settings_only=True):
@@ -54,6 +55,8 @@ def test_settings_and_the_address_lookup_go_through_the_poller_behind_the_login(
     assert c.get("/api/settings/outage-schedule/houses?source=yasno-kyiv&street=911&q=22", auth=AUTH).json() == [{"id": 39986, "value": "22"}]
     assert c.get("/api/settings/outage-schedule/group?source=yasno-kyiv&street=911&house=39986", auth=AUTH).json() == {"group": "20.1"}
     assert ("houses", {"source": "yasno-kyiv", "street": 911, "q": "22"}) in ctl.calls
+    assert c.get("/api/settings/outage-schedule/groups?source=dtek-kyiv-region", auth=AUTH).json() == [{"value": "3.1", "label": "Черга 3.1"}]
+    assert c.get("/api/settings/outage-schedule/groups?source=dtek-kyiv-region").status_code == 401
     assert c.get("/api/settings/outage-schedule/houses?source=yasno-kyiv&street=abc&q=22", auth=AUTH).status_code == 422
     r = c.post("/api/settings/outage-schedule", json={"source": "yasno-kyiv", "group": "20.1", "alerts": {"before": True}}, headers=JSON, auth=AUTH)
     assert r.status_code == 200 and ctl.calls[-1] == ("set", "yasno-kyiv", "20.1", {"before": True}, None)

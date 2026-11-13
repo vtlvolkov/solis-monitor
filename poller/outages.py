@@ -13,7 +13,18 @@ integrations), checked live on 2026-11-13:
     GET {SHUTDOWNS}/addresses/v2/group?regionId=&dsoId=&streetId=&houseId= -> {"group": 20, "subgroup": 1}
 
 Slots are minutes from local midnight; "Definite" is an outage, "NotPlanned" is power, anything else with a
-duration is shown as a possible outage. The poller owns this because it has what the battery verdict needs (the
+duration is shown as a possible outage.
+
+DTEK's regional sites (Kyiv Oblast, Dnipro, Odesa) sit behind an anti-bot wall a server cannot pass without a
+headless browser, so those come from the community mirror github.com/Baskerville42/outage-data-ua, which runs one
+and publishes each region as JSON every few minutes (checked live 2026-11-13):
+
+    {"fact": {"today": <unix time of local midnight>, "update": "13.11.2026 14:23",
+              "data": {"<unix midnight>": {"GPV3.1": {"1": "no", "2": "first", ..., "24": "yes"}, ...}}},
+     "preset": {"sch_names": {"GPV3.1": "Черга 3.1", ...}, ...}, "lastUpdated": "...Z", "lastUpdateStatus": {"ok": true, ...}}
+
+Hour "1" is 00:00-01:00; "no" is an outage, "first"/"second" the first/second half hour, "maybe"/"mfirst"/"msecond"
+possible ones. There is no address lookup for these: the page links to DTEK's own address search instead. The poller owns this because it has what the battery verdict needs (the
 live SOC, the capacity and the backup floor, the load history) and sends the Telegram messages. Only the group is
 kept, never the address; nothing is fetched while the source is off.
 """
@@ -32,12 +43,22 @@ from zoneinfo import ZoneInfo
 log = logging.getLogger("solis-poller")
 
 SHUTDOWNS = "https://app.yasno.ua/api/blackout-service/public/shutdowns"
+MIRROR = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data"
 SOURCES = {
-    "yasno-kyiv": {"label": "Yasno: Kyiv", "region_id": 25, "dso_id": 902, "region": "Київ", "provider": "ДТЕК Київські електромережі"},
-    "yasno-dnipro-dnem": {"label": "Yasno: Dnipro (DnEM)", "region_id": 3, "dso_id": 301, "region": "Дніпро", "provider": "ДнЕМ"},
-    "yasno-dnipro-cek": {"label": "Yasno: Dnipro (CEK)", "region_id": 3, "dso_id": 303, "region": "Дніпро", "provider": "ЦЕК"},
+    "yasno-kyiv": {"kind": "yasno", "label": "Yasno: Kyiv", "region_id": 25, "dso_id": 902, "region": "Київ", "provider": "ДТЕК Київські електромережі"},
+    "yasno-dnipro-dnem": {"kind": "yasno", "label": "Yasno: Dnipro (DnEM)", "region_id": 3, "dso_id": 301, "region": "Дніпро", "provider": "ДнЕМ"},
+    "yasno-dnipro-cek": {"kind": "yasno", "label": "Yasno: Dnipro (CEK)", "region_id": 3, "dso_id": 303, "region": "Дніпро", "provider": "ЦЕК"},
+    "dtek-kyiv-region": {"kind": "mirror", "label": "DTEK: Kyiv Oblast", "file": "kyiv-region", "region": "Київська обл.",
+                         "provider": "ДТЕК Київські регіональні електромережі", "find": "https://www.dtek-krem.com.ua/ua/shutdowns"},
+    "dtek-dnipro": {"kind": "mirror", "label": "DTEK: Dnipro and Oblast", "file": "dnipro", "region": "Дніпро та обл.",
+                    "provider": "ДТЕК Дніпровські електромережі", "find": "https://www.dtek-dnem.com.ua/ua/shutdowns"},
+    "dtek-odesa": {"kind": "mirror", "label": "DTEK: Odesa and Oblast", "file": "odesa", "region": "Одеса та обл.",
+                   "provider": "ДТЕК Одеські електромережі", "find": "https://www.dtek-oem.com.ua/ua/shutdowns"},
 }
-GROUP = re.compile(r"\d{1,3}\.\d{1,2}")
+GROUP = re.compile(r"\d{1,4}\.\d{1,2}")
+MIRROR_STALE_S = 3 * 3600          # the mirror scrapes every few minutes: hours without a good scrape is worth saying
+HALF = {"no": ((0, 60), "Definite"), "first": ((0, 30), "Definite"), "second": ((30, 60), "Definite"),
+        "maybe": ((0, 60), "Possible"), "mfirst": ((0, 30), "Possible"), "msecond": ((30, 60), "Possible")}
 FETCH_EVERY_S = 15 * 60
 ALERT_BEFORE_S = 30 * 60
 DEFAULT_ALERTS = {"before": True, "short": True, "changes": True}
@@ -95,6 +116,98 @@ class Yasno:
         if isinstance(answer, dict) and type(answer.get("group")) is int and type(answer.get("subgroup")) is int:
             return f"{answer['group']}.{answer['subgroup']}"
         return None
+
+
+class Mirror:
+    """The community mirror of DTEK's regional schedules (see the module docstring)."""
+
+    def __init__(self, base: str = MIRROR, opener=None, clock=time.time):
+        self.base, self.opener, self.clock = base, opener or urllib.request.urlopen, clock
+        self._cache: dict[str, tuple[float, dict]] = {}
+
+    def fetch(self, source: str, max_age_s: float = 0) -> dict:
+        at, data = self._cache.get(source, (-1e9, None))
+        if data is not None and self.clock() - at < max_age_s:
+            return data
+        url = f"{self.base}/{SOURCES[source]['file']}.json"
+        req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "solis-monitor"})
+        try:
+            with self.opener(req, timeout=TIMEOUT_S) as r:
+                data = json.loads(r.read(5_000_000))
+        except urllib.error.HTTPError as exc:
+            raise OutageError(f"The community data answered HTTP {exc.code}") from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise OutageError(f"The community data is not reachable ({type(exc).__name__})") from exc
+        if not isinstance(data, dict) or not isinstance(data.get("fact"), dict):
+            raise OutageError("The community data has an unexpected shape")
+        self._cache[source] = (self.clock(), data)
+        return data
+
+    def groups(self, source: str) -> list[dict]:
+        """The groups of today's schedule, as {value: "3.1", label: "Черга 3.1"}, in their natural order."""
+        data = self.fetch(source, max_age_s=600)
+        names = (data.get("preset") or {}).get("sch_names") or {}
+        days = (data["fact"].get("data") or {}).values()
+        keys = sorted({k for d in days if isinstance(d, dict) for k in d}, key=_group_order)
+        return [{"value": k.removeprefix("GPV"), "label": str(names.get(k) or f"Черга {k.removeprefix('GPV')}")}
+                for k in keys if GROUP.fullmatch(k.removeprefix("GPV"))]
+
+
+def _group_order(key: str):
+    try:
+        a, b = key.removeprefix("GPV").split(".")
+        return int(a), int(b)
+    except ValueError:
+        return 10**9, 0
+
+
+def mirror_slots(hours: dict) -> list[dict]:
+    """{"1": "no", "2": "first", ...} -> outage slots in minutes, touching ones of the same kind merged."""
+    out = []
+    for h in range(1, 25):
+        v = hours.get(str(h))
+        if v not in HALF:
+            continue
+        (a, b), kind = HALF[v]
+        start, end = (h - 1) * 60 + a, (h - 1) * 60 + b
+        if out and out[-1]["type"] == kind and out[-1]["end"] == start:
+            out[-1]["end"] = end
+        else:
+            out.append({"start": start, "end": end, "type": kind})
+    return out
+
+
+def parse_mirror(data: dict, group: str, tz: str, now: datetime) -> tuple[list[dict], str | None, str | None]:
+    """(days, updated_on, warning): today and tomorrow of one group, DTEK's own update time, and a warning when the
+    mirror has not scraped DTEK successfully for hours."""
+    zone, fact = ZoneInfo(tz), data["fact"]
+    by_day = fact.get("data") if isinstance(fact.get("data"), dict) else {}
+    key = f"GPV{group}"
+    if not any(isinstance(d, dict) and key in d for d in by_day.values()):
+        raise OutageError(f"The community data has no group {group}")
+    today = now.astimezone(zone).date()
+    days = []
+    for offset in (0, 1):
+        date = today + timedelta(days=offset)
+        midnight = datetime(date.year, date.month, date.day, tzinfo=zone)
+        hours = next((d.get(key) for ts, d in by_day.items()
+                      if isinstance(d, dict) and str(ts).isdigit() and datetime.fromtimestamp(int(ts), zone).date() == date), None)
+        days.append({"date": midnight.isoformat(), "status": "ScheduleApplies" if isinstance(hours, dict) else "WaitingForSchedule",
+                     "slots": mirror_slots(hours) if isinstance(hours, dict) else []})
+    updated = None
+    try:
+        updated = datetime.strptime(str(fact.get("update")), "%d.%m.%Y %H:%M").replace(tzinfo=zone).isoformat()
+    except ValueError:
+        pass
+    warning = None
+    status = data.get("lastUpdateStatus") if isinstance(data.get("lastUpdateStatus"), dict) else {}
+    try:
+        scraped = datetime.fromisoformat(str(data.get("lastUpdated")).replace("Z", "+00:00"))
+    except ValueError:
+        scraped = None
+    if status.get("ok") is False or (scraped is not None and (now - scraped).total_seconds() > MIRROR_STALE_S):
+        warning = f"The community data has not been refreshed from DTEK since {scraped.astimezone(zone).strftime('%d.%m %H:%M') if scraped else 'a while'}."
+    return days, updated, warning
 
 
 def parse_group(answer: dict, group: str) -> list[dict]:
@@ -274,8 +387,10 @@ class OutageWatcher:
     device cache; `profile()` the usual load by local hour."""
 
     def __init__(self, store: OutageStore, yasno: Yasno, tz: str, send=lambda text: None, state=lambda: (None, None, None),
-                 battery=lambda: None, profile=lambda: {}, clock=time.time):
+                 battery=lambda: None, profile=lambda: {}, clock=time.time, mirror: "Mirror | None" = None):
         self.store, self.yasno, self.tz = store, yasno, tz
+        self.mirror = mirror or Mirror(clock=clock)
+        self.warning: str | None = None                        # the source works but its data may be old
         self.send, self.state, self.battery, self.profile, self.clock = send, state, battery, profile, clock
         self.last_error: str | None = None
         self._alerted: set[str] = set()                        # "before:<start>", "short:<start>" already sent
@@ -289,13 +404,17 @@ class OutageWatcher:
         if not source or not group:
             return False
         try:
-            answer = self.yasno.planned(source)
-            days = parse_group(answer, group)
+            if SOURCES[source]["kind"] == "mirror":
+                days, updated, self.warning = parse_mirror(self.mirror.fetch(source), group, self.tz, self.now())
+            else:
+                answer = self.yasno.planned(source)
+                days = parse_group(answer, group)
+                updated = answer.get(group, {}).get("updatedOn") if isinstance(answer.get(group), dict) else None
+                self.warning = None
         except OutageError as exc:
             self.last_error = str(exc)
             log.warning("outage schedule: %s", exc)
             return False
-        updated = answer.get(group, {}).get("updatedOn") if isinstance(answer.get(group), dict) else None
         old = self.store.schedule
         new = {"source": source, "group": group, "fetched_at": self.now().isoformat(), "updated_on": updated if isinstance(updated, str) else None, "days": days}
         self.last_error = None
@@ -320,8 +439,10 @@ class OutageWatcher:
     # -- what the dashboard shows
     def payload(self) -> dict:
         s = SOURCES.get(self.store.source or "", {})
-        base = {"configured": self.store.configured(), "show": self.store.show_card, "source": "Yasno" if s else None, "region": s.get("region"), "provider": s.get("provider"),
-                "group": self.store.group, "updated_on": None, "fetched_at": None, "stale": False, "error": self.last_error,
+        base = {"configured": self.store.configured(), "show": self.store.show_card,
+                "source": ("Yasno" if s.get("kind") == "yasno" else s.get("label")) if s else None, "kind": s.get("kind"),
+                "region": s.get("region"), "provider": s.get("provider"),
+                "group": self.store.group, "updated_on": None, "fetched_at": None, "stale": False, "error": self.last_error, "warning": self.warning,
                 "days": [], "next": None, "battery": None}
         sch = self.store.schedule
         if not base["configured"] or not sch or sch.get("group") != self.store.group:

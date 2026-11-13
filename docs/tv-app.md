@@ -2,7 +2,7 @@
 
 ![TV view](img/tv.png)
 
-`?view=tv` is a wall-display page on one screen with no scrolling: the power-flow diagram (big, top left) with the Battery card under it (charge bars, voltage, current, SOH and the backup-runtime estimate), and on the right the four gauges as a 2×2 block of bars (Grid, Backup load, Battery charge, Battery discharge), a tall Power flows chart and a strip with today's energy. Left/right on the remote (or arrow keys) change the chart range. It only reads data, so it works with `WEB_AUTH_SETTINGS_ONLY=true` and no password.
+`?view=tv` is a wall-display page on one screen with no scrolling: the power-flow diagram (big, top left) with the Battery card under it (charge bars, voltage, current, SOH and the backup-runtime estimate), and on the right the four gauges as a 2×2 block of bars (Grid, Backup load, Battery charge, Battery discharge), the planned outages (when a group is set on Settings → General → Outage schedule and the card is not hidden there: the next outage with the battery verdict, today and tomorrow side by side), a Power flows chart that takes the rest of the height (taller when there is no outage card) and a strip with today's energy. Left/right on the remote (or arrow keys) change the chart range. It only reads data, so it works with `WEB_AUTH_SETTINGS_ONLY=true` and no password.
 
 The Android TV app opens that page full screen (a WebView, plus a screen for the host and port).
 
