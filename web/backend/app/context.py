@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from .auth import LoginStore
 from .config import Settings
 from .control import PollerUnavailable
+from .layout import LayoutStore
 from .tariff import Tariff, TariffStore
 
 log = logging.getLogger("solis-web")
@@ -48,6 +49,8 @@ class Context:
                    night_start=s.tariff_night_start if s.tariff_night is not None else None,
                    night_end=s.tariff_night_end if s.tariff_night is not None else None) if s.tariff_day is not None else None,
             s.tariff_file)
+        # The Overview's cards and their order (Customize on the Overview; see layout.py).
+        self.layout = LayoutStore(s.layout_file)
         # Cost results, cleared when the tariff changes (routes/settings.py) so a new price shows at once.
         self.cost_cache: dict = {}
         self._retention: tuple[float, int] = (-1e9, s.raw_retention_days)

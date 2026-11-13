@@ -117,8 +117,9 @@ export function OutageSourceCard() {
       <label class="check outage-show">
         <input type="checkbox" checked={cfg.overview} disabled={!cfg.web.can_change || showing === 'saving'} data-testid="outage-show"
                onChange={(e) => toggleCard((e.target as HTMLInputElement).checked)} />
-        <span>{t('Show the Planned outages card on the Overview')}
-          {showing === 'saved' && <span class="muted"> · {cfg.overview ? t('shown') : t('hidden')}</span>}</span>
+        <span>{t('Show the Planned outages card on the TV page')}
+          {showing === 'saved' && <span class="muted"> · {cfg.overview ? t('shown') : t('hidden')}</span>}
+          <span class="setting-hint">{t('On the Overview, add or remove it with Customize.')}</span></span>
       </label>
       {!cfg.web.can_change && <div class="setting-hint">{cfg.web.reason ? t(cfg.web.reason) : ''}</div>}
 

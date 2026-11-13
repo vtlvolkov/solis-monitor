@@ -38,6 +38,7 @@ class Settings:
                                      in ("1", "true", "yes", "on"))
     site_name: str = field(default_factory=lambda: os.getenv("SITE_NAME", "").strip())
     tariff_file: str = field(default_factory=lambda: os.getenv("TARIFF_FILE", "/data/tariff.json"))   # saved tariff changes ("" = memory only)
+    layout_file: str = field(default_factory=lambda: os.getenv("LAYOUT_FILE", "/data/overview-layout.json"))   # the Overview's cards ("" = memory only)
     # Release installs (install.sh) know their version and repository; builds from source do not.
     solis_version: str = field(default_factory=lambda: os.getenv("SOLIS_VERSION", "").strip())
     solis_repo: str = field(default_factory=lambda: os.getenv("SOLIS_REPO", "").strip())

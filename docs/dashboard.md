@@ -2,7 +2,7 @@
 
 What each page shows, how the numbers are calculated and which settings in `.env` affect them. For a short tour with pictures see the [README](../README.md#a-tour).
 
-- **Overview**: live power-flow diagram (PV, Grid, Grid Load, Battery, Backup Load), battery SOC bar, today's kWh, a backup-runtime estimate, and a red banner during a grid outage.
+- **Overview**: live power-flow diagram (PV, Grid, Grid Load, Battery, Backup Load), battery SOC bar, today's kWh, a backup-runtime estimate, and a red banner during a grid outage. Its cards can be moved, removed and added: see [Customizing the Overview](#customizing-the-overview).
 - **Devices**: inverter, battery, logger and meter cards with status, like the Solis app. Tap a card for details:
   - inverter: serial number, firmware, state, fault codes, clock drift, AC/PV/grid values
   - battery: SOC/SOH, voltage, current, today's kWh, plus BMS voltage/current, battery temperature, BMS charge and discharge limits, BMS failure codes, and for Dyness batteries an estimate of the batteries in parallel (the BMS discharge limit ÷ 100 A; the inverter has no register for the count, so the estimate can read low or disappear while the BMS lowers its limit, and it never changes the saved capacity)
@@ -45,11 +45,27 @@ Ranges: `1h 3h 6h 12h 24h 2d 7d 30d`. `every=auto` keeps each series at 500 poin
 
 Code: `web/backend` (FastAPI) and `web/frontend` (Vite + Preact + uPlot). `web/Dockerfile` builds both into one image.
 
+## Customizing the Overview
+
+**Customize** in the Overview's header turns the cards into a layout you can change: drag a card by its **⠿ Move** handle (mouse or finger) within its column or to the other one, remove it with **✕**, and bring cards back or add new ones with **+ Add cards**. With the keyboard, focus the handle and use the arrow keys. **Save** keeps the layout, **Cancel** forgets every change since you pressed Customize, and **Reset to default** brings back the original page. On a phone the two columns stack, left first.
+
+The layout is kept on the server (`/data/overview-layout.json` in the `web-data` volume, `LAYOUT_FILE`), so every screen and browser shows the same page; open screens pick up a change within five minutes. Changing it needs the Settings login (`WEB_BASIC_AUTH`, the browser asks when you press Customize), but not `CONTROL_ENABLED`: nothing goes to the inverter. A layout that matches the default is saved as "default", so cards a later version adds to the default still appear. The TV page keeps its own fixed layout.
+
+Cards you can add, besides the usual ones:
+
+- **Power today**: PV and load from midnight to midnight.
+- **Self-sufficiency**: the share of today's energy that came from your PV, PV ÷ (PV + grid import), and the same for this month. Charging the battery from the grid at night counts as grid energy.
+- **Recent events**: the last five outages and alarms, with their length.
+- **Battery health**: state of health and its change over 30 days, full cycles (lifetime discharge ÷ capacity, an equivalent count), the lifetime round trip (energy out ÷ energy in, the losses of the battery and inverter), the temperature range over 30 days and the usable capacity.
+- **Load by hour**: the last 7 days as a heatmap of kWh per hour, and the busiest hour on average.
+
+A card only asks for its data while it is on the page.
+
 ## Planned outages (графік відключень)
 
 **Settings → General → Outage schedule** finds your outage group from your address: pick the source (Yasno for Kyiv, or Dnipro DnEM / CEK), start typing the street, pick it, type the house number and pick it; Yasno answers with the group (for example 20.1). For **DTEK Kyiv Oblast, Dnipro and Oblast, and Odesa and Oblast**, pick the group from the list instead: DTEK's regional sites block servers, so there is no address lookup here, but the card links to the site's own address search, which works in your browser. Their schedule comes from [outage-data-ua](https://github.com/Baskerville42/outage-data-ua), a community project on GitHub that copies DTEK's sites every few minutes (downloaded from raw.githubusercontent.com every 15 minutes; it marks half-hour outages, and the card says when the copy is more than three hours old). Only the group is saved, never the address. If you know your group, **I know my group** lets you type it instead. While this is on, the poller asks Yasno (app.yasno.ua, DTEK's own service for those cities) for the group's schedule every 15 minutes; nothing else is sent, and the last good copy is kept, so a Yasno hiccup does not empty the card.
 
-The **Planned outages** card on the Overview (hide it with **Show the Planned outages card on the Overview** on the same Settings card; it hides on every screen, the TV page too, and the schedule and Telegram messages carry on) shows the next outage and how long it lasts, whether the battery will carry the house through it, and today and tomorrow as 24-hour bars (red: outage, striped: possible outage, white line: now). The battery verdict starts from the charge expected at the start of the outage (the current charging or discharging carried on until then, up to the maximum charge SOC), takes the energy above the backup floor, and spends it minute by minute at your usual load for those hours (the average of the last two weeks), so a heavy evening counts.
+The **Planned outages** card on the Overview (remove or add it with Customize; **Show the Planned outages card on the TV page** on the same Settings card does the same for the TV page, and also decides the Overview until a layout is saved; the schedule and Telegram messages carry on either way) shows the next outage and how long it lasts, whether the battery will carry the house through it, and today and tomorrow as 24-hour bars (red: outage, striped: possible outage, white line: now). The battery verdict starts from the charge expected at the start of the outage (the current charging or discharging carried on until then, up to the maximum charge SOC), takes the energy above the backup floor, and spends it minute by minute at your usual load for those hours (the average of the last two weeks), so a heavy evening counts.
 
 In Telegram (each can be turned off on the same card): 30 minutes before a planned outage, with the battery level and the runtime; once, up to three hours ahead, when the battery will not last through the next outage; and when tomorrow's schedule is published or a schedule changes.
 

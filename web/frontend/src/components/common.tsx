@@ -26,7 +26,7 @@ export function LangSwitch({ tabIndex }: { tabIndex?: number }) {
   );
 }
 
-export function Header({ live, now, title }: { live: LiveState; now: number; title?: string }) {
+export function Header({ live, now, title, extra }: { live: LiveState; now: number; title?: string; extra?: ComponentChildren }) {
   const site = useSite();
   return (
     <header class="top">
@@ -37,6 +37,7 @@ export function Header({ live, now, title }: { live: LiveState; now: number; tit
         <span class="updated" data-testid="updated">
           {live.data?.time ? t('Updated {time}', { time: clockTime(live.data.time) }) : ''}
         </span>
+        {extra}
         <a class="link" href="?view=tv" data-testid="tv-link">{t('TV view')}</a>
         <LangSwitch />
       </div>
