@@ -43,6 +43,12 @@ class ControlClient:
     def battery_capacity(self) -> tuple[int, dict]:
         return self._call("GET", "/battery-capacity")
 
+    def retention(self) -> tuple[int, dict]:
+        return self._call("GET", "/retention", timeout=10)
+
+    def set_retention(self, days: int | None) -> tuple[int, dict]:
+        return self._call("POST", "/retention", {"days": days})
+
     def set_battery_capacity(self, kwh: float | None) -> tuple[int, dict]:
         return self._call("POST", "/battery-capacity", {"kwh": kwh})
 

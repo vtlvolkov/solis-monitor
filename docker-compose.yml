@@ -42,6 +42,7 @@ services:
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_BUCKET_1M: ${INFLUX_BUCKET_1M:-}             # 1-minute aggregates (default <bucket>_1m), kept by an InfluxDB task the poller sets up
       RAW_RETENTION_DAYS: ${RAW_RETENTION_DAYS:-90}       # 10-second readings older than this are deleted (the aggregates stay); 0 = keep all
+      RETENTION_FILE: /data/retention.json                # the same, changed on Settings -> System (wins over RAW_RETENTION_DAYS)
       # Settings page: internal control API on :8780 (Docker network only, not published). CONTROL_TOKEN is the secret
       # the web service presents to it; installs from before it existed have only INFLUX_TOKEN, used by both sides then.
       CONTROL_TOKEN: ${CONTROL_TOKEN:-${INFLUX_TOKEN}}

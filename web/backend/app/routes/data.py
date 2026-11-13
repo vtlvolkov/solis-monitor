@@ -24,7 +24,7 @@ def build(ctx: Context) -> tuple[APIRouter, dict]:
 
     @r.get("/api/site")
     async def api_site():
-        return {"name": s.site_name, "raw_retention_days": s.raw_retention_days}
+        return {"name": s.site_name, "raw_retention_days": await ctx.raw_retention()}
 
     async def live():
         return shaping.live_payload(await call(repo.latest), now())

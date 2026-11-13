@@ -286,6 +286,10 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .grid-table tr.warn td:first-child { color: var(--c-warn); }
 .band-note { color: var(--c-muted); font-size: 0.78rem; text-align: right; }
 .grid-limits { margin-bottom: 14px; }
+.retention-warning { color: var(--c-warn); }
+.tariff-form label.retention-all { display: flex; align-items: center; gap: 10px; align-self: center; color: var(--c-text); font-size: 0.9rem; }
+.tariff-form label.retention-all input { width: 18px; height: 18px; min-height: 0; flex: none; accent-color: var(--c-inverter); }
+.confirm-actions .btn-danger, .btn.btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
 .grid-limits-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; margin: 10px 0; }
 .grid-limits-form .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
 .grid-limits-form input { background: var(--c-surface2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px; padding: 6px 10px; font: inherit; }

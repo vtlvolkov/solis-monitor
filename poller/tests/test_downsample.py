@@ -167,3 +167,35 @@ def test_backfill_edges_are_whole_minutes_and_never_empty():
     assert c.queries == []
     d.aggregate(stop, stop)                                                       # inside a minute: that whole minute
     assert "start: 2026-11-12T11:34:00Z, stop: 2026-11-12T11:35:00Z" in c.queries[-1]
+
+
+def test_retention_store_saved_wins_over_the_environment(tmp_path):
+    path = str(tmp_path / "retention.json")
+    st = downsample.RetentionStore(path, None)
+    assert st.value() == (90, "default")
+    st = downsample.RetentionStore(path, "120")
+    assert st.value() == (120, "RAW_RETENTION_DAYS")
+    st.set(180)
+    assert st.value() == (180, "saved") and downsample.RetentionStore(path, "120").value() == (180, "saved")    # survives a restart
+    st.set(0)
+    assert st.value() == (0, "saved")                                             # keep everything
+    st.set(None)
+    assert st.value() == (120, "RAW_RETENTION_DAYS") and not (tmp_path / "retention.json").exists()
+    for bad in (7, 34, 3651, -1, 90.5, True, "90"):
+        try:
+            st.set(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {bad!r}")
+    (tmp_path / "retention.json").write_text("{broken")
+    assert downsample.RetentionStore(path, "120").value() == (120, "RAW_RETENTION_DAYS")
+
+
+def test_the_downsampler_reads_the_days_at_every_use():
+    days = [90]
+    c, d = FakeClient(raw_first=T0 - timedelta(days=93)), None
+    d = Downsampler(c, "home", "solis", "solis_1m", clock=lambda: T0.timestamp(), sleep=lambda s: None, raw_days=lambda: days[0])
+    days[0] = 0
+    assert d.prune() == 0 and c.deleted == []                                     # switched off on the page: nothing goes
+    days[0] = 90
+    assert d.prune() == 3

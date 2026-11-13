@@ -6,6 +6,7 @@ import { CapacityCard } from '../components/CapacityCard';
 import { DebugCard } from '../components/DebugCard';
 import { InverterCard } from '../components/InverterCard';
 import { LoginCard } from '../components/LoginCard';
+import { RetentionCard } from '../components/RetentionCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
 import { goTo } from '../lib/nav';
@@ -490,10 +491,15 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
       {tab === 'schedule' && s && <TouCard s={s} wait={wait} onPropose={propose} />}
       {tab === 'backup' && <BackupCard />}
       {tab === 'system' && (
-        <div class="settings-row">
-          <UpdateCard />
-          <LoginCard />
-        </div>
+        <>
+          <div class="settings-row">
+            <UpdateCard />
+            <LoginCard />
+          </div>
+          <div class="settings-row">
+            <RetentionCard />
+          </div>
+        </>
       )}
       {tab === 'debug' && <DebugCard />}
     </div>

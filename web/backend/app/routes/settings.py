@@ -150,6 +150,31 @@ def build(ctx: Context) -> APIRouter:
             result["web"] = ctx.web_can_change()
         return JSONResponse(result, status_code=status)
 
+    # ------------------------------------------------------------------ how long the 10-second readings are kept (kept by the poller)
+    @r.get("/api/settings/retention")
+    async def api_retention():
+        status, body = await poller(control.retention)
+        if status == 200:
+            body["web"] = ctx.web_can_change()
+        return JSONResponse(body, status_code=status)
+
+    @r.post("/api/settings/retention")
+    async def api_retention_change(request: Request):
+        """Days of 10-second readings to keep (0 = all, null = back to RAW_RETENTION_DAYS). Fewer days delete the older
+        readings at the poller's next daily run; the 1-minute averages, outages and settings log are kept regardless."""
+        body, bad = await change_body(request)
+        if bad is not None:
+            return bad
+        days = body.get("days") if isinstance(body, dict) else None
+        if not isinstance(body, dict) or set(body) != {"days"} or isinstance(days, bool) or not (days is None or isinstance(days, int)):
+            return JSONResponse({"detail": "body must be {days: whole number or null}"}, status_code=400)
+        log.warning("raw retention change requested: %s", days)
+        status, result = await poller(control.set_retention, days)
+        ctx.forget_retention()
+        if status == 200:
+            result["web"] = ctx.web_can_change()
+        return JSONResponse(result, status_code=status)
+
     # ------------------------------------------------------------------ where the inverter's data logger is (kept by the poller)
     @r.get("/api/settings/inverter")
     async def api_inverter(request: Request):

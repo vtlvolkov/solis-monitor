@@ -527,6 +527,23 @@ export const UK: Record<string, string> = {
   "Restoring the database": "Відновлення бази даних", "Starting with the restored settings": "Запуск із відновленими налаштуваннями",
   "The app's data folder (the history, and the settings saved on this dashboard) is included in the platform's own app backups. Nothing needs to be set up here, and there is nothing to download from this page.":
     "Тека даних застосунку (історія та налаштування, збережені на цій панелі) входить до власних резервних копій застосунків платформи. Тут нічого не треба налаштовувати, і з цієї сторінки нічого завантажувати.",
+  // Stored history (retention)
+  "Stored history": "Збережена історія",
+  "everything": "усе",
+  "default": "за замовчуванням",
+  "Enter a whole number of days from {min} to {max}, or keep everything": "Введіть ціле число днів від {min} до {max} або зберігайте все",
+  "10-second readings from before {date} will be deleted at the next daily clean-up (within a day). This cannot be undone. The 1-minute averages, outages and settings log stay.": "Показання з кроком 10 с до {date} буде видалено під час наступного щоденного очищення (протягом доби). Це не можна скасувати. Хвилинні середні, відключення та журнал налаштувань залишаться.",
+  "10-second readings kept: {from} → {to}": "Зберігати показання з кроком 10 с: {from} → {to}",
+  "Saved. 10-second readings are kept for {n}.": "Збережено. Показання з кроком 10 с зберігаються: {n}.",
+  "10-second readings: {n}": "Показання з кроком 10 с: {n}",
+  "10-second readings since": "Показання з кроком 10 с від",
+  "1-minute averages since": "Хвилинні середні від",
+  "Charts, daily energy, cost and exports at 1 minute or coarser use the 1-minute averages, which are kept for good, as are outages and the settings log. Only Grid quality and the 10 s export need the 10-second readings. Older ones are deleted once a day to keep the disk small.": "Графіки, добова енергія, вартість і експорт із кроком від 1 хвилини беруть хвилинні середні, які зберігаються назавжди, як і відключення та журнал налаштувань. Показання з кроком 10 с потрібні лише для якості мережі та експорту з кроком 10 с. Старіші видаляються раз на добу, щоб диск не переповнювався.",
+  "Keep 10-second readings for": "Зберігати показання з кроком 10 с",
+  "days, {min}–{max}": "днів, {min}–{max}",
+  "Keep everything": "Зберігати все",
+  "(the database grows by about 1–2 GB a year)": "(база даних зростає приблизно на 1–2 ГБ на рік)",
+  "Change how long readings are kept?": "Змінити, скільки зберігати показання?",
   // Grid quality
   "Outside {band}": "Поза {band}", "below {lo} V / above {hi} V": "нижче {lo} В / вище {hi} В",
   "{p} % of readings outside {band}": "{p} % показань поза {band}",

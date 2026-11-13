@@ -66,7 +66,7 @@ def make_handler(ctl: Controller):
                 h = ctl.health()
                 return self._send(200 if h["alive"] else 503, h)
             routes = {"/settings": ctl.settings, "/settings/cached": ctl.cached_settings,
-                      "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity,
+                      "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity, "/retention": ctl.retention,
                       "/inverter": ctl.inverter_address}
             self._run(routes.get(self.path))
 
@@ -80,6 +80,12 @@ def make_handler(ctl: Controller):
                 if set(body) != {"kwh"}:
                     raise ControlError(400, "body must be {kwh}")
                 return ctl.set_battery_capacity(body["kwh"])
+
+            def retention():
+                body = self._body()
+                if set(body) != {"days"}:
+                    raise ControlError(400, "body must be {days}")
+                return ctl.set_retention(body["days"])
 
             def inverter():
                 body = self._body()
@@ -99,7 +105,7 @@ def make_handler(ctl: Controller):
                     raise ControlError(400, "body must be {function, address, count}")
                 return ctl.debug_read(body["function"], body["address"], body["count"])
 
-            self._run({"/settings": apply, "/battery-capacity": capacity, "/inverter": inverter,
+            self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/inverter": inverter,
                        "/inverter/scan": scan_for_logger, "/debug/read": debug_read}.get(self.path))
 
         def log_message(self, fmt, *args):            # keep the poller log quiet

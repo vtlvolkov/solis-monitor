@@ -146,8 +146,9 @@ def build(ctx: Context, api: dict) -> APIRouter:
         t = now()
         start, stop, label = period(range_, from_, to, t)
         res = parse_resolution(every, round((stop - start).total_seconds()))
-        if res == "10s" and s.raw_retention_days and start < t - timedelta(days=s.raw_retention_days - 1):
-            raise _bad(f"every=10s needs the 10-second readings, which are kept for the last {s.raw_retention_days} days; use 1 min or more")
+        keep = await ctx.raw_retention() if res == "10s" else 0
+        if keep and start < t - timedelta(days=keep - 1):
+            raise _bad(f"every=10s needs the 10-second readings, which are kept for the last {keep} days; use 1 min or more")
         rows = Rows(sp, s.tz)
         name = f"solis{_site(ctx)}-{label}-{res}.csv"
         if res == "1d":

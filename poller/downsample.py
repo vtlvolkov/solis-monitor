@@ -18,7 +18,9 @@ that are deleted from the raw bucket, a day at a time, each day re-aggregated ju
 are certainly there. Only measurement `solis` is deleted: the events (`solis_event`) and the settings audit
 (`solis_control`) live in the same bucket and are kept forever. The aggregate bucket has no retention.
 """
+import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -31,6 +33,68 @@ REPAIR_EVERY_S = 6 * 3600
 REPAIR_SPAN = timedelta(hours=24)
 CHUNK = timedelta(days=1)
 MIN_RAW_DAYS = 35          # grid quality reads 30 days of raw readings: never keep fewer than this
+
+
+MAX_RAW_DAYS = 3650
+
+
+class RetentionStore:
+    """Days of 10-second readings to keep: the value saved from the Settings page (a small JSON file in the poller's
+    volume), else RAW_RETENTION_DAYS, else 90. 0 = keep everything."""
+
+    def __init__(self, path: str | None = None, env_days: str | None = None):
+        self.path = path or None
+        self.env_raw = env_days if env_days not in (None, "") else None
+        self.lock = threading.Lock()
+        self.saved = self._load()
+
+    def _load(self) -> int | None:
+        if not self.path or not os.path.exists(self.path):
+            return None
+        try:
+            with open(self.path) as f:
+                return check_days(json.load(f)["days"])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            log.error("retention file %s is unreadable (%s): using RAW_RETENTION_DAYS", self.path, exc)
+            return None
+
+    def value(self) -> tuple[int, str]:
+        """(days, source): source is "saved", "RAW_RETENTION_DAYS" or "default"."""
+        if self.saved is not None:
+            return self.saved, "saved"
+        if self.env_raw is not None:
+            return parse_retention(self.env_raw), "RAW_RETENTION_DAYS"
+        return parse_retention(None), "default"
+
+    def days(self) -> int:
+        return self.value()[0]
+
+    def set(self, days: int | None) -> None:
+        """Save a new number of days; None removes the saved one (back to RAW_RETENTION_DAYS or 90)."""
+        days = None if days is None else check_days(days)
+        with self.lock:
+            if self.path:
+                if days is None:
+                    if os.path.exists(self.path):
+                        os.remove(self.path)
+                else:
+                    os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+                    tmp = self.path + ".tmp"
+                    with open(tmp, "w") as f:
+                        json.dump({"days": days}, f)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, self.path)             # a crash never leaves half a file
+            self.saved = days
+
+
+def check_days(v) -> int:
+    """A value saved from the page: 0 (keep all) or a whole number of days from MIN_RAW_DAYS to MAX_RAW_DAYS."""
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError("days must be a whole number")
+    if v != 0 and not MIN_RAW_DAYS <= v <= MAX_RAW_DAYS:
+        raise ValueError(f"days must be 0 (keep everything) or from {MIN_RAW_DAYS} to {MAX_RAW_DAYS}")
+    return v
 
 
 def parse_retention(raw: str | None) -> int:
@@ -76,11 +140,32 @@ def _ceil_minute(t: datetime) -> datetime:
 class Downsampler:
     """`client` is an influxdb_client.InfluxDBClient (or a fake with the same buckets/tasks/query API in the tests)."""
 
-    def __init__(self, client, org: str, source: str, target: str, clock=time.time, sleep=time.sleep, raw_days: int = 0):
+    def __init__(self, client, org: str, source: str, target: str, clock=time.time, sleep=time.sleep, raw_days=0):
         self.client, self.org, self.source, self.target = client, org, source, target
         self.clock, self.sleep = clock, sleep
-        self.raw_days = raw_days                           # 10-second readings kept this many days (0 = all)
+        self._raw_days = raw_days                          # days of 10-second readings kept (0 = all), or a callable for them
         self.backfilled_to: datetime | None = None         # the oldest day done, for the log and the tests
+        self._info: tuple[float, dict] = (-1e9, {})
+
+    @property
+    def raw_days(self) -> int:
+        """Read at every use, so a change saved from the Settings page applies at the next daily run."""
+        return self._raw_days() if callable(self._raw_days) else self._raw_days
+
+    def history(self) -> dict:
+        """The oldest 10-second reading and the oldest 1-minute aggregate, for the Settings card (cached 10 minutes)."""
+        at, info = self._info
+        if self.clock() - at < 600:
+            return info
+        def iso(t):
+            return t.isoformat() if t else None
+        try:
+            info = {"raw_first": iso(self._first_time(self.source, "solis")), "agg_first": iso(self._first_time(self.target, "solis"))}
+        except Exception as exc:
+            log.debug("retention: could not read the oldest readings: %s", exc)
+            info = {"raw_first": None, "agg_first": None}
+        self._info = (self.clock(), info)
+        return info
 
     # ---------------------------------------------------------------- the bucket and the task
     def ensure(self) -> bool:
@@ -161,10 +246,11 @@ class Downsampler:
     def prune(self) -> int:
         """Delete the 10-second readings older than raw_days, oldest day first; returns the number of days deleted.
         Each day is aggregated again right before, so the 1-minute data for it is there whatever happened earlier."""
-        if not self.raw_days:
+        days = self.raw_days
+        if not days:
             return 0
         now = datetime.fromtimestamp(self.clock(), timezone.utc)
-        cutoff = (now - timedelta(days=self.raw_days)).replace(hour=0, minute=0, second=0, microsecond=0)
+        cutoff = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
         first = self._first_time(self.source, "solis")
         if first is None or first >= cutoff:
             return 0
@@ -176,6 +262,7 @@ class Downsampler:
             delete.delete(day, end, '_measurement="solis"', bucket=self.source, org=self.org)
             day, n = end, n + 1
             self.sleep(0.2)
+        self._info = (-1e9, {})                            # the oldest reading moved
         return n
 
     # ---------------------------------------------------------------- the background thread

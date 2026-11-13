@@ -271,8 +271,10 @@ def main():
     writer = influx.write_api(write_options=SYNCHRONOUS)
     # The 1-minute bucket and the InfluxDB task that fills it (plus the history from before it existed), in the background
     # Also the retention split: 10-second readings older than RAW_RETENTION_DAYS are deleted (the aggregates stay)
-    downsample.Downsampler(influx, INFLUX_ORG, INFLUX_BUCKET, INFLUX_BUCKET_1M,
-                           raw_days=downsample.parse_retention(os.getenv("RAW_RETENTION_DAYS"))).run_in_background(stop)
+    # (the number of days can be changed on the Settings page; the saved value wins over RAW_RETENTION_DAYS)
+    retention = downsample.RetentionStore(os.getenv("RETENTION_FILE", "/data/retention.json"), os.getenv("RAW_RETENTION_DAYS"))
+    downsampler = downsample.Downsampler(influx, INFLUX_ORG, INFLUX_BUCKET, INFLUX_BUCKET_1M, raw_days=retention.days)
+    downsampler.run_in_background(stop)
     # The logger's address: saved from the Settings page, else INVERTER_HOST. It can be set (or changed) while we run.
     addresses = address.AddressStore(os.getenv("INVERTER_FILE", "/data/inverter.json"), INVERTER_HOST, INVERTER_PORT, MODBUS_UNIT)
     here = addresses.value()
@@ -291,6 +293,7 @@ def main():
 
     ctl = control.Controller(inv, control.Config(), audit=audit)
     ctl.addresses, ctl.poll_status, ctl.poll_interval = addresses, status, POLL_INTERVAL
+    ctl.retention_store, ctl.downsampler = retention, downsampler
     ctl.devices = device.DeviceReader(inv, ttl=90, capacity=device.CapacityStore(
         os.getenv("CAPACITY_FILE", "/data/battery-capacity.json"), os.getenv("BATTERY_CAPACITY_KWH")))
     server = api.serve(ctl)

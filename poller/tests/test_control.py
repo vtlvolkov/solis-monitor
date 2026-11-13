@@ -392,3 +392,27 @@ def test_change_invalidates_cache():
     ctl.apply("reserve_mode", True)
     assert ctl.cached_settings()["reserve_mode"] is True
     assert ctl.cached_settings()["control"]["next_change_in_s"] == 60
+
+
+def test_retention_over_the_internal_api(tmp_path):
+    import downsample
+    ctl, *_ = make()
+    audits = []
+    ctl.audit = lambda action, **f: audits.append((action, f))
+    ctl.retention_store = downsample.RetentionStore(str(tmp_path / "retention.json"), "120")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(ctl))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_port}/retention"
+    try:
+        status, body = call(url)
+        assert status == 200 and body["days"] == 120 and body["source"] == "RAW_RETENTION_DAYS" and body["env_days"] == 120
+        assert body["min_days"] == 35 and body["max_days"] == 3650 and body["raw_first"] is None
+        status, body = call(url, "POST", {"days": 60})
+        assert status == 200 and body["days"] == 60 and body["source"] == "saved" and "120 days → 60 days" in body["applied"]
+        assert audits[-1][0] == "raw_retention"
+        assert call(url, "POST", {"days": 10})[0] == 400 and call(url, "POST", {"days": "x"})[0] == 400 and call(url, "POST", {"n": 1})[0] == 400
+        status, body = call(url, "POST", {"days": None})
+        assert body["days"] == 120 and body["source"] == "RAW_RETENTION_DAYS"
+        assert call(url, token="wrong")[0] == 401
+    finally:
+        srv.shutdown()

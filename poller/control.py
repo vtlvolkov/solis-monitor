@@ -26,6 +26,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import downsample
 import rawread
 import scan
 
@@ -153,6 +154,8 @@ class Controller:
         self.last_write = 0.0
         self.lock = threading.Lock()                 # one change at a time
         self.devices = None                          # device.DeviceReader, set by poller.main
+        self.retention_store = None                  # downsample.RetentionStore, set by poller.main
+        self.downsampler = None                      # downsample.Downsampler, for the oldest readings
         self.addresses = None                        # address.AddressStore, set by poller.main
         self.poll_status = None                      # address.PollStatus, set by poller.main
         self.poll_interval = 10.0
@@ -219,6 +222,32 @@ class Controller:
                    f" → {after['capacity_kwh'] if after['capacity_kwh'] is not None else '--'} kWh"
                    + ("" if after["source"] == "saved" else f" (from {after['source']})"))
         self.audit("battery_capacity", before=str(before["capacity_kwh"]), written=str(kwh), verified=True, summary=summary)
+        return {**after, "applied": summary}
+
+    # ------------------------------------------------------------------ how long the 10-second readings are kept
+    def retention(self) -> dict:
+        if self.retention_store is None:
+            raise ControlError(503, "The retention setting is not ready yet.")
+        days, source = self.retention_store.value()
+        env = self.retention_store.env_raw
+        return {"days": days, "source": source, "saved_days": self.retention_store.saved,
+                "env_days": None if env is None else downsample.parse_retention(env), "default_days": downsample.parse_retention(None),
+                "min_days": downsample.MIN_RAW_DAYS, "max_days": downsample.MAX_RAW_DAYS,
+                **(self.downsampler.history() if self.downsampler else {"raw_first": None, "agg_first": None})}
+
+    def set_retention(self, days) -> dict:
+        """Days of 10-second readings to keep (the app's own value; CONTROL_ENABLED does not apply). None = back to
+        RAW_RETENTION_DAYS or 90. Fewer days delete the older readings at the next daily run, not now."""
+        before = self.retention()
+        try:
+            self.retention_store.set(days)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
+        after = self.retention()
+        def name(d):
+            return "all" if d == 0 else f"{d} days"
+        summary = f"10-second readings kept: {name(before['days'])} → {name(after['days'])}" + ("" if after["source"] == "saved" else f" (from {after['source']})")
+        self.audit("raw_retention", before=str(before["days"]), written=str(days), verified=True, summary=summary)
         return {**after, "applied": summary}
 
     # ------------------------------------------------------------------ where the logger is (the app's own setting)

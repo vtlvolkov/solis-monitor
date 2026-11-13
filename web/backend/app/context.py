@@ -3,6 +3,7 @@ the login and tariff stores, and the checks a request must pass before it may ch
 import asyncio
 import json
 import logging
+import time
 from urllib.parse import urlparse
 
 from fastapi import Request
@@ -49,6 +50,7 @@ class Context:
             s.tariff_file)
         # Cost results, cleared when the tariff changes (routes/settings.py) so a new price shows at once.
         self.cost_cache: dict = {}
+        self._retention: tuple[float, int] = (-1e9, s.raw_retention_days)
         self.history_cache: dict = {}
 
     async def call(self, fn, *args):
@@ -59,6 +61,23 @@ class Context:
             detail = _describe(exc)
             log.warning("InfluxDB query failed: %s", detail)
             raise InfluxUnavailable(f"InfluxDB unavailable: {detail}") from exc
+
+    async def raw_retention(self) -> int:
+        """Days of 10-second readings kept (0 = all): the poller's value, which the Settings page can change, asked once
+        a minute; RAW_RETENTION_DAYS from this container's environment while the poller does not answer."""
+        at, days = self._retention
+        if time.monotonic() - at < 60:
+            return days
+        get = getattr(self.control, "retention", None)
+        if get is not None:
+            status, body = await self.poller(get)
+            if status == 200 and isinstance(body.get("days"), int):
+                days = body["days"]
+        self._retention = (time.monotonic(), days)
+        return days
+
+    def forget_retention(self) -> None:
+        self._retention = (-1e9, self._retention[1])
 
     async def poller(self, fn, *args):
         """Call the poller's internal API off the event loop; (status, body), 502 when the poller is unreachable."""

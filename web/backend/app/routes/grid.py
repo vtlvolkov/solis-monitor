@@ -158,9 +158,10 @@ def build(ctx: Context) -> APIRouter:
             d = shaping.parse_day(date)
             if d is None or d > t.astimezone(ZoneInfo(s.tz)).date():
                 raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD, not in the future")
-            first_raw = raw_from(s.raw_retention_days, t, s.tz)
+            keep = await ctx.raw_retention()
+            first_raw = raw_from(keep, t, s.tz)
             if first_raw and d < first_raw:
-                raise HTTPException(status_code=400, detail=f"Grid quality needs the 10-second readings, which are kept for the last {s.raw_retention_days} days.")
+                raise HTTPException(status_code=400, detail=f"Grid quality needs the 10-second readings, which are kept for the last {keep} days.")
             start, stop = shaping.local_range(d, d, s.tz)
             stop = min(stop, t)
             rng, day = d.isoformat(), d.isoformat()
@@ -188,8 +189,8 @@ def build(ctx: Context) -> APIRouter:
         rows = dict(zip(jobs, results, strict=True))
         events = rows.pop("events")
         body = shape(rows, limits, start, stop, t, s.tz, events, rng, day)
-        first_raw = raw_from(s.raw_retention_days, t, s.tz)
-        body["raw_from"] = first_raw.isoformat() if first_raw else None      # the day picker offers nothing older
+        first_raw = raw_from(await ctx.raw_retention(), t, s.tz)
+        body = {**body, "raw_from": first_raw.isoformat() if first_raw else None}      # the day picker offers nothing older
         cache[key] = {"at": t, "body": body}
         return body
 

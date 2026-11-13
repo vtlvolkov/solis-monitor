@@ -208,3 +208,45 @@ def test_capacity_poller_down():
     c = client(FakeControl(down=True))
     assert c.get("/api/settings/battery-capacity", auth=AUTH).status_code == 502
     assert post_capacity(c, {"kwh": 5}).status_code == 502
+
+
+class RetentionControl(FakeControl):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.days, self.source = 90, "default"
+
+    def retention(self):
+        if self.down:
+            raise PollerUnavailable("connection refused")
+        return 200, {"days": self.days, "source": self.source, "saved_days": None, "env_days": None, "default_days": 90,
+                     "min_days": 35, "max_days": 3650, "raw_first": "2026-08-01T00:00:00+00:00", "agg_first": "2026-05-01T00:00:00+00:00"}
+
+    def set_retention(self, days):
+        self.applied.append(("retention", days))
+        if days is not None and days != 0 and not 35 <= days <= 3650:
+            return 400, {"detail": "Days must be 0 (keep everything) or from 35 to 3650."}
+        self.days, self.source = (90, "default") if days is None else (days, "saved")
+        return 200, {"days": self.days, "source": self.source, "applied": "x"}
+
+
+def test_retention_is_read_and_changed_through_the_poller():
+    ctl = RetentionControl()
+    c = client(ctl)
+    body = c.get("/api/settings/retention", auth=AUTH).json()
+    assert body["days"] == 90 and body["web"]["can_change"] is True and body["raw_first"].startswith("2026-08")
+    assert c.get("/api/site", auth=AUTH).json()["raw_retention_days"] == 90
+    r = c.post("/api/settings/retention", json={"days": 180}, headers=JSON, auth=AUTH)
+    assert r.status_code == 200 and r.json()["days"] == 180 and ctl.applied[-1] == ("retention", 180)
+    assert c.get("/api/site", auth=AUTH).json()["raw_retention_days"] == 180                # the page's value applies at once, not after a minute
+    assert c.post("/api/settings/retention", json={"days": 10}, headers=JSON, auth=AUTH).status_code == 400
+    for bad in ({"days": "90"}, {"days": True}, {"days": 1.5}, {"n": 90}):
+        assert c.post("/api/settings/retention", json=bad, headers=JSON, auth=AUTH).status_code == 400, bad
+    assert c.post("/api/settings/retention", json={"days": 0}, headers={**JSON, "Origin": "http://evil.example"}, auth=AUTH).status_code == 403
+    assert client(RetentionControl(), auth="").post("/api/settings/retention", json={"days": 0}, headers=JSON).status_code == 403
+
+
+def test_without_the_poller_the_environment_value_is_used():
+    ctl = RetentionControl(down=True)
+    app = create_app(repo=Repo(), control=ctl, now=lambda: datetime.now(timezone.utc),
+                     settings=Settings(static_dir="/nonexistent", basic_auth="me:pw", raw_retention_days=60))
+    assert TestClient(app).get("/api/site", auth=AUTH).json()["raw_retention_days"] == 60
