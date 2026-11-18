@@ -8,6 +8,7 @@ import { InverterCard } from '../components/InverterCard';
 import { LoginCard } from '../components/LoginCard';
 import { MqttCard } from '../components/MqttCard';
 import { OutageSourceCard } from '../components/OutageSourceCard';
+import { ForecastSettingsCard } from '../components/ForecastSettingsCard';
 import { RetentionCard } from '../components/RetentionCard';
 import { TariffCard } from '../components/TariffCard';
 import { UpdateCard } from '../components/UpdateCard';
@@ -481,6 +482,7 @@ export function Settings({ live, now }: { live: LiveState; now: number }) {
           </div>
           <div class="settings-row">
             <OutageSourceCard />
+            <ForecastSettingsCard />
           </div>
         </>
       )}

@@ -26,6 +26,7 @@ import control
 import device
 import downsample
 import faults
+import forecast
 import mqtt
 import notify
 import outages
@@ -347,9 +348,29 @@ def main():
         max_soc = (ctl._settings_cache or {}).get("battery", {}).get("max_charge_soc")
         return d["battery"]["capacity_kwh"], d["backup"]["eps_dod_pct"], max_soc
 
+    # The solar forecast (Open-Meteo): fetched every hour while set up; corrected by what the panels really made
+    actual_cache = {"at": -1e9, "v": {}}
+
+    def pv_actual():                              # hour -> (PV W mean, battery SOC max), the last two weeks (once an hour)
+        if time.monotonic() - actual_cache["at"] > 3600:
+            try:
+                pv_q, soc_q = forecast.actual_flux(INFLUX_BUCKET)
+                rows = [[(r.get_time(), r.get_value()) for t in influx.query_api().query(q) for r in t.records] for q in (pv_q, soc_q)]
+                actual_cache["v"] = forecast.actual_rows(*rows)
+            except Exception as exc:
+                log.debug("PV history for the forecast failed: %s", exc)
+            actual_cache["at"] = time.monotonic()
+        return actual_cache["v"]
+
+    forecaster = forecast.Forecaster(forecast.ForecastStore(os.getenv("FORECAST_DIR", "/data")), forecast.OpenMeteo(), os.getenv("TZ") or "Europe/Kyiv",
+                                     send=alerts.send, actual=pv_actual, load=load_profile)
+    ctl.forecast = forecaster
+    forecaster.run_in_background(stop)
+
     watcher = outages.OutageWatcher(outages.OutageStore(os.getenv("OUTAGES_DIR", "/data")), outages.Yasno(), os.getenv("TZ") or "Europe/Kyiv",
                                     send=alerts.send, battery=battery_for_outage, profile=load_profile,
-                                    state=lambda: (latest.get("battery_soc"), latest.get("battery_power_signed"), latest.get("total_load_power")))
+                                    state=lambda: (latest.get("battery_soc"), latest.get("battery_power_signed"), latest.get("total_load_power")),
+                                    pv=lambda: forecaster.watts_at if forecaster.store.configured() and forecaster.store.data["model"] else None)
     ctl.outages = watcher
     watcher.run_in_background(stop)
 

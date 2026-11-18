@@ -11,6 +11,7 @@
 
 - **Live power flow** between solar, grid, battery and your house, updated every 10 seconds, with gauges that turn amber and red as you approach the inverter's limits.
 - **Backup runtime estimate**: how long the battery would last if the grid went out right now.
+- **Solar forecast** from Open-Meteo, corrected by what your panels really make: today, tomorrow and the day after, by the hour on the Overview and as a line on the charts, a warning (and Telegram) when tomorrow will be weak, and the expected sun counted in the planned-outage battery verdict.
 - **Planned outages** (графік відключень; Kyiv and Dnipro via Yasno, Kyiv Oblast, Dnipro Oblast and Odesa via DTEK community data): the next outage for your address, whether the battery will last through it, and Telegram warnings before it.
 - **An Overview you arrange yourself**: drag cards around, remove them, or add new ones (power today, self-sufficiency, recent events, battery health, load by hour). Kept on the server, so every screen shows the same page.
 - **Charts** for any period from one hour to 30 days: power, battery charge, voltage, frequency, daily energy. **Export to CSV** (Excel-ready) from the Charts, Events and Cost pages.

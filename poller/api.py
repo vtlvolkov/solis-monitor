@@ -72,6 +72,7 @@ def make_handler(ctl: Controller):
                       "/device": ctl.devices and ctl.devices.read, "/battery-capacity": ctl.battery_capacity, "/retention": ctl.retention,
                       "/inverter": ctl.inverter_address, "/mqtt": ctl.mqtt_config,
                       "/outages": ctl.outage_schedule, "/outages/config": ctl.outage_config,
+                      "/forecast": ctl.solar_forecast, "/forecast/hours": ctl.solar_forecast_hours, "/forecast/config": ctl.forecast_config,
                       "/outages/groups": lambda: ctl.outage_groups(q.get("source")),
                       "/outages/streets": lambda: ctl.outage_streets(q.get("source"), q.get("q")),
                       "/outages/houses": lambda: ctl.outage_houses(q.get("source"), q.get("street"), q.get("q")),
@@ -101,6 +102,12 @@ def make_handler(ctl: Controller):
                     raise ControlError(400, "body must be {source, group, alerts, overview?}")
                 return ctl.set_outage_config(body["source"], body["group"], body["alerts"], body.get("overview"))
 
+            def forecast_config():
+                body = self._body()
+                if set(body) - {"lat", "lon", "arrays", "losses", "correct", "telegram", "below_pct", "overview"} or not {"lat", "lon", "arrays"} <= set(body):
+                    raise ControlError(400, "body must be {lat, lon, arrays, losses, correct, telegram, below_pct, overview}")
+                return ctl.set_forecast_config(body)
+
             def inverter():
                 body = self._body()
                 if set(body) - {"host", "port", "unit"} or "host" not in body:
@@ -128,7 +135,7 @@ def make_handler(ctl: Controller):
                     raise ControlError(400, "body must be {function, address, count}")
                 return ctl.debug_read(body["function"], body["address"], body["count"])
 
-            self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/outages/config": outage_config, "/inverter": inverter,
+            self._run({"/settings": apply, "/battery-capacity": capacity, "/retention": retention, "/outages/config": outage_config, "/forecast/config": forecast_config, "/inverter": inverter,
                        "/inverter/scan": scan_for_logger, "/debug/read": debug_read,
                        "/mqtt": mqtt_change, "/mqtt/test": mqtt_test}.get(self.path))
 

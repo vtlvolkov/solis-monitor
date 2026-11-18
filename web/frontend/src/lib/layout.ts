@@ -22,14 +22,16 @@ export const CARDS: CardInfo[] = [
   { id: 'events', title: tx('Recent events'), desc: tx('The last outages and alarms.'), col: 'right' },
   { id: 'health', title: tx('Battery health'), desc: tx('State of health, full cycles, round-trip efficiency and temperature.'), col: 'left' },
   { id: 'heatmap', title: tx('Load by hour'), desc: tx('When the house uses the most power, over the last 7 days.'), col: 'left' },
+  { id: 'forecast', title: tx('Solar forecast'), desc: tx('What the panels should make today, tomorrow and the day after, by the hour.'), col: 'left' },
 ];
 export const CARD_IDS = CARDS.map((c) => c.id);
 export const cardInfo = (id: string): CardInfo | undefined => CARDS.find((c) => c.id === id);
 
-/** The page as it was before it could be changed (Planned outages only when its own setting showed it). */
-export function defaultLayout(outages = true): Layout {
+/** The page as it was before it could be changed (Planned outages only when its own setting showed it; the Solar
+ *  forecast once it is set up). */
+export function defaultLayout(outages = true, forecast = false): Layout {
   return {
-    left: ['flow', 'battery', 'gauges'],
+    left: ['flow', 'battery', 'gauges', ...(forecast ? ['forecast'] : [])],
     right: ['grid', ...(outages ? ['outages'] : []), 'schedule', 'today', 'cost'],
   };
 }
@@ -93,4 +95,4 @@ export function nearestColumn(rects: { col: Col; left: number; right: number; to
 }
 
 /** What Save sends: null when the result is the default, so a later release's default still applies. */
-export const toSave = (l: Layout, outages: boolean): Layout | null => (sameLayout(l, defaultLayout(outages)) ? null : l);
+export const toSave = (l: Layout, outages: boolean, forecast = false): Layout | null => (sameLayout(l, defaultLayout(outages, forecast)) ? null : l);

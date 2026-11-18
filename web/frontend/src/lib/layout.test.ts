@@ -17,6 +17,7 @@ describe('the Overview layout', () => {
   it('starts as the page was, with Planned outages only when its setting showed it', () => {
     expect(defaultLayout()).toEqual({ left: ['flow', 'battery', 'gauges'], right: ['grid', 'outages', 'schedule', 'today', 'cost'] });
     expect(defaultLayout(false).right).not.toContain('outages');
+    expect(defaultLayout(true, true).left).toEqual(['flow', 'battery', 'gauges', 'forecast']);   // once the forecast is set up
   });
 
   it('drops unknown cards and repeats from a saved layout', () => {

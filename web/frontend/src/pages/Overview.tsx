@@ -2,6 +2,8 @@ import { useState } from 'preact/hooks';
 import { BatteryCard, Card, ErrorBanner, Header, Skeleton, TodayRow } from '../components/common';
 import { CostCard, GridCard, ScheduleCard, StatusChips, type CostPayload } from '../components/OverviewCards';
 import { OutageCard } from '../components/OutageCard';
+import { ForecastCard } from '../components/ForecastCard';
+import type { ForecastPayload } from '../lib/forecast';
 import { BatteryHealthCard, LoadHeatmapCard, PowerTodayCard, RecentEventsCard, SelfSufficiencyCard } from '../components/MoreCards';
 import { AddCardsDialog, EditBar, LayoutColumns, useLayoutEditor, useSavedLayout } from '../components/OverviewEditor';
 import type { OutagePayload } from '../lib/outages';
@@ -26,10 +28,12 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
   const avgLoad = useAvgLoad();
   const planned = usePoll<OutagePayload>('/api/outage-schedule', 300_000);
   const outagesByDefault = planned.data?.show ?? false;          // before the layout was ever saved: the card's own setting
+  const solar = usePoll<ForecastPayload>('/api/forecast', 900_000);
+  const forecastByDefault = !!(solar.data?.configured && solar.data.show);   // the same, once the forecast is set up
   const saved = useSavedLayout();
-  const editor = useLayoutEditor(saved.layout ?? defaultLayout(outagesByDefault), outagesByDefault, saved.reload);
+  const editor = useLayoutEditor(saved.layout ?? defaultLayout(outagesByDefault, forecastByDefault), outagesByDefault, saved.reload, forecastByDefault);
   const [adding, setAdding] = useState(false);
-  const layout = editor.edit?.layout ?? saved.layout ?? defaultLayout(outagesByDefault);
+  const layout = editor.edit?.layout ?? saved.layout ?? defaultLayout(outagesByDefault, forecastByDefault);
   const shown = onPage(layout);
 
   // Each card's data is asked for only while the card is on the page.
@@ -68,6 +72,7 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
       case 'events': return <RecentEventsCard events={events} />;
       case 'health': return <BatteryHealthCard fields={fields} info={info} />;
       case 'heatmap': return <LoadHeatmapCard />;
+      case 'forecast': return <ForecastCard p={solar.data} error={solar.error} fields={fields} now={now} />;
       default: return null;
     }
   };
@@ -101,8 +106,8 @@ export function Overview({ live, now }: { live: LiveState; now: number }) {
         </div>
       )}
       {editor.edit && (
-        <EditBar edit={editor.edit} state={editor.state} outages={outagesByDefault} onAdd={() => setAdding(true)}
-                 onReset={() => editor.set(defaultLayout(outagesByDefault))} onCancel={editor.cancel} onSave={editor.save} />
+        <EditBar edit={editor.edit} state={editor.state} outages={outagesByDefault} forecast={forecastByDefault} onAdd={() => setAdding(true)}
+                 onReset={() => editor.set(defaultLayout(outagesByDefault, forecastByDefault))} onCancel={editor.cancel} onSave={editor.save} />
       )}
       {!editor.edit && !shown.size && (
         <div class="banner" role="status">{t('The Overview has no cards. Press Customize to add some.')}</div>

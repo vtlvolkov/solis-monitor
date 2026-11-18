@@ -32,7 +32,7 @@ export function useSavedLayout() {
 type Editing = { layout: Layout; before: Layout; web: LayoutPayload['web'] };
 
 /** Edit mode: entering asks for the Settings login (the browser prompts) so it comes before the changes. */
-export function useLayoutEditor(current: Layout, outages: boolean, reload: () => Promise<boolean>) {
+export function useLayoutEditor(current: Layout, outages: boolean, reload: () => Promise<boolean>, forecast = false) {
   const [edit, setEdit] = useState<Editing | null>(null);
   const [state, setState] = useState<{ busy: boolean; error: string | null; signIn: boolean }>({ busy: false, error: null, signIn: false });
   const start = async () => {
@@ -50,7 +50,7 @@ export function useLayoutEditor(current: Layout, outages: boolean, reload: () =>
     if (!edit) return;
     setState({ busy: true, error: null, signIn: false });
     try {
-      const p = await postJson<LayoutPayload>('/api/settings/overview-layout', { layout: toSave(edit.layout, outages) });
+      const p = await postJson<LayoutPayload>('/api/settings/overview-layout', { layout: toSave(edit.layout, outages, forecast) });
       writeHint(p.layout ? normalize(p.layout) : null);
       await reload();
       setEdit(null);
@@ -67,12 +67,12 @@ export function useLayoutEditor(current: Layout, outages: boolean, reload: () =>
   };
 }
 
-export function EditBar({ edit, state, outages, onAdd, onReset, onCancel, onSave }: {
-  edit: Editing; state: { busy: boolean; error: string | null }; outages: boolean;
+export function EditBar({ edit, state, outages, forecast = false, onAdd, onReset, onCancel, onSave }: {
+  edit: Editing; state: { busy: boolean; error: string | null }; outages: boolean; forecast?: boolean;
   onAdd: () => void; onReset: () => void; onCancel: () => void; onSave: () => void;
 }) {
   const changed = !sameLayout(edit.layout, edit.before);
-  const isDefault = sameLayout(edit.layout, defaultLayout(outages));
+  const isDefault = sameLayout(edit.layout, defaultLayout(outages, forecast));
   return (
     <div class="ov-editbar" role="region" aria-label={t('Customize the Overview')} data-testid="ov-editbar">
       <div class="ov-editbar-text">

@@ -9,7 +9,7 @@ log = logging.getLogger("solis-web")
 
 # Every card the Overview can show; web/frontend/src/lib/layout.ts has the same list (layout.test.ts checks it).
 CARD_IDS = ("flow", "battery", "gauges", "grid", "outages", "schedule", "today", "cost",
-            "power", "selfsufficiency", "events", "health", "heatmap")
+            "power", "selfsufficiency", "events", "health", "heatmap", "forecast")
 COLUMNS = ("left", "right")
 
 

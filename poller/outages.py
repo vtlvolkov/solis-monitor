@@ -257,10 +257,13 @@ def next_outage(days: list[dict], now: datetime, tz: str) -> tuple[datetime, dat
 
 # ---------------------------------------------------------------- will the battery last?
 def verdict(start: datetime, end: datetime, now: datetime, soc: float | None, floor: float | None, capacity_kwh: float | None,
-            profile: dict[int, float], load_now: float | None, battery_w: float | None, max_soc: float = 100.0, tz: str = "Europe/Kyiv") -> dict | None:
+            profile: dict[int, float], load_now: float | None, battery_w: float | None, max_soc: float = 100.0, tz: str = "Europe/Kyiv",
+            pv=None) -> dict | None:
     """Energy above the backup floor when the outage starts against the usual load of those hours, minute by minute.
     profile: local hour -> average load in W (the last two weeks); the current load fills hours without history.
-    Before the outage the battery keeps its current charging (or discharging) rate, capped at max_soc and the floor."""
+    Before the outage the battery keeps its current charging (or discharging) rate, capped at max_soc and the floor.
+    pv: moment -> expected PV W (the solar forecast) or None. The panels keep working off-grid, so their power covers
+    load first and charges the battery with the rest, never above max_soc."""
     if soc is None or floor is None or not capacity_kwh or capacity_kwh <= 0:
         return None
     zone = ZoneInfo(tz)
@@ -269,31 +272,37 @@ def verdict(start: datetime, end: datetime, now: datetime, soc: float | None, fl
     soc_start = soc + (battery_w or 0.0) * until_h / wh_per_pct if until_h else soc
     soc_start = max(floor, min(max_soc, soc_start))
     left = (soc_start - floor) * wh_per_pct
+    room = max(0.0, (max_soc - soc_start) * wh_per_pct)          # what the sun can put back in
     t, used, minutes = max(start, now), 0.0, 0
 
     def load_at(at):
         return profile.get(at.astimezone(zone).hour) or load_now or 0.0
     span = [load_at(max(start, now) + timedelta(minutes=i)) for i in range(int((end - max(start, now)).total_seconds() // 60))]
     load_w = round(sum(span) / len(span)) if span else None      # the usual load over the whole outage, not only until it runs out
+    sun = (lambda at: max(0.0, pv(at) or 0.0)) if pv else (lambda at: 0.0)
+    pv_wh = sum(sun(max(start, now) + timedelta(minutes=i)) for i in range(len(span))) / 60 if pv else None
     while t < end:
-        w = load_at(t)
+        w = load_at(t) - sun(t)
         if used + w / 60 > left + 1e-6:        # (a sum of 1/60 steps drifts above an exact limit)
             break
-        used += w / 60
+        used = max(-room, used + w / 60)
         t += timedelta(minutes=1)
         minutes += 1
+    extra_pv = {"pv_kwh": round(pv_wh / 1000, 1) if pv_wh is not None else None}
     if t < end:                                                   # runs out before the end
         return {"enough": False, "lasts_s": minutes * 60, "short_s": round((end - t).total_seconds()), "runs_out_at": t.astimezone(zone).strftime("%H:%M"),
-                "load_w": load_w, "soc_at_start": round(soc_start)}
+                "load_w": load_w, "soc_at_start": round(soc_start), **extra_pv}
     extra = 0                                                     # enough: how much longer it would go on
     while extra < 72 * 60:
-        w = load_at(t)
-        if w <= 0 or used + w / 60 > left + 1e-6:
+        load = load_at(t)
+        w = load - sun(t)
+        if load <= 0 or used + w / 60 > left + 1e-6:
             break
-        used += w / 60
+        used = max(-room, used + w / 60)
         t += timedelta(minutes=1)
         extra += 1
-    return {"enough": True, "lasts_s": (minutes + extra) * 60, "short_s": None, "runs_out_at": None, "load_w": load_w, "soc_at_start": round(soc_start)}
+    return {"enough": True, "lasts_s": (minutes + extra) * 60, "short_s": None, "runs_out_at": None, "load_w": load_w, "soc_at_start": round(soc_start),
+            **extra_pv}
 
 
 # ---------------------------------------------------------------- what is kept in /data
@@ -387,11 +396,12 @@ class OutageWatcher:
     device cache; `profile()` the usual load by local hour."""
 
     def __init__(self, store: OutageStore, yasno: Yasno, tz: str, send=lambda text: None, state=lambda: (None, None, None),
-                 battery=lambda: None, profile=lambda: {}, clock=time.time, mirror: "Mirror | None" = None):
+                 battery=lambda: None, profile=lambda: {}, clock=time.time, mirror: "Mirror | None" = None, pv=None):
         self.store, self.yasno, self.tz = store, yasno, tz
         self.mirror = mirror or Mirror(clock=clock)
         self.warning: str | None = None                        # the source works but its data may be old
         self.send, self.state, self.battery, self.profile, self.clock = send, state, battery, profile, clock
+        self.pv = pv                                           # moment -> expected PV W (the solar forecast), or None
         self.last_error: str | None = None
         self._alerted: set[str] = set()                        # "before:<start>", "short:<start>" already sent
 
@@ -466,7 +476,8 @@ class OutageWatcher:
         if not bat:
             return None
         capacity, floor, max_soc = bat
-        return verdict(a, b, now, soc, floor, capacity, self.profile(), load_w, battery_w, max_soc or 100.0, self.tz)
+        pv = self.pv() if callable(self.pv) else None          # None while no forecast is set up
+        return verdict(a, b, now, soc, floor, capacity, self.profile(), load_w, battery_w, max_soc or 100.0, self.tz, pv=pv)
 
     # -- Telegram, once a minute
     def check_alerts(self) -> None:

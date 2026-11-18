@@ -841,3 +841,53 @@ i.ok { background: var(--c-ok); }
 .mqtt-form label.check { display: flex; color: var(--c-text); font-size: 0.95rem; }
 .mqtt-topics .kv div { flex-direction: column; gap: 2px; }
 .mqtt-topics .kv dd { text-align: left; font-weight: 500; }
+
+/* ---------------------------------------------------------------- solar forecast (Overview card, Settings card) */
+.swatch-dash { height: 0; border-top: 2px dashed; border-radius: 0; background: none; }
+.fc-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.fc-day { background: var(--c-surface2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.fc-day.sel { outline: 1px solid #6b4a1c; background: linear-gradient(180deg, #3a2c14 0%, #2a2210 100%); }
+.fc-d { display: flex; justify-content: space-between; gap: 6px; font-size: 0.82rem; color: var(--c-muted); }
+.fc-v { font-size: 1.35rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fc-s { font-size: 0.78rem; color: var(--c-muted); margin-top: 2px; }
+.fc-s.warn { color: var(--c-warn); font-weight: 600; }
+.fc-updated { font-size: 0.8rem; }
+.fc-chart { width: 100%; height: auto; display: block; }
+.fc-chart .fc-axis { fill: var(--c-muted); font-size: 11px; }
+.fc-chart .fc-day { fill: #c9cbd1; font-weight: 600; }
+.fc-chart .fc-grid { stroke: #2c2e33; }
+.fc-chart .fc-made { fill: var(--c-pv); }
+.fc-chart .fc-hatch { fill: rgba(244, 196, 48, 0.55); }
+.fc-chart .fc-ahead { stroke: rgba(244, 196, 48, 0.6); stroke-width: 1; }
+.fc-chart .fc-tick { stroke: #fff; stroke-opacity: 0.6; stroke-width: 1.5; }
+.fc-chart .fc-load { fill: none; stroke: var(--c-load); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.fc-chart .fc-now { stroke: var(--c-warn); stroke-width: 1.5; }
+.fc-legend { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 0.78rem; color: var(--c-muted); margin: 6px 0 2px; }
+.fc-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.fc-legend .made::before { background: var(--c-pv); }
+.fc-legend .ahead::before { background: repeating-linear-gradient(135deg, rgba(244, 196, 48, 0.6) 0 3px, transparent 3px 6px); outline: 1px solid rgba(244, 196, 48, 0.6); }
+.fc-legend .load::before { height: 0; border-top: 2px dashed var(--c-load); border-radius: 0; vertical-align: 3px; }
+.fc-legend .tick::before { height: 0; border-top: 2px solid rgba(255, 255, 255, 0.6); border-radius: 0; vertical-align: 3px; }
+.fc-note { margin-top: 10px; }
+.inv-form.fc-form { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 10px 0 6px; }
+.inv-form.fc-form .fc-place { grid-column: span 2; }
+.fc-group { margin-top: 10px; }
+.fc-group .export-label { display: flex; justify-content: space-between; align-items: baseline; }
+.fc-threshold { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fc-threshold input { width: 56px; min-height: 30px; padding: 0 8px; font: inherit; color: var(--c-text); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; }
+.fc-recent { margin-top: 16px; }
+.fc-cmp { display: grid; gap: 6px; margin-top: 6px; }
+.fc-cmp-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 0.82rem; }
+.fc-cmp-bars { position: relative; height: 14px; }
+.fc-cmp-bars span { position: absolute; left: 0; height: 6px; border-radius: 3px; }
+.fc-cmp-bars .fa { top: 0; background: repeating-linear-gradient(135deg, rgba(244, 196, 48, 0.6) 0 3px, transparent 3px 6px); }
+.fc-cmp-bars .aa { top: 8px; background: var(--c-pv); }
+.fc-cmp-n { color: var(--c-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 480px) {
+  .fc-days { gap: 6px; }
+  .fc-day { padding: 8px; }
+  .fc-v { font-size: 1.1rem; }
+  .inv-form.fc-form { grid-template-columns: 1fr 1fr; }
+}
+.fc-settings label.check { margin-top: 12px; }
+.fc-settings label.check .setting-hint { display: block; margin-top: 2px; }

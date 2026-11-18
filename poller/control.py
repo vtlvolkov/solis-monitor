@@ -27,6 +27,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import downsample
+import forecast
 import mqtt
 import outages
 import rawread
@@ -159,6 +160,7 @@ class Controller:
         self.retention_store = None                  # downsample.RetentionStore, set by poller.main
         self.outages = None                          # outages.OutageWatcher, set by poller.main
         self.mqtt = None                             # mqtt.MqttPublisher, set by poller.main
+        self.forecast = None                         # forecast.Forecaster, set by poller.main
         self.downsampler = None                      # downsample.Downsampler, for the oldest readings
         self.addresses = None                        # address.AddressStore, set by poller.main
         self.poll_status = None                      # address.PollStatus, set by poller.main
@@ -262,6 +264,40 @@ class Controller:
 
     def outage_schedule(self) -> dict:
         return self._watcher().payload()
+
+    # ------------------------------------------------------------------ the solar forecast (the app's own setting)
+    def _forecaster(self):
+        if self.forecast is None:
+            raise ControlError(503, "The poller is still starting.")
+        return self.forecast
+
+    def solar_forecast(self) -> dict:
+        return self._forecaster().payload()
+
+    def solar_forecast_hours(self) -> dict:
+        return self._forecaster().hours()
+
+    def forecast_config(self) -> dict:
+        f = self._forecaster()
+        return {"config": f.store.config, "configured": f.store.configured(), "error": f.last_error,
+                "fetched_at": f.store.data["fetched_at"], "max_arrays": forecast.MAX_ARRAYS}
+
+    def set_forecast_config(self, body: dict) -> dict:
+        """Where the panels are and how they are mounted (the app's own setting: nothing reaches the inverter, so
+        CONTROL_ENABLED does not apply). lat null = off."""
+        f = self._forecaster()
+        before = f.store.config
+        try:
+            after, changed = f.store.set_config(body)
+        except ValueError as exc:
+            raise ControlError(400, str(exc)[:1].upper() + str(exc)[1:] + ".") from exc
+        def name(c):
+            return f"{sum(a['kwp'] for a in c['arrays']):g} kWp" if c and c["lat"] is not None else "off"
+        if name(before) != name(after) or changed:
+            self.audit("solar_forecast", before=name(before), written=name(after), verified=True, summary=f"Solar forecast: {name(before)} → {name(after)}")
+        if changed and f.store.configured():
+            f.reconfigured()
+        return self.forecast_config()
 
     # ------------------------------------------------------------------ MQTT (publishing only)
     def _mqtt(self):

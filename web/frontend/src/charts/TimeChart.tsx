@@ -16,6 +16,8 @@ export interface SeriesDef {
   /** Put on the right-hand axis (second unit). */
   right?: boolean;
   fill?: boolean;
+  /** A dashed line (a forecast rather than a reading). */
+  dash?: number[];
 }
 
 export function fmt(v: number | null | undefined, unit: Unit): string {
@@ -142,6 +144,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
           label: s.label,
           stroke: s.color,
           width: 2,
+          ...(s.dash ? { dash: s.dash } : {}),
           scale: s.right ? 'r' : 'y',
           fill: s.fill ? hexA(s.color, 0.12) : undefined,
           points: { show: false },
@@ -206,7 +209,7 @@ export function TimeChart({ data, series, height = 220, zeroLine = false, minY, 
             const st = stats(vals);
             return (
               <tr key={s.key}>
-                <td><span class="swatch" style={{ background: s.color }} />{t(s.label)}</td>
+                <td><span class={`swatch ${s.dash ? 'swatch-dash' : ''}`} style={{ background: s.dash ? undefined : s.color, borderColor: s.color }} />{t(s.label)}</td>
                 <td>{cursorIdx != null ? fmt(vals[cursorIdx], s.unit) : ''}</td>
                 <td>{fmt(showMin ? st.min : st.last, s.unit)}</td>
                 <td>{fmt(st.mean, s.unit)}</td>

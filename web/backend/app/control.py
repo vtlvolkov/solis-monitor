@@ -61,6 +61,18 @@ class ControlClient:
         assert kind in ("streets", "houses", "group", "groups")
         return self._call("GET", f"/outages/{kind}?{urllib.parse.urlencode(params)}", timeout=25)
 
+    def forecast(self) -> tuple[int, dict]:
+        return self._call("GET", "/forecast", timeout=10)
+
+    def forecast_hours(self) -> tuple[int, dict]:
+        return self._call("GET", "/forecast/hours", timeout=10)
+
+    def forecast_config(self) -> tuple[int, dict]:
+        return self._call("GET", "/forecast/config")
+
+    def set_forecast_config(self, body: dict) -> tuple[int, dict]:
+        return self._call("POST", "/forecast/config", body)
+
     def retention(self) -> tuple[int, dict]:
         return self._call("GET", "/retention", timeout=10)
 

@@ -11,6 +11,7 @@ import { ApiError, getJson, RANGES, type DailyPayload, type HistoryPayload, type
 import type { LiveState } from '../lib/live';
 import { t, tx } from '../lib/i18n';
 import { colors } from '../lib/tokens';
+import { withForecast } from '../lib/forecast';
 
 export const POWER: SeriesDef[] = [
   { key: 'grid_power', label: tx('Grid (+import)'), color: colors.grid, unit: 'W' },
@@ -18,6 +19,8 @@ export const POWER: SeriesDef[] = [
   { key: 'total_load_power', label: tx('Load'), color: colors.load, unit: 'W' },
   { key: 'pv_power', label: tx('PV'), color: colors.pv, unit: 'W' },
 ];
+/** Power flows with the solar forecast as a dashed PV line, once the forecast is set up. */
+const POWER_FC: SeriesDef[] = [...POWER, { key: 'pv_forecast', label: tx('PV forecast'), color: colors.pv, unit: 'W', dash: [6, 4] }];
 export const SOC: SeriesDef[] = [{ key: 'battery_soc', label: tx('SOC'), color: colors.battery, unit: '%', fill: true }];
 const BATT_VI: SeriesDef[] = [
   { key: 'battery_voltage', label: tx('Voltage'), color: colors.battery, unit: 'V' },
@@ -94,12 +97,17 @@ export function Charts({ live, now }: { live: LiveState; now: number }) {
   const summary = usePoll<SummaryPayload>('/api/energy/summary', 300_000);
   const daily = useFetch<DailyPayload>('/api/energy/daily?days=30', auto ? 300_000 : null);
   const h = hist.data;
+  const solar = usePoll<{ configured: boolean; hours: [number, number][] }>('/api/forecast/hours', 900_000).data;
+  const withSun = !!solar?.configured && solar.hours.length > 0;
+  // Today on the day view runs to midnight, so the dashed line shows the rest of the day too.
+  const powerData = useMemo(() => (h && withSun ? withForecast(h, solar!.hours, isToday && h.stop != null ? h.stop : undefined) : h),
+    [h, solar, withSun, isToday]);
   const f = live.data?.fields;
   const err = hist.error ?? live.error;
 
-  const chart = (title: string, series: SeriesDef[], opts: { zeroLine?: boolean; minY?: number; maxY?: number; height?: number } = {}) => (
+  const chart = (title: string, series: SeriesDef[], opts: { zeroLine?: boolean; minY?: number; maxY?: number; height?: number } = {}, data = h) => (
     <Card title={title} class="chart-card" aside={day && title === 'Power flows' && outageBands?.length ? <span class="band-note">{t('Shaded: grid outage')}</span> : undefined}>
-      {h ? <TimeChart data={h} series={series} {...opts} {...(day ? { xRange: h.start != null && h.stop != null ? [h.start, h.stop] as [number, number] : undefined, bands: outageBands, showMin: true } : {})} /> : hist.error ? <div class="chart-error">{t(hist.error)}</div> : <Skeleton h={opts.height ?? 220} />}
+      {data && h ? <TimeChart data={data} series={series} {...opts} {...(day ? { xRange: h.start != null && h.stop != null ? [h.start, h.stop] as [number, number] : undefined, bands: outageBands, showMin: true } : {})} /> : hist.error ? <div class="chart-error">{t(hist.error)}</div> : <Skeleton h={opts.height ?? 220} />}
     </Card>
   );
 
@@ -135,7 +143,7 @@ export function Charts({ live, now }: { live: LiveState; now: number }) {
         : f ? <StatRow f={f} /> : <div class="stat-row">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} h={96} />)}</div>}
 
       <div class="chart-grid">
-        <div class="span-2">{chart('Power flows', POWER, { zeroLine: true, height: 280 })}</div>
+        <div class="span-2">{chart('Power flows', withSun ? POWER_FC : POWER, { zeroLine: true, height: 280 }, powerData)}</div>
         {chart('Battery SOC', SOC, { minY: 0, maxY: 100 })}
         {chart('Battery voltage & current', BATT_VI)}
         {chart('Grid & backup voltage', GRID_V)}

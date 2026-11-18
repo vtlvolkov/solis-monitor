@@ -1,5 +1,6 @@
 // Planned outage schedule (графік відключень): payload types and pure helpers for the Overview card and the
 // Settings card. The server fetches the schedule (Yasno for now) and works out whether the battery will last.
+import { kwh } from './format';
 import { t, tx } from './i18n';
 
 export type SlotType = 'Definite' | 'Possible';
@@ -15,6 +16,7 @@ export interface BatteryVerdict {
   runs_out_at: string | null;
   load_w: number | null;        // the load expected for those hours (from the history)
   soc_at_start: number | null;  // SOC expected when the outage begins
+  pv_kwh?: number | null;       // the solar forecast's energy during the outage, counted in (null: no forecast set up)
 }
 export interface OutageAlerts { before: boolean; short: boolean; changes: boolean }
 export interface OutageConfig {
@@ -78,6 +80,7 @@ export function describeDay(day: ScheduleDay): string {
 }
 
 export function verdictText(b: BatteryVerdict, fmt: (s: number) => string): { text: string; tone: 'ok' | 'bad' } {
-  if (b.enough) return { text: t('Battery is enough: ≈ {d} at about {w} W', { d: b.lasts_s != null ? fmt(b.lasts_s) : '--', w: b.load_w ?? '--' }), tone: 'ok' };
-  return { text: t('Battery runs out ≈ {at}, {short} short', { at: b.runs_out_at ?? '--', short: b.short_s != null ? fmt(b.short_s) : '--' }), tone: 'bad' };
+  const sun = b.pv_kwh != null && b.pv_kwh >= 0.1 ? ` · ${t('with ≈ {energy} of sun counted', { energy: kwh(b.pv_kwh) })}` : '';
+  if (b.enough) return { text: t('Battery is enough: ≈ {d} at about {w} W', { d: b.lasts_s != null ? fmt(b.lasts_s) : '--', w: b.load_w ?? '--' }) + sun, tone: 'ok' };
+  return { text: t('Battery runs out ≈ {at}, {short} short', { at: b.runs_out_at ?? '--', short: b.short_s != null ? fmt(b.short_s) : '--' }) + sun, tone: 'bad' };
 }
