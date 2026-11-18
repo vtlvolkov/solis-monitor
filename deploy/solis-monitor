@@ -9,9 +9,10 @@
 #   solis-monitor dashboard-updates on|off  let the dashboard's Settings page update and back up this install (off by default for source builds)
 #   solis-monitor reset-login            forgot the dashboard password you set? go back to the one in .env
 #   solis-monitor secure-tokens          give the dashboard a read-only database token and its own poller secret (installs do this)
-#   solis-monitor backup [FILE|DIR]      one .tar.gz with the history, the saved settings and .env (default: backups/ here)
+#   solis-monitor backup [FILE|DIR]      one .tar.gz with the history, the saved settings and .env
 #                                        (default: the folder set on the Settings page, else backups/ here; --from-dashboard: asked
-#                                        for on the Settings page, which also keeps only the newest N there)
+#                                        for on the Settings page, which also keeps only the newest N there; a backup into that
+#                                        folder is also copied to Nextcloud/WebDAV when that is set up there, unless --no-copy)
 #   solis-monitor restore FILE [--yes]   put a backup back, on this or a fresh install (replaces the history and .env);
 #                                        the dashboard's Backup tab can do this too, for the archives in its folder
 #   solis-monitor edit                   open .env in your editor, then apply the changes
@@ -115,6 +116,10 @@ cmd_status() {
   local last
   last="$(ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | sed -n 1p || true)"
   if [[ -n "$last" ]]; then echo "Backup:    $(date -r "$last" +%Y-%m-%d\ %H:%M)  $last"; else echo "Backup:    none yet in $(backup_dir) (solis-monitor backup)"; fi
+  if [[ -n "$(backup_schedule)" ]]; then echo "           daily at $(backup_schedule)$(scheduler_installed || echo ' (the timer is missing: solis-monitor dashboard-updates on)')"; fi
+  if [[ -s "$REMOTE_CONF" ]]; then
+    echo "           copied to $(remote_label): $(remote_get URL) $(remote_get FOLDER)$(sed -n 's/.*"last":{"state":"\([a-z]*\)".*"at":"\([^"]*\)".*/  (last: \1, \2)/p' "$CTL/backup-remote.json" 2>/dev/null || true)"
+  fi
   compose ps --format 'table {{.Name}}\t{{.Status}}'
   echo "--- poller, last lines ---"
   compose logs --tail 5 poller 2>&1 || true
@@ -185,9 +190,16 @@ cmd_secure_tokens() {
 # the web container only sees backups/ here.
 backup_dir() { local d; d="$(sed -n 's/.*"dir":"\([^"]*\)".*/\1/p' "$CTL/backup-config.json" 2>/dev/null | sed -n 1p || true)"; printf '%s' "${d:-$DIR/backups}"; }
 backup_keep() { local k; k="$(sed -n 's/.*"keep":\([0-9]*\).*/\1/p' "$CTL/backup-config.json" 2>/dev/null | sed -n 1p || true)"; printf '%s' "${k:-${SOLIS_BACKUP_KEEP:-5}}"; }
-write_backup_config() {   # write_backup_config DIR KEEP
+backup_schedule() { sed -n 's/.*"schedule":"\([0-9][0-9]:[0-9][0-9]\)".*/\1/p' "$CTL/backup-config.json" 2>/dev/null | sed -n 1p || true; }
+# The timer that makes the daily backups (installed by dashboard-updates on); the page offers a time only when it is there.
+scheduler_installed() { [[ -f "${SOLIS_UNIT_DIR:-/etc/systemd/system}/solis-monitor-backup.timer" ]]; }
+write_backup_config() {   # write_backup_config DIR KEEP [SCHEDULE]: the schedule stays as it was unless given ("" = off)
+  local schedule scheduler=false
+  if (($# >= 3)); then schedule="$3"; else schedule="$(backup_schedule)"; fi
+  scheduler_installed && scheduler=true
   ensure_ctl
-  printf '{"dir":"%s","default_dir":"%s","keep":%s}\n' "$(json_text "$1")" "$(json_text "$DIR/backups")" "$2" > "$CTL/backup-config.json.tmp" 2>/dev/null \
+  printf '{"dir":"%s","default_dir":"%s","keep":%s,"schedule":"%s","scheduler":%s}\n' "$(json_text "$1")" "$(json_text "$DIR/backups")" "$2" \
+    "$(json_text "$schedule")" "$scheduler" > "$CTL/backup-config.json.tmp" 2>/dev/null \
     && mv "$CTL/backup-config.json.tmp" "$CTL/backup-config.json" 2>/dev/null || true
 }
 write_backup_index() {    # write_backup_index DIR: what is in the backup folder, for the dashboard's list
@@ -224,22 +236,29 @@ req_value() {      # req_value KEY JSON
   printf '%s' "$2" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\", }]*\).*/\1/p" | sed -n 1p
 }
 
-BREPORT=""; BREPORT_DONE=""; BREPORT_STARTED=""
-breport() {          # breport STATE MESSAGE [FILE]: progress for the dashboard's Backup tab (only when it asked for this backup)
+BREPORT=""; BREPORT_DONE=""; BREPORT_STARTED=""; SCHEDULED=""; COPY_STATE=""; COPY_MESSAGE=""
+breport() {          # breport STATE MESSAGE [FILE]: progress for the dashboard's Backup tab (when it asked, or for a scheduled one)
   [[ -n "$BREPORT" ]] || return 0
   local finished=""
   [[ "$1" == running ]] || { finished="$(now_iso)"; BREPORT_DONE=1; }
-  printf '{"state":"%s","message":"%s","file":"%s","started":"%s","finished":"%s"}\n' \
-    "$1" "$(json_text "$2")" "$(json_text "${3:-}")" "$BREPORT_STARTED" "$finished" \
+  printf '{"state":"%s","message":"%s","file":"%s","started":"%s","finished":"%s","scheduled":%s,"copy":"%s","copy_message":"%s"}\n' \
+    "$1" "$(json_text "$2")" "$(json_text "${3:-}")" "$BREPORT_STARTED" "$finished" "$([[ -n "$SCHEDULED" ]] && echo true || echo false)" \
+    "$COPY_STATE" "$(json_text "$COPY_MESSAGE")" \
     > "$CTL/backup-status.json.tmp" 2>/dev/null && mv "$CTL/backup-status.json.tmp" "$CTL/backup-status.json" 2>/dev/null || true
 }
-finish_breport() { [[ -n "$BREPORT" && -z "$BREPORT_DONE" ]] && breport failed "The backup stopped before it finished. See: solis-monitor logs" || true; }
+finish_breport() {
+  [[ -n "$BREPORT" && -z "$BREPORT_DONE" ]] || return 0
+  breport failed "The backup stopped before it finished. See: solis-monitor logs"
+  [[ -z "$SCHEDULED" ]] || notify "⚠️ The daily backup failed. See: solis-monitor logs"
+}
 
 cmd_backup() {
-  local target="" site stamp file tmp
+  local target="" site stamp file tmp copy=1
   while (($#)); do
     case "$1" in
       --from-dashboard) BREPORT=1; shift ;;   # started by the dashboard's request file; report progress back
+      --scheduled) SCHEDULED=1; shift ;;      # from solis-monitor-backup.timer, every 15 minutes: backs up only when due
+      --no-copy) copy=""; shift ;;
       -*) die "unknown option $1" ;;
       *) target="$1"; shift ;;
     esac
@@ -251,7 +270,7 @@ cmd_backup() {
     request="$(head -c 2000 "$CTL/backup-request" 2>/dev/null || true)"
     rm -f "$CTL/backup-request" || die "cannot remove $CTL/backup-request (is the folder owned by the user running this?)"
     BREPORT_STARTED="$(now_iso)"
-    exec 8>/tmp/solis-monitor-backup.lock
+    exec 8>"$DIR/.backup.lock"          # here, not in /tmp: a lock left there by root would block a run as the folder owner
     flock -n 8 || { echo "another backup is running"; BREPORT=""; exit 0; }
     action="$(req_value action "$request")"
     case "$action" in
@@ -259,8 +278,17 @@ cmd_backup() {
       set-folder) set_backup_folder "$request"; return $? ;;
       remove) remove_backup "$request"; return $? ;;
       restore) restore_from_dashboard "$request"; return $? ;;
+      set-remote) set_remote "$request"; return $? ;;
+      remove-remote) remove_remote; return $? ;;
+      set-schedule) set_schedule "$request"; return $? ;;
       *) breport failed "The server does not know that request."; echo "solis-monitor: unknown request '$action'" >&2; return 1 ;;
     esac
+  elif [[ -n "$SCHEDULED" ]]; then
+    scheduled_due || return 0                                            # most runs of the timer: not yet, or done today
+    exec 8>"$DIR/.backup.lock"
+    flock -n 8 || { echo "another backup is running; trying again in 15 minutes"; return 0; }
+    ensure_ctl; date +%s > "$CTL/backup-last-scheduled"                 # one try a day: a failure is reported, not repeated
+    BREPORT=1; BREPORT_STARTED="$(now_iso)"
   fi
   target="${target:-$(backup_dir)}"
   site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
@@ -269,12 +297,13 @@ cmd_backup() {
   make_archive "$file"
   if [[ "$(dirname "$file")" == "$(backup_dir)" ]]; then
     if [[ -n "$BREPORT" ]]; then
-      # Asked for from the dashboard: keep only the newest N in the backup folder, so clicking cannot fill the disk.
+      # Asked for from the dashboard (or scheduled): keep only the newest N in the backup folder, so it cannot fill the disk.
       # Archives made by hand elsewhere, and the ones you downloaded, are not touched.
       local keep old; keep="$(backup_keep)"
       ls -1t "$(backup_dir)"/solis-monitor-*.tar.gz 2>/dev/null | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
     fi
     write_backup_index "$(backup_dir)"
+    [[ -z "$copy" ]] || remote_copy "$file" || true                     # a failed copy is reported; the archive stays here
   fi
   [[ -z "$BREPORT" ]] || breport ok "Backup written" "$(basename "$file")"
 }
@@ -348,6 +377,218 @@ set_backup_folder() {     # the dashboard asked for another folder (and how many
   write_backup_index "$d"
   echo "Backups go to $d (keeping the newest $keep made from the dashboard)."
   breport ok "Folder set to $d"
+}
+
+# --- Daily backups: solis-monitor-backup.timer runs `backup --scheduled` every 15 minutes; it backs up once a day, at
+# the first run after the time set on the Backup tab (so a machine that was off at that time catches up when it starts).
+scheduled_due() {
+  local at slot last now
+  at="$(backup_schedule)"; [[ -n "$at" ]] || return 1
+  now="$(date +%s)"; slot="$(date -d "today $at" +%s 2>/dev/null)" || return 1
+  last="$(cat "$CTL/backup-last-scheduled" 2>/dev/null || true)"; [[ "$last" =~ ^[0-9]+$ ]] || last=0
+  ((now >= slot && last < slot))
+}
+
+set_schedule() {          # the dashboard asked for a daily backup at HH:MM, or none
+  local at
+  at="$(req_value time "$1")"
+  [[ "$at" == off ]] && at=""
+  if [[ -n "$at" && ! "$at" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then breport failed "That is not a time of day."; return 1; fi
+  if [[ -n "$at" ]] && ! scheduler_installed; then
+    breport failed "Daily backups need the timer on the server. On the server run: solis-monitor dashboard-updates on"; return 1
+  fi
+  write_backup_config "$(backup_dir)" "$(backup_keep)" "$at"
+  if [[ -n "$at" ]]; then echo "A backup is made every day at $at."; breport ok "Daily backups are on."
+  else echo "Daily backups are off."; breport ok "Daily backups are off."; fi
+}
+
+# --- A copy in Nextcloud or on another WebDAV server, set on the Backup tab. The password is kept here, in a file only
+# this install's owner can read, and never in control/ (the web container reads that): the page only learns that one is
+# set. Every value is stored base64-encoded, so nothing in it (quotes, spaces, $) is ever parsed by the shell, and it
+# reaches curl only through a config on a pipe (never the command line, which ps would show).
+REMOTE_CONF="$DIR/backup-remote.conf"
+remote_get() {            # remote_get KEY [FILE]
+  local v; v="$(sed -n "s/^$1=//p" "${2:-$REMOTE_CONF}" 2>/dev/null | sed -n 1p || true)"
+  [[ -z "$v" ]] || printf '%s' "$v" | base64 -d 2>/dev/null || true
+}
+b64() { printf '%s' "$1" | base64 -w0; }
+urlenc() {                # one path segment, percent-encoded byte by byte
+  local LC_ALL=C s="$1" out="" c i
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in [A-Za-z0-9._~-]) out+="$c" ;; *) printf -v c '%%%02X' "'$c"; out+="$c" ;; esac
+  done
+  printf '%s' "$out"
+}
+curl_quoted() { local v="${1//\\/\\\\}"; printf '"%s"' "${v//\"/\\\"}"; }
+RCONF=""                  # the settings dav() uses: the saved ones, or new ones while they are tested
+dav() {                   # dav METHOD URL [curl args...]: prints the HTTP status; 000 not reached, cut, timeout
+  local method="$1" url="$2" conf="${RCONF:-$REMOTE_CONF}" code rc=0; shift 2
+  code="$(curl -sS -m "${SOLIS_DAV_TIMEOUT:-600}" -o "${DAV_OUT:-/dev/null}" -w '%{http_code}' -X "$method" \
+    -K <(printf 'user = %s\n' "$(curl_quoted "$(remote_get USER "$conf"):$(remote_get PASS "$conf")")") "$@" "$url" 2>/dev/null)" || rc=$?
+  case "$rc" in 52|55|56) code="cut" ;; 28) code="timeout" ;; esac
+  printf '%s' "${code:-000}"
+}
+dav_reason() {            # a sentence for the page from an HTTP status
+  case "$1" in
+    000) echo "The server could not be reached." ;;
+    cut) echo "The server broke the connection off. It may limit how much one request can send." ;;
+    timeout) echo "The server did not answer in time." ;;
+    401) echo "The server refused the user name or password." ;;
+    403) echo "The server does not let this user write there." ;;
+    404|409) echo "That address or folder was not found on the server." ;;
+    413) echo "The server refused a file this large." ;;
+    507) echo "The server has no room left." ;;
+    *) echo "The server answered with an error (HTTP $1)." ;;
+  esac
+}
+remote_label() { if [[ "$(remote_get KIND "${RCONF:-$REMOTE_CONF}")" == nextcloud ]]; then echo Nextcloud; else echo "the WebDAV server"; fi; }
+remote_urls() {           # sets R_DIR (our folder), R_DIRS (each level of it, to create), R_UP (Nextcloud's upload area)
+  local conf="${RCONF:-$REMOTE_CONF}" url user seg path="" root parts
+  url="$(remote_get URL "$conf")"; url="${url%/}"; user="$(remote_get USER "$conf")"
+  if [[ "$(remote_get KIND "$conf")" == nextcloud ]]; then
+    root="$url/remote.php/dav/files/$(urlenc "$user")"; R_UP="$url/remote.php/dav/uploads/$(urlenc "$user")"
+  else root="$url"; R_UP=""; fi
+  R_DIRS=()
+  IFS=/ read -ra parts <<< "$(remote_get FOLDER "$conf")"
+  for seg in "${parts[@]}"; do [[ -n "$seg" ]] || continue; path+="/$(urlenc "$seg")"; R_DIRS+=("$root$path"); done
+  R_DIR="$root$path"
+}
+remote_mkdirs() {         # create the folder one level at a time (201 made, 405 already there); prints a failing status
+  local d code
+  for d in "${R_DIRS[@]}"; do
+    code="$(dav MKCOL "$d/")"
+    [[ "$code" == 201 || "$code" == 405 ]] || { echo "$code"; return 1; }
+  done
+  [[ ${#R_DIRS[@]} -gt 0 ]] || { code="$(dav PROPFIND "$R_DIR/" -H 'Depth: 0')"; [[ "$code" == 207 ]] || { echo "$code"; return 1; }; }
+}
+remote_size() {           # remote_size URL: the size the server has for a file
+  local out; out="$(mktemp)"
+  DAV_OUT="$out" dav PROPFIND "$1" -H 'Depth: 0' >/dev/null
+  grep -oiE 'getcontentlength[^>]*>[0-9]+' "$out" | grep -oE '[0-9]+$' | sed -n 1p || true
+  rm -f "$out"
+}
+# One file up. Nextcloud: its chunked upload (5 MB pieces, each retried, joined by Nextcloud only once all are there),
+# because some servers cut one large request off. Other servers: one PUT under a .part name, renamed when complete.
+# Either way a broken upload never shows up as a backup there. Prints a failing status.
+remote_put() {            # remote_put FILE NAME
+  local file="$1" dest size code up n try ok chunk work
+  dest="$R_DIR/$(urlenc "$2")"; size="$(stat -c %s "$file")"
+  if [[ -n "$R_UP" ]]; then
+    up="$R_UP/solis-monitor-$(date +%s)-$$"
+    code="$(dav MKCOL "$up" -H "Destination: $dest")"
+    [[ "$code" == 201 ]] || { echo "$code"; return 1; }
+    work="$(mktemp -d)"
+    split -b "${SOLIS_DAV_CHUNK_MB:-5}M" -d -a 5 "$file" "$work/c"
+    n=0
+    for chunk in "$work"/c*; do
+      n=$((n + 1)); ok=""
+      for try in 1 2 3; do
+        code="$(dav PUT "$up/$(printf '%05d' "$n")" -T "$chunk" -H "Destination: $dest" -H "OC-Total-Length: $size")"
+        if [[ "$code" == 201 || "$code" == 204 ]]; then ok=1; break; fi
+        sleep "$((try * ${SOLIS_DAV_RETRY_S:-10}))"
+      done
+      [[ -n "$ok" ]] || { rm -rf "$work"; dav DELETE "$up" >/dev/null; echo "$code"; return 1; }
+    done
+    rm -rf "$work"
+    code="$(dav MOVE "$up/.file" -H "Destination: $dest" -H "OC-Total-Length: $size" -H 'Overwrite: T')"
+    [[ "$code" == 201 || "$code" == 204 ]] || { dav DELETE "$up" >/dev/null; echo "$code"; return 1; }
+  else
+    code="$(dav PUT "$dest.part" -T "$file")"
+    [[ "$code" == 201 || "$code" == 204 ]] || { dav DELETE "$dest.part" >/dev/null; echo "$code"; return 1; }
+    code="$(dav MOVE "$dest.part" -H "Destination: $dest" -H 'Overwrite: T')"
+    [[ "$code" == 201 || "$code" == 204 ]] || { dav DELETE "$dest.part" >/dev/null; echo "$code"; return 1; }
+  fi
+  if [[ "$(remote_size "$dest")" != "$size" ]]; then dav DELETE "$dest" >/dev/null; echo size; return 1; fi
+}
+remote_prune() {          # keep the newest KEEP of this site's archives there; others' files (and other sites') are left alone
+  local keep site out names n=0 f
+  keep="$(remote_get KEEP)"; [[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 ]] || keep=14
+  site="$(env_value SITE_NAME | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
+  out="$(mktemp)"
+  [[ "$(DAV_OUT="$out" dav PROPFIND "$R_DIR/" -H 'Depth: 1')" == 207 ]] || { rm -f "$out"; return 0; }
+  names="$(grep -oiE '<([a-z0-9]+:)?href>[^<]*</([a-z0-9]+:)?href>' "$out" | sed -E 's#<[^>]*>##g; s#.*/##' \
+    | grep -E "^solis-monitor${site:+-$site}-[0-9]{8}-[0-9]{6}\.tar\.gz(\.part)?$" | sort -r || true)"
+  rm -f "$out"
+  while read -r f; do
+    [[ -n "$f" ]] || continue
+    if [[ "$f" == *.part ]]; then dav DELETE "$R_DIR/$f" >/dev/null; continue; fi     # left by an upload that broke off
+    n=$((n + 1)); ((n <= keep)) || dav DELETE "$R_DIR/$f" >/dev/null
+  done <<< "$names"
+}
+write_remote_info() {     # write_remote_info [STATE MESSAGE FILE]: what the page shows (never the password)
+  ensure_ctl
+  [[ -s "$REMOTE_CONF" ]] || { rm -f "$CTL/backup-remote.json"; return 0; }
+  local last=""
+  [[ -z "${1:-}" ]] || last="$(printf ',"last":{"state":"%s","message":"%s","file":"%s","at":"%s"}' "$1" "$(json_text "$2")" "$(json_text "$3")" "$(now_iso)")"
+  printf '{"kind":"%s","url":"%s","user":"%s","folder":"%s","keep":%s%s}\n' "$(json_text "$(remote_get KIND)")" "$(json_text "$(remote_get URL)")" \
+    "$(json_text "$(remote_get USER)")" "$(json_text "$(remote_get FOLDER)")" "$(remote_get KEEP)" "$last" \
+    > "$CTL/backup-remote.json.tmp" 2>/dev/null && mv "$CTL/backup-remote.json.tmp" "$CTL/backup-remote.json" 2>/dev/null || true
+}
+remote_copy() {           # remote_copy FILE: after a backup into the backup folder, when a server is set on the Backup tab
+  [[ -s "$REMOTE_CONF" ]] || return 0
+  local file="$1" name label code
+  name="$(basename "$file")"; label="$(remote_label)"
+  echo "Copying to $label ..."
+  breport running "Copying to $label"
+  remote_urls
+  if ! code="$(remote_mkdirs)" || ! code="$(remote_put "$file" "$name")"; then
+    if [[ "$code" == size ]]; then COPY_MESSAGE="The copy on the server is incomplete."; else COPY_MESSAGE="$(dav_reason "$code")"; fi
+    COPY_STATE=failed
+    echo "solis-monitor: the copy to $label failed: $COPY_MESSAGE The backup is still here: $file" >&2
+    write_remote_info failed "$COPY_MESSAGE" "$name"
+    notify "⚠️ The backup could not be copied to $label: $COPY_MESSAGE"
+    return 1
+  fi
+  remote_prune
+  COPY_STATE=ok; COPY_MESSAGE="Copied to $label."
+  write_remote_info ok "$COPY_MESSAGE" "$name"
+  echo "Copied to $label: $R_DIR/$name"
+}
+
+# The dashboard asked to copy the backups to a server. The values come base64-encoded (any character is allowed in a
+# password) and are checked here again; then the connection is tried (the folder created, a small file written and
+# removed) and only settings that work are kept. An empty password keeps the saved one.
+req_b64() { req_value "$1_b64" "$2" | base64 -d 2>/dev/null || true; }
+set_remote() {
+  local kind url user pass folder keep code new
+  kind="$(req_value kind "$1")"; keep="$(req_value keep "$1")"
+  url="$(req_b64 url "$1")"; user="$(req_b64 user "$1")"; pass="$(req_b64 password "$1")"; folder="$(req_b64 folder "$1")"
+  url="${url%/}"
+  [[ "$kind" == nextcloud || "$kind" == webdav ]] || { breport failed "The server does not know that request."; return 1; }
+  if [[ ${#url} -gt 300 || ! "$url" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~%/+-]*)?$ ]]; then
+    breport failed "The address must start with http:// or https://."; return 1
+  fi
+  if [[ -z "$user" || ${#user} -gt 200 || "$user" == *:* || "$user" =~ [[:cntrl:]] ]]; then breport failed "Enter the user name."; return 1; fi
+  [[ -n "$pass" ]] || pass="$(remote_get PASS)"
+  if [[ -z "$pass" || ${#pass} -gt 500 || "$pass" =~ [[:cntrl:]] ]]; then breport failed "Enter the password."; return 1; fi
+  if [[ ${#folder} -gt 200 || "$folder" =~ (^|/)\.\.?(/|$) || "$folder" =~ [[:cntrl:]] || "$folder" == *[\"\\]* ]]; then
+    breport failed "That folder name is not allowed."; return 1
+  fi
+  [[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 && "$keep" -le 100 ]] || keep=14
+  new="$REMOTE_CONF.new"
+  (umask 077; printf 'KIND=%s\nURL=%s\nUSER=%s\nPASS=%s\nFOLDER=%s\nKEEP=%s\n' "$(b64 "$kind")" "$(b64 "$url")" "$(b64 "$user")" \
+    "$(b64 "$pass")" "$(b64 "${folder#/}")" "$(b64 "$keep")" > "$new")
+  RCONF="$new"
+  breport running "Trying the connection"
+  remote_urls
+  local probe; probe="$(mktemp)"; echo "Solis Monitor checks that it can write here; this file is removed at once." > "$probe"
+  if ! code="$(remote_mkdirs)" || ! code="$(dav PUT "$R_DIR/.solis-monitor-test" -T "$probe")" || [[ "$code" != 201 && "$code" != 204 ]]; then
+    rm -f "$probe" "$new"; RCONF=""
+    breport failed "$(dav_reason "$code")"; echo "solis-monitor: $(dav_reason "$code")" >&2; return 1
+  fi
+  dav DELETE "$R_DIR/.solis-monitor-test" >/dev/null
+  rm -f "$probe"; RCONF=""
+  mv "$new" "$REMOTE_CONF"
+  write_remote_info
+  echo "Backups are copied to $(remote_label) from now on (keeping the newest $keep there)."
+  breport ok "Connected. Backups are copied there from now on."
+}
+remove_remote() {
+  rm -f "$REMOTE_CONF" "$REMOTE_CONF.new"
+  write_remote_info
+  echo "Backups are no longer copied to a server (the copies already there stay)."
+  breport ok "Backups are no longer copied to a server."
 }
 
 # The opposite: the database is replaced in full (influx restore --full, so the tokens in the restored .env match it),
@@ -463,6 +704,9 @@ cmd_update() {
   compose up -d --remove-orphans
   if wait_healthy; then
     install -m 755 "$tmp/solis-monitor" "$SELF.new" && mv "$SELF.new" "$SELF"      # mv: the running copy is not overwritten in place
+    # The new release's helper units (daily backups came in a later one than dashboard-updates on was run with);
+    # only as root, which owns /etc/systemd. A folder owned by a user keeps its units until dashboard-updates on.
+    if [[ $EUID -eq 0 && -f "$CTL/bridge.json" && -z "${SOLIS_TEST_MODE:-}" ]]; then "$SELF" dashboard-updates on >/dev/null 2>&1 || true; fi
     echo "Updated to $target."
     [[ -n "$(env_value CONTROL_TOKEN)" && -n "$(env_value INFLUX_READ_TOKEN)" ]] \
       || echo "The dashboard still reads the database with the admin token; give it a read-only one with: solis-monitor secure-tokens"
@@ -592,7 +836,6 @@ Unit=solis-monitor-dashboard-update.service
 WantedBy=multi-user.target
 UNIT
       as_root install -d -o "$owner" -m 755 "$DIR/backups"
-      [[ -s "$CTL/backup-config.json" ]] || { write_backup_config "$DIR/backups" 5; write_backup_index "$DIR/backups"; }
       as_root tee "$unit_dir/solis-monitor-dashboard-backup.service" >/dev/null <<UNIT
 [Unit]
 Description=Back up Solis Monitor (asked for on the dashboard)
@@ -614,12 +857,39 @@ Unit=solis-monitor-dashboard-backup.service
 [Install]
 WantedBy=multi-user.target
 UNIT
+      # Daily backups: every 15 minutes `backup --scheduled` looks whether the time set on the Backup tab has come
+      # (so the page sets the time without touching systemd, and a machine that was off catches up when it starts).
+      as_root tee "$unit_dir/solis-monitor-backup.service" >/dev/null <<UNIT
+[Unit]
+Description=Daily Solis Monitor backup (when its time, set on the dashboard, has come)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+$user_line
+ExecStart=$SELF backup --scheduled
+UNIT
+      as_root tee "$unit_dir/solis-monitor-backup.timer" >/dev/null <<UNIT
+[Unit]
+Description=Look every 15 minutes whether the daily Solis Monitor backup is due
+
+[Timer]
+OnCalendar=*:0/15
+OnBootSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+      # (written after the timer, so it says the timer is there; keeps the folder, count and time already chosen)
+      write_backup_config "$(backup_dir)" "$(backup_keep)"; [[ -s "$CTL/backups.json" ]] || write_backup_index "$(backup_dir)"
+      [[ "$owner" == root ]] || as_root chown "$owner" "$CTL/backup-config.json" "$CTL/backups.json" 2>/dev/null || true
       printf '{"enabled":true,"version":"%s","updated":"%s"}\n' "$(json_text "$(env_value SOLIS_VERSION)")" "$(now_iso)" | as_root -u "$owner" tee "$CTL/bridge.json" >/dev/null
       as_root systemctl daemon-reload
-      as_root systemctl enable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path
-      echo "Updating and backing up from the dashboard are on: Settings -> System -> Software, Settings -> Backup." ;;
+      as_root systemctl enable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path solis-monitor-backup.timer
+      echo "Updating and backing up from the dashboard are on: Settings -> System -> Software, Settings -> Backup (with daily backups, if you set a time there)." ;;
     off)
-      as_root systemctl disable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path 2>/dev/null || true
+      as_root systemctl disable --now solis-monitor-dashboard-update.path solis-monitor-dashboard-backup.path solis-monitor-backup.timer 2>/dev/null || true
       rm -f "$CTL/bridge.json" "$CTL/update-request" "$CTL/backup-request"
       echo "Updating and backing up from the dashboard are off." ;;
     *) die "usage: solis-monitor dashboard-updates on|off" ;;

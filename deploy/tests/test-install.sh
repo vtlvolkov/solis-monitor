@@ -7,7 +7,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 T="$(mktemp -d)"
-trap 'kill "${MOCK_PID:-}" 2>/dev/null; rm -rf "$T"' EXIT
+trap 'kill "${MOCK_PID:-}" "${DAV_PID:-}" 2>/dev/null; rm -rf "$T"' EXIT
 REAL_DOCKER="$(command -v docker || true)"
 fails=0
 ok() { echo "  ok   $1"; }
@@ -310,6 +310,73 @@ echo "not a backup" > "$T/mnt/usb/solis/solis-monitor-20200101-000000.tar.gz"
 echo '{"action":"restore","name":"solis-monitor-20200101-000000.tar.gz","backup_first":false}' > "$T/inst/control/backup-request"
 out=$(upd backup --from-dashboard 2>&1); check "a broken archive fails before anything is stopped, and the page is told" '[[ $? -ne 0 && "$(bstatus_of state)" == failed ]] && ! grep -q "^compose stop" <(tail -3 "$T/docker.log")'
 rm -f "$T/mnt/usb/solis/solis-monitor-20200101-000000.tar.gz"
+
+echo "daily backups"
+cfg_sched() { sed -n 's/.*"schedule":"\([^"]*\)".*/\1/p' "$T/inst/control/backup-config.json"; }
+echo '{"action":"set-schedule","time":"03:30"}' > "$T/inst/control/backup-request"
+out=$(SOLIS_UNIT_DIR="$T/nounits" upd backup --from-dashboard 2>&1); check "a time without the timer is refused, and the page says what to run" '[[ $? -ne 0 && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == *"dashboard-updates on"* && -z "$(cfg_sched)" ]]'
+check "dashboard-updates on installs the timer, which runs backup --scheduled" 'grep -q "^OnCalendar=\*:0/15$" "$T/units/solis-monitor-backup.timer" && grep -q "^ExecStart=$T/inst/solis-monitor backup --scheduled$" "$T/units/solis-monitor-backup.service" && grep -q "solis-monitor-backup.timer" "$T/systemctl.log"'
+echo '{"action": "set-schedule", "time": "24:00"}' > "$T/inst/control/backup-request"
+out=$(SOLIS_UNIT_DIR="$T/units" upd backup --from-dashboard 2>&1); check "a time that is not a time is refused" '[[ $? -ne 0 && "$(bstatus_of message)" == "That is not a time of day." ]]'
+echo '{"action": "set-schedule", "time": "00:00"}' > "$T/inst/control/backup-request"
+out=$(SOLIS_UNIT_DIR="$T/units" upd backup --from-dashboard 2>&1); rc=$?
+check "a time is kept with the folder and the keep count" '[[ $rc -eq 0 && "$(cfg_sched)" == 00:00 && "$(cfg_of dir)" == "$T/mnt/usb/solis" && "$(cfg_of keep)" == 3 && "$(cfg_of scheduler)" == true ]]'
+n_before=$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l); rm -f "$T/inst/control/backup-last-scheduled"; sleep 1
+out=$(SOLIS_UNIT_DIR="$T/units" upd backup --scheduled 2>&1); rc=$?
+check "the first run after the time makes a backup, reported to the page as scheduled" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && "$(sed -n "s/.*\"scheduled\":\([a-z]*\).*/\1/p" "$T/inst/control/backup-status.json")" == true && -s "$T/mnt/usb/solis/$(bstatus_of file)" ]]'
+check "scheduled backups keep the newest N too" '[[ "$(ls "$T"/mnt/usb/solis/solis-monitor-*.tar.gz | wc -l)" -le 3 ]]'
+last=$(bstatus_of file); sleep 1
+out=$(SOLIS_UNIT_DIR="$T/units" upd backup --scheduled 2>&1); check "later runs that day do nothing" '[[ $? -eq 0 && -z "$out" && "$(bstatus_of file)" == "$last" ]]'
+SOLIS_UNIT_DIR="$T/units" upd dashboard-updates on >/dev/null 2>&1
+check "dashboard-updates on again keeps the time, folder and count" '[[ "$(cfg_sched)" == 00:00 && "$(cfg_of dir)" == "$T/mnt/usb/solis" && "$(cfg_of keep)" == 3 ]]'
+echo '{"action": "set-schedule", "time": "off"}' > "$T/inst/control/backup-request"
+SOLIS_UNIT_DIR="$T/units" upd backup --from-dashboard >/dev/null 2>&1; rm -f "$T/inst/control/backup-last-scheduled"
+out=$(SOLIS_UNIT_DIR="$T/units" upd backup --scheduled 2>&1); check "off: the timer's runs do nothing" '[[ -z "$(cfg_sched)" && -z "$out" && "$(bstatus_of message)" == "Daily backups are off." ]]'
+
+echo "copies in Nextcloud / WebDAV"
+DAV_PORT=$((20000 + RANDOM % 20000)); mkdir -p "$T/dav/root/remote.php/dav/files/bob" "$T/dav/root/remote.php/dav/uploads/bob" "$T/dav/root/plain"
+python3 -I "$ROOT/deploy/tests/fake-webdav.py" "$DAV_PORT" "$T/dav/root" bob 'p@ss "w\rd $x' 1500000 > /dev/null 2>&1 &
+DAV_PID=$!; sleep 1
+b64() { printf '%s' "$1" | base64 -w0; }
+remote_req() {   # remote_req KIND URL USER PASSWORD FOLDER KEEP: as the web app writes it
+  printf '{"requested_at": "now", "action": "set-remote", "kind": "%s", "url_b64": "%s", "user_b64": "%s", "password_b64": "%s", "folder_b64": "%s", "keep": %s}' \
+    "$1" "$(b64 "$2")" "$(b64 "$3")" "$(b64 "$4")" "$(b64 "$5")" "$6" > "$T/inst/control/backup-request"
+}
+NC="$T/dav/root/remote.php/dav/files/bob/Backups/Сонце дача"
+remote_req nextcloud "http://127.0.0.1:$DAV_PORT/" bob wrong "Backups/Сонце дача" 2
+out=$(upd backup --from-dashboard 2>&1); check "a wrong password is refused and nothing is kept" '[[ $? -ne 0 && "$(bstatus_of state)" == failed && "$(bstatus_of message)" == "The server refused the user name or password." && ! -e "$T/inst/backup-remote.conf" && ! -e "$T/inst/control/backup-remote.json" ]]'
+remote_req nextcloud "http://127.0.0.1:1/" bob x "Backups" 2
+out=$(upd backup --from-dashboard 2>&1); check "a server that does not answer is refused" '[[ $? -ne 0 && "$(bstatus_of message)" == "The server could not be reached." && ! -e "$T/inst/backup-remote.conf" ]]'
+remote_req nextcloud "http://127.0.0.1:$DAV_PORT/" bob 'p@ss "w\rd $x' "Backups/Сонце дача" 2
+out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "the right login is tried (folder made, test file gone) and kept" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && -d "$NC" && ! -e "$NC/.solis-monitor-test" && "$(stat -c %a "$T/inst/backup-remote.conf")" == 600 ]]'
+check "the page learns the server, user and folder, never the password" 'grep -q "\"kind\":\"nextcloud\"" "$T/inst/control/backup-remote.json" && grep -q "\"user\":\"bob\"" "$T/inst/control/backup-remote.json" && grep -q "Сонце дача" "$T/inst/control/backup-remote.json" && ! grep -rq "p@ss" "$T/inst/control" && ! grep -q "p@ss" "$T/inst/backup-remote.conf"'
+head -c 3500000 /dev/urandom > "$T/fake/influx/20261112/big"       # an archive bigger than the server takes in one request
+echo '{}' > "$T/inst/control/backup-request"; : > "$T/dav/webdav.log"; sleep 1
+out=$(SOLIS_DAV_CHUNK_MB=1 upd backup --from-dashboard 2>&1); rc=$?; f="$(bstatus_of file)"
+check "a backup is copied to Nextcloud in pieces, byte for byte" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && "$(sed -n "s/.*\"copy\":\"\([a-z]*\)\".*/\1/p" "$T/inst/control/backup-status.json")" == ok ]] && cmp -s "$NC/$f" "$T/mnt/usb/solis/$f" && [[ "$(grep -c "^PUT /remote.php/dav/uploads/bob/" "$T/dav/webdav.log")" -ge 4 ]]'
+check "the page sees when it was copied" 'grep -q "\"last\":{\"state\":\"ok\",\"message\":\"Copied to Nextcloud.\",\"file\":\"$f\"" "$T/inst/control/backup-remote.json"'
+pre="${f%-*-*}"      # this site's archive names (the restore above may have changed SITE_NAME)
+: > "$NC/solis-monitor-Other-20200101-000000.tar.gz"; : > "$NC/notes.txt"; : > "$NC/$pre-20200101-000000.tar.gz.part"
+for i in 1 2; do echo '{}' > "$T/inst/control/backup-request"; sleep 1; SOLIS_DAV_CHUNK_MB=1 upd backup --from-dashboard >/dev/null 2>&1; done
+check "the server keeps this site's newest N; other files and other sites' backups stay" '[[ "$(ls "$NC" | grep -c "^$pre-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz$")" == 2 && -e "$NC/solis-monitor-Other-20200101-000000.tar.gz" && -e "$NC/notes.txt" && ! -e "$NC/$pre-20200101-000000.tar.gz.part" ]]'
+sleep 1; out=$(SOLIS_DAV_CHUNK_MB=1 upd backup 2>&1); check "a backup by hand is copied too" '[[ "$out" == *"Copied to Nextcloud"* ]]'
+sleep 1; n_nc=$(ls "$NC" | wc -l); out=$(upd backup --no-copy 2>&1); check "--no-copy does not" '[[ "$out" != *"Copied"* && "$(ls "$NC" | wc -l)" == "$n_nc" ]]'
+sleep 1; out=$(SOLIS_DAV_CHUNK_MB=8 SOLIS_DAV_RETRY_S=0 upd backup 2>&1); rc=$?
+check "a piece the server cuts off: the backup stays here, nothing half-made there, and the failure is told" '[[ $rc -eq 0 && "$out" == *"copy to Nextcloud failed: The server broke the connection off"* && "$(ls "$NC" | wc -l)" == "$n_nc" ]] && grep -q "\"last\":{\"state\":\"failed\"" "$T/inst/control/backup-remote.json" && [[ -z "$(ls "$T/dav/root/remote.php/dav/uploads/bob")" ]]'
+kill "$DAV_PID"; wait "$DAV_PID" 2>/dev/null
+echo '{}' > "$T/inst/control/backup-request"; sleep 1; out=$(upd backup --from-dashboard 2>&1); rc=$?
+check "a server that is down: the backup is made and the page shows why the copy failed" '[[ $rc -eq 0 && "$(bstatus_of state)" == ok && -s "$T/mnt/usb/solis/$(bstatus_of file)" && "$(sed -n "s/.*\"copy\":\"\([a-z]*\)\".*/\1/p" "$T/inst/control/backup-status.json")" == failed && "$(sed -n "s/.*\"copy_message\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/backup-status.json")" == "The server could not be reached." ]]'
+python3 -I "$ROOT/deploy/tests/fake-webdav.py" "$DAV_PORT" "$T/dav/root" bob 'p@ss "w\rd $x' > /dev/null 2>&1 &
+DAV_PID=$!; sleep 1
+remote_req webdav "http://127.0.0.1:$DAV_PORT/plain" bob "" "solis" 5
+out=$(upd backup --from-dashboard 2>&1); check "another WebDAV server, the saved password kept when none is typed" '[[ $? -eq 0 && "$(bstatus_of state)" == ok && -d "$T/dav/root/plain/solis" ]] && grep -q "\"kind\":\"webdav\"" "$T/inst/control/backup-remote.json"'
+echo '{}' > "$T/inst/control/backup-request"; sleep 1; upd backup --from-dashboard >/dev/null 2>&1; f="$(bstatus_of file)"
+check "it gets one upload, renamed when complete" 'cmp -s "$T/dav/root/plain/solis/$f" "$T/mnt/usb/solis/$f" && grep -q "^PUT /plain/solis/$f.part 201" "$T/dav/webdav.log" && grep -q "^MOVE /plain/solis/$f.part 201" "$T/dav/webdav.log"'
+out=$(upd status 2>&1); check "status shows where the copies go" '[[ "$out" == *"copied to the WebDAV server: http://127.0.0.1:$DAV_PORT/plain solis  (last: ok"* ]]'
+echo '{"action":"remove-remote"}' > "$T/inst/control/backup-request"
+out=$(upd backup --from-dashboard 2>&1); check "remove-remote forgets the server, and the copies there stay" '[[ $? -eq 0 && ! -e "$T/inst/backup-remote.conf" && ! -e "$T/inst/control/backup-remote.json" && -e "$T/dav/root/plain/solis/$f" ]]'
+rm -f "$T/fake/influx/20261112/big"
 
 status_of() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$T/inst/control/update-status.json"; }
 : > "$T/docker.log"; rm -f "$T/inst/control/update-status.json"

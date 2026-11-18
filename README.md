@@ -147,7 +147,7 @@ solis-monitor auto-update on    # optional: look for a new release every night (
 solis-monitor logs poller       # recent log lines of a service (poller, web or influxdb); add -f to follow
 solis-monitor edit              # open your settings file (.env) in an editor, then apply the changes
 solis-monitor apply             # apply a .env you edited by hand (restarts only what changed)
-solis-monitor backup            # one .tar.gz with your history, saved settings and .env; copy it off the machine (also: Settings → Backup)
+solis-monitor backup            # one .tar.gz with your history, saved settings and .env (also: Settings → Backup, with daily backups and a copy in Nextcloud/WebDAV)
 solis-monitor restore FILE      # put a backup back, here or on a fresh install
 ```
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { ApiError, getJson, postJson } from '../lib/api';
 import { describeBackup, downloadUrl, folderError, formatSize, type BackupPayload } from '../lib/backup';
 import { locale, t } from '../lib/i18n';
+import { RemoteSection, ScheduleSection } from './BackupExtras';
 import { Card, Skeleton } from './common';
 
 const POLL_MS = 3000;
@@ -30,6 +31,7 @@ export function BackupCard() {
   const [typed, setTyped] = useState('');
   const [offline, setOffline] = useState(false);                     // the dashboard itself is being replaced (a restore)
   const restoreAsked = useRef(false);
+  const [askedFor, setAskedFor] = useState<'remote' | 'schedule' | null>(null);   // whose answer the status holds
   const asked = useRef<{ startedBefore: string | null; at: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -81,7 +83,24 @@ export function BackupCard() {
     );
   }
 
+  /** One request for the host from the daily-backup or copy section; its answer is shown there, not at the top. */
+  const ask = async (path: string, body: object, onError: (message: string) => void): Promise<boolean> => {
+    setBusy(true); setError(null);
+    asked.current = { startedBefore: b.status?.started ?? null, at: Date.now() };
+    try {
+      setB(await postJson<BackupPayload>(path, body));
+      setAskedFor(path.includes('/schedule') ? 'schedule' : 'remote');
+      setFollowing(true);
+      return true;
+    } catch (e) {
+      asked.current = null;
+      onError(t(e instanceof ApiError ? e.message : 'Request failed'));
+      return false;
+    } finally { setBusy(false); }
+  };
+
   const start = async () => {
+    setAskedFor(null);
     setBusy(true); setError(null);
     asked.current = { startedBefore: b.status?.started ?? null, at: Date.now() };
     try {
@@ -100,6 +119,7 @@ export function BackupCard() {
     setEditing(true);
   };
   const saveFolder = async () => {
+    setAskedFor(null);
     const bad = folderError(dir);
     const n = Number(keep);
     if (bad) { setFormError(bad); return; }
@@ -119,6 +139,7 @@ export function BackupCard() {
   };
 
   const remove = async (name: string) => {
+    setAskedFor(null);
     setBusy(true); setError(null);
     asked.current = { startedBefore: b.status?.started ?? null, at: Date.now() };
     try {
@@ -132,6 +153,7 @@ export function BackupCard() {
   };
 
   const restore = async (name: string) => {
+    setAskedFor(null);
     setBusy(true); setError(null);
     asked.current = { startedBefore: b.status?.started ?? null, at: Date.now() };
     restoreAsked.current = true;
@@ -146,7 +168,10 @@ export function BackupCard() {
   };
 
   const inProgress = following || b.busy;
-  const result = b.status && !inProgress ? describeBackup(b.status) : null;
+  const result = b.status && !inProgress && !askedFor ? describeBackup(b.status) : null;
+  const answer = (whose: 'remote' | 'schedule') =>
+    askedFor === whose && !inProgress && b.status && b.status.state !== 'running' ? { state: b.status.state, message: b.status.message } : null;
+  const sectionProps = { b, ask, disabled: busy || inProgress || !b.can_backup };
   const folder = b.folder.dir ?? b.folder.default_dir;
   const restoringEntry = restoring ? b.backups.find((x) => x.name === restoring) : null;
   const elsewhere = b.backups.some((x) => !x.downloadable);
@@ -170,7 +195,7 @@ export function BackupCard() {
       {inProgress && (
         <div class="update-line" role="status" data-testid="backup-progress">
           <div class="progress indeterminate" role="progressbar" aria-label={t('Progress')}><div class="progress-fill" /></div>
-          <div class="setting-hint">{b.status?.state === 'running' && b.status.message ? t(b.status.message) : restoreAsked.current ? t('Waiting for the server to start the restore…') : t('Waiting for the server to start the backup…')}</div>
+          <div class="setting-hint">{b.status?.state === 'running' && b.status.message ? t(b.status.message) : restoreAsked.current ? t('Waiting for the server to start the restore…') : askedFor ? t('Waiting for the server…') : t('Waiting for the server to start the backup…')}</div>
           {offline && <div class="setting-hint">{t('The dashboard is restarting with the restored settings. This page reconnects by itself; if it asks for a password, use the one from the backup.')}</div>}
         </div>
       )}
@@ -276,6 +301,9 @@ export function BackupCard() {
       {elsewhere && <div class="setting-hint">{t('Files in {dir} can be copied from the server; the dashboard can download only from its own folder.', { dir: folder ?? '' })}</div>}
       {b.listed && <div class="setting-hint">{t('The server keeps the newest {n} made from here; older ones are removed. Backups made on the server by hand (solis-monitor backup) stay where you put them.', { n: b.folder.keep })}</div>}
       <div class="setting-hint">{t('Restore… puts a backup back (on the server: solis-monitor restore FILE).')}</div>
+
+      <ScheduleSection {...sectionProps} pending={inProgress && askedFor === 'schedule'} result={answer('schedule')} />
+      <RemoteSection {...sectionProps} pending={inProgress && askedFor === 'remote'} result={answer('remote')} />
     </Card>
   );
 }

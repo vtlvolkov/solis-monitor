@@ -239,6 +239,22 @@ button { font: inherit; color: inherit; }
 .backup-folder-edit .field-short input { max-width: 120px; }
 .backup-folder-edit .setting-hint, .backup-folder-edit .confirm-actions, .backup-folder-edit .field-error { flex-basis: 100%; }
 .backup-elsewhere { font-size: 0.85rem; }
+.backup-section { margin-top: 20px; padding-top: 4px; border-top: 1px solid var(--c-border); }
+.backup-schedule { align-items: center; gap: 10px; flex-wrap: wrap; }
+.setting-edit input.backup-time { flex: 0 0 8.5rem; }
+.inv-form.backup-remote-form { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: end; }
+.backup-remote-form > * { grid-column: 1 / -1; }
+.backup-remote-form > .backup-remote-user, .backup-remote-form > .backup-remote-pass { grid-column: span 3; }
+.backup-remote-form > .backup-remote-folder { grid-column: span 4; }
+.backup-remote-form > .backup-remote-keep { grid-column: span 2; }
+.backup-kinds { display: flex; gap: 22px; flex-wrap: wrap; }
+.backup-kinds label.radio { display: flex; color: var(--c-text); font-size: 0.95rem; }
+.backup-kinds .radio > input { min-height: 0; padding: 0; }
+.backup-remote-form .setting-hint + .setting-hint { margin-top: -4px; }
+@media (max-width: 480px) { .backup-remote-form > .backup-remote-user, .backup-remote-form > .backup-remote-pass { grid-column: 1 / -1; } }
+.backup-section .btn-quiet { color: var(--c-muted); }
+.backup-section .btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
+.backup-section .update-result { margin: 6px 0; }
 /* CSV export dialog */
 .modal-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal { background: linear-gradient(180deg, #25272b 0%, var(--c-surface) 100%); border: 1px solid var(--c-border); border-radius: 16px; padding: 18px 20px;
