@@ -662,7 +662,7 @@ cmd_update() {
     rm -f "$CTL/update-request" || die "cannot remove $CTL/update-request (is the folder owned by the user running this?)"
     REPORT_STARTED="$(now_iso)"
   fi
-  exec 9>/tmp/solis-monitor-update.lock
+  exec 9>"$DIR/.update.lock"           # not in /tmp: with fs.protected_regular=2 root cannot open a lock another user left there
   flock -n 9 || { echo "another update is running"; REPORT=""; exit 0; }
 
   local current explicit="$target"
