@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: automation
 name: Solis Monitor
-version: "0.12.0"
+version: "0.13.0"
 tagline: Live dashboard, history and alerts for Solis hybrid inverters
 icon: https://raw.githubusercontent.com/vtlvolkov/solis-monitor/main/vtlvolkov-solis-monitor/icon.svg
 description: >-
@@ -36,11 +36,13 @@ path: ""
 defaultUsername: admin
 deterministicPassword: true
 releaseNotes: |-
-  daily backups and a copy to Nextcloud or WebDAV
+  solar forecast for today, tomorrow and the day after
 
-  - Settings → Backup → Daily backup: one backup a day at the time you choose (the server's clock). A server that was off at that time makes it when it starts; a failed daily backup is sent to Telegram
-  - Settings → Backup → Copy to Nextcloud or WebDAV: every backup is also uploaded there, and the newest copies you choose are kept. Saving tries the connection first; the password stays on the server and the page never shows it. Large backups go to Nextcloud in 5 MB pieces. A failed copy keeps the backup and says why on the tab and in Telegram
-  - Release installs: run `sudo solis-monitor dashboard-updates on` once after this update to add the daily-backup timer; later updates keep it current
-  - Fixed: a lock file left in /tmp by another user could stop `sudo solis-monitor update` or a backup with "Permission denied"
+  - Settings → General → Solar forecast: enter the location and the panels (peak power, tilt, facing; up to three groups). The forecast comes from Open-Meteo (free, no account); only the location, rounded to about 1 km, is sent
+  - The forecast is corrected by what your panels actually made over the last 14 days (shade, dirt, an inexact kWp); hours with a full battery are left out
+  - Overview → Solar forecast card: today's made + still to come, tomorrow and the day after, an hourly chart with the usual load, and a warning when tomorrow is weak
+  - Charts → Power flows: the forecast as a dashed line
+  - Optional Telegram at 20:00 when tomorrow gives less than a chosen share of a usual day
+  - Planned outages: "will the battery last" now counts the expected sun
 submitter: vtlvolkov
 submission: https://github.com/vtlvolkov/solis-monitor
